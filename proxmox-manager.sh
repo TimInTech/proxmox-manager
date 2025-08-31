@@ -4,7 +4,7 @@
 set -Eeuo pipefail
 
 # Farben
-BOLD="\033[1m"; BLUE="\033[1;34m"; CYAN="\033[1;36m"; GREEN="\033[1;32m"; YELLOW="\033[1;33m"; RED="\033[1;31m"; NC="\033[0m"
+BLUE="\033[1;34m"; CYAN="\033[1;36m"; GREEN="\033[1;32m"; YELLOW="\033[1;33m"; RED="\033[1;31m"; NC="\033[0m"
 
 # Graceful exit
 trap 'echo -e "\n\nScript beendet."; exit 0' INT TERM
@@ -118,8 +118,7 @@ collect_all_instances() {
     map+=("${instance_info[i]}:$i")
   done
 
-  IFS=$'\n' map=($(sort -n -t: -k1 <<<"${map[*]}"))
-  unset IFS
+  readarray -t map < <(printf '%s\n' "${map[@]}" | sort -n -t: -k1)
   for entry in "${map[@]}"; do
     local idx="${entry#*:}"
     sorted_info+=("${instance_info[idx]}" "${instance_info[idx+1]}" "${instance_info[idx+2]}" "${instance_info[idx+3]}" "${instance_info[idx+4]}")
