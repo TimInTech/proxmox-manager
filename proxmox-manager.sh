@@ -4,8 +4,6 @@
 set -Eeuo pipefail
 
 
-BLUE="\033[1;34m"; CYAN="\033[1;36m"; GREEN="\033[1;32m"; YELLOW="\033[1;33m"; RED="\033[1;31m"; NC="\033[0m"
-
 # Graceful exit
 trap 'echo -e "\n\nScript terminated."; exit 0' INT TERM
 
@@ -13,7 +11,6 @@ trap 'echo -e "\n\nScript terminated."; exit 0' INT TERM
 # Helper functions
 # ──────────────────────────────────────────────────────────────────
 
-err() { echo -e "${RED}Error:${NC} $*" >&2; }
 
 have() { command -v "$1" >/dev/null 2>&1; }
 
@@ -58,7 +55,6 @@ collect_all_instances() {
 
   # CTs
   if have pct; then
-
 
 
       symbol="🟡"
@@ -119,9 +115,9 @@ collect_all_instances() {
 # Menu display
 show_main_menu() {
   clear
-  echo -e "\n${BLUE}═══════════════════════════════════════════════════${NC}"
-  echo -e "${BLUE}          Proxmox VM/CT Management Tool             ${NC}"
-  echo -e "${BLUE}═══════════════════════════════════════════════════${NC}"
+  echo -e "\n${BOLD}${BLUE}═══════════════════════════════════════════════════${NC}"
+  echo -e "${BOLD}${BLUE}          Proxmox VM/CT Management Tool             ${NC}"
+  echo -e "${BOLD}${BLUE}═══════════════════════════════════════════════════${NC}"
 
   local -a all
   readarray -t all < <(collect_all_instances)
@@ -140,7 +136,7 @@ show_main_menu() {
       "${all[i]}" "${all[i+1]}" "${all[i+4]}" "${all[i+2]}" "${all[i+3]}"
   done
   echo "─────────────────────────────────────────────────────────────"
-  echo -e "${GREEN}Total: $((${#all[@]}/5)) instances found${NC}"
+
   echo
 }
 
