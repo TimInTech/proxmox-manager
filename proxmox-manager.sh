@@ -3,7 +3,7 @@
 # Updated: 2025-08-31
 set -Eeuo pipefail
 
-# Colors
+
 BLUE="\033[1;34m"; CYAN="\033[1;36m"; GREEN="\033[1;32m"; YELLOW="\033[1;33m"; RED="\033[1;31m"; NC="\033[0m"
 
 # Graceful exit
@@ -58,13 +58,7 @@ collect_all_instances() {
 
   # CTs
   if have pct; then
-    while read -r vmid status rest; do
-      [[ -z "$vmid" ]] && continue
 
-      local name symbol
-      name="${rest#* }"
-      [[ "$name" == "$rest" ]] && name=""
-      [[ "$name" == "-" || -z "$name" ]] && name="CT-${vmid}"
       [[ -z "$status" ]] && status="unknown"
 
       symbol="🟡"
@@ -73,7 +67,7 @@ collect_all_instances() {
       [[ "$status" == "paused" ]] && symbol="🟠"
 
       instance_info+=("$vmid" "CT" "$symbol" "$name" "$status")
-    done < <(pct list 2>/dev/null | awk 'NR>1' || true)
+
   fi
 
   # VMs
