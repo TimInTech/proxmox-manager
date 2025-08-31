@@ -1,23 +1,23 @@
 #!/usr/bin/env bash
-# Version 1.5 – Erweiterungen: Snapshot-Management & Konsole öffnen
+# Version 1.5 – Snapshot management & console access
 # Updated: 2025-08-31
 set -Eeuo pipefail
 
-# Farben
-BOLD="\033[1m"; BLUE="\033[1;34m"; CYAN="\033[1;36m"; GREEN="\033[1;32m"; YELLOW="\033[1;33m"; RED="\033[1;31m"; NC="\033[0m"
+# Colors
+BLUE="\033[1;34m"; CYAN="\033[1;36m"; GREEN="\033[1;32m"; YELLOW="\033[1;33m"; RED="\033[1;31m"; NC="\033[0m"
 
 # Graceful exit
-trap 'echo -e "\n\nScript beendet."; exit 0' INT TERM
+trap 'echo -e "\n\nScript terminated."; exit 0' INT TERM
 
 # ──────────────────────────────────────────────────────────────────
-# Hilfsfunktionen
+# Helper functions
 # ──────────────────────────────────────────────────────────────────
 
-err() { echo -e "${RED}Fehler:${NC} $*" >&2; }
+err() { echo -e "${RED}Error:${NC} $*" >&2; }
 
 have() { command -v "$1" >/dev/null 2>&1; }
 
-# Prüft, ob ID CT oder VM ist
+# Determine whether ID is a CT or VM
 get_instance_type() {
   local id="${1:-}"
   [[ -z "${id}" ]] && { echo ""; return; }
@@ -31,7 +31,7 @@ get_instance_type() {
   fi
 }
 
-# Einfache Status-Extraktion ("running"/"stopped"/"paused"/"unknown")
+# Simple status extraction ("running"/"stopped"/"paused"/"unknown")
 check_status() {
   local id="$1" type="$2"
   if [[ "$type" == "CT" ]]; then
@@ -49,27 +49,22 @@ check_status() {
   fi
 }
 
-# Listet alle Instanzen (VMs & CTs) und gibt eine flache Liste (je 5 Felder) aus:
-# VMID, TYP, SYMBOL, NAME, STATUS
+
+
+# List all instances (VMs & CTs) and output a flat list (5 fields each):
+# VMID, TYPE, SYMBOL, NAME, STATUS
 collect_all_instances() {
   local -a instance_info=()
 
   # CTs
   if have pct; then
-    while IFS= read -r line; do
-      [[ -z "$line" ]] && continue
-      [[ "$line" =~ ^[[:space:]]*VMID ]] && continue
-      [[ "$line" =~ ^[[:space:]]*[0-9]+ ]] || continue
+    while read -r vmid status rest; do
+      [[ -z "$vmid" ]] && continue
 
-      local vmid status name symbol
-      vmid="$(awk '{print $1}' <<<"$line")"
-      status="$(awk '{for(i=1;i<=NF;i++) if($i=="running"||$i=="stopped"||$i=="paused"){print $i; exit}}' <<<"$line" || true)"
-      if [[ -n "$status" ]]; then
-        name="$(sed -E "s/^[[:space:]]*${vmid}[[:space:]]+//; s/[[:space:]]+${status}.*//" <<<"$line" | sed -E 's/^[[:space:]]+|[[:space:]]+$//')"
-      else
-        name="$(sed -E "s/^[[:space:]]*${vmid}[[:space:]]+//" <<<"$line" | sed -E 's/^[[:space:]]+|[[:space:]]+$//')"
-      fi
-      [[ -z "$name" ]] && name="CT-${vmid}"
+      local name symbol
+      name="${rest#* }"
+      [[ "$name" == "$rest" ]] && name=""
+      [[ "$name" == "-" || -z "$name" ]] && name="CT-${vmid}"
       [[ -z "$status" ]] && status="unknown"
 
       symbol="🟡"
@@ -78,7 +73,7 @@ collect_all_instances() {
       [[ "$status" == "paused" ]] && symbol="🟠"
 
       instance_info+=("$vmid" "CT" "$symbol" "$name" "$status")
-    done < <(pct list 2>/dev/null || true)
+    done < <(pct list 2>/dev/null | awk 'NR>1' || true)
   fi
 
   # VMs
@@ -118,8 +113,7 @@ collect_all_instances() {
     map+=("${instance_info[i]}:$i")
   done
 
-  IFS=$'\n' map=($(sort -n -t: -k1 <<<"${map[*]}"))
-  unset IFS
+  readarray -t map < <(printf '%s\n' "${map[@]}" | sort -n -t: -k1)
   for entry in "${map[@]}"; do
     local idx="${entry#*:}"
     sorted_info+=("${instance_info[idx]}" "${instance_info[idx+1]}" "${instance_info[idx+2]}" "${instance_info[idx+3]}" "${instance_info[idx+4]}")
@@ -128,7 +122,7 @@ collect_all_instances() {
   printf '%s\n' "${sorted_info[@]}"
 }
 
-# Menüanzeige
+# Menu display
 show_main_menu() {
   clear
   echo -e "\n${BLUE}═══════════════════════════════════════════════════${NC}"
@@ -139,20 +133,20 @@ show_main_menu() {
   readarray -t all < <(collect_all_instances)
 
   if ((${#all[@]}==0)); then
-    echo -e "${RED}Keine VMs oder Container gefunden!${NC}"
-    echo "Prüfen Sie Berechtigungen oder Host."
+    echo -e "${RED}No VMs or containers found!${NC}"
+    echo "Check permissions or host."
     return 1
   fi
 
   echo
-  printf "%-6s %-4s %-8s %-6s %s\n" "ID" "Typ" "Status" "Symb." "Name"
+  printf "%-6s %-4s %-8s %-6s %s\n" "ID" "Type" "Status" "Symb." "Name"
   echo "─────────────────────────────────────────────────────────────"
   for ((i=0; i<${#all[@]}; i+=5)); do
     printf "%-6s %-4s %-8s %-6s %s\n" \
       "${all[i]}" "${all[i+1]}" "${all[i+4]}" "${all[i+2]}" "${all[i+3]}"
   done
   echo "─────────────────────────────────────────────────────────────"
-  echo -e "${GREEN}Gesamt: $((${#all[@]}/5)) Instanzen gefunden${NC}"
+  echo -e "${GREEN}Total: $((${#all[@]}/5)) instances found${NC}"
   echo
 }
 
@@ -160,25 +154,25 @@ select_instance() {
   local -a all
   readarray -t all < <(collect_all_instances)
   if ((${#all[@]}==0)); then
-    echo "Keine Instanzen verfügbar!"
+    echo "No instances available!"
     return 1
   fi
 
-  echo "Verfügbare Aktionen:"
+  echo "Available actions:"
   echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-  echo "• VMID eingeben (z.B. 100)"
-  echo "• 'r' für Aktualisieren"
-  echo "• 'q' für Beenden"
+  echo "• Enter VMID (e.g., 100)"
+  echo "• 'r' to refresh"
+  echo "• 'q' to quit"
   echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
   echo
 
   while true; do
-    read -r -p "Ihre Auswahl: " choice
+    read -r -p "Your choice: " choice
     case "$choice" in
-      q|Q) echo "Auf Wiedersehen!"; exit 0 ;;
+      q|Q) echo "Goodbye!"; exit 0 ;;
       r|R) return 0 ;;
       "")
-        echo "Bitte eine VMID eingeben."
+        echo "Please enter a VMID."
         ;;
       *)
         if [[ "$choice" =~ ^[0-9]+$ ]]; then
@@ -192,12 +186,12 @@ select_instance() {
             select_action "$choice" "$type" "$name"
             return 0
           else
-            echo "VMID $choice nicht gefunden! Verfügbar:"
+            echo "VMID $choice not found! Available:"
             for ((i=0; i<${#all[@]}; i+=5)); do printf "%s " "${all[i]}"; done
             echo
           fi
         else
-          echo "Ungültige Eingabe. Zahl, 'r' oder 'q'."
+          echo "Invalid input. Number, 'r', or 'q'."
         fi
         ;;
     esac
@@ -210,31 +204,31 @@ select_action() {
   current_status="$(check_status "$id" "$type")"
 
   echo
-  echo -e "${CYAN}=== Aktionen für $type $id ($name) ===${NC}"
-  echo -e "Aktueller Status: ${YELLOW}${current_status}${NC}"
+  echo -e "${CYAN}=== Actions for $type $id ($name) ===${NC}"
+  echo -e "Current status: ${YELLOW}${current_status}${NC}"
   echo
 
-  local -a actions=("Starten" "Stoppen" "Neustarten" "Status prüfen" "Konsole öffnen" "Snapshots verwalten")
+  local -a actions=("Start" "Stop" "Restart" "Check status" "Open console" "Manage snapshots")
   if [[ "$type" == "VM" ]]; then
-    actions+=("SPICE Viewer Info" "SPICE aktivieren")
+    actions+=("SPICE Viewer Info" "Enable SPICE")
   fi
-  actions+=("Zurück zum Hauptmenü")
+  actions+=("Back to main menu")
 
-  PS3="Bitte wählen Sie eine Aktion: "
+  PS3="Select an action: "
   select opt in "${actions[@]}"; do
     case "${opt:-}" in
-      "Starten")        perform_action "$id" "$type" "start"   "$name" ;;
-      "Stoppen")        perform_action "$id" "$type" "stop"    "$name" ;;
-      "Neustarten")     perform_action "$id" "$type" "restart" "$name" ;;
-      "Status prüfen")  perform_action "$id" "$type" "status"  "$name" ;;
-      "Konsole öffnen") open_console "$id" "$type" "$name" ;;
-      "Snapshots verwalten") manage_snapshots "$id" "$type" "$name" ;;
+      "Start")        perform_action "$id" "$type" "start"   "$name" ;;
+      "Stop")        perform_action "$id" "$type" "stop"    "$name" ;;
+      "Restart")     perform_action "$id" "$type" "restart" "$name" ;;
+      "Check status")  perform_action "$id" "$type" "status"  "$name" ;;
+      "Open console") open_console "$id" "$type" "$name" ;;
+      "Manage snapshots") manage_snapshots "$id" "$type" "$name" ;;
       "SPICE Viewer Info")
                         perform_action "$id" "$type" "spice"   "$name" ;;
-      "SPICE aktivieren")
+      "Enable SPICE")
                         perform_action "$id" "$type" "enable_spice" "$name" ;;
-      "Zurück zum Hauptmenü") return 0 ;;
-      *) echo "Ungültige Auswahl.";;
+      "Back to main menu") return 0 ;;
+      *) echo "Invalid choice.";;
     esac
   done
 }
@@ -245,237 +239,237 @@ perform_action() {
   current_status="$(check_status "$id" "$type")"
 
   echo
-  echo -e "${YELLOW}=== Aktion '${action}' für $type $id ($name) ===${NC}"
+  echo -e "${YELLOW}=== Action '${action}' for $type $id ($name) ===${NC}"
 
   case "$action" in
     start)
       if [[ "$current_status" == "running" ]]; then
-        echo -e "${GREEN}$type $id ist bereits gestartet.${NC}"
+        echo -e "${GREEN}$type $id is already running.${NC}"
       else
-        echo "Starte $type $id..."
+        echo "Starting $type $id..."
         if [[ "$type" == "CT" ]]; then
           if pct start "$id" 2>/dev/null; then
-            echo -e "${GREEN}Container $id erfolgreich gestartet.${NC}"
+            echo -e "${GREEN}Container $id started successfully.${NC}"
           else
-            err "Start von Container $id fehlgeschlagen."
+            err "Start of container $id failed."
           fi
         else
           if qm start "$id" 2>/dev/null; then
-            echo -e "${GREEN}VM $id erfolgreich gestartet.${NC}"
+            echo -e "${GREEN}VM $id started successfully.${NC}"
           else
-            err "Start von VM $id fehlgeschlagen."
+            err "Start of VM $id failed."
           fi
         fi
       fi
       ;;
     stop)
       if [[ "$current_status" != "running" ]]; then
-        echo -e "${GREEN}$type $id ist bereits gestoppt.${NC}"
+        echo -e "${GREEN}$type $id is already stopped.${NC}"
       else
-        echo "Stoppe $type $id..."
+        echo "Stopping $type $id..."
         if [[ "$type" == "CT" ]]; then
           if pct stop "$id" 2>/dev/null; then
-            echo -e "${GREEN}Container $id erfolgreich gestoppt.${NC}"
+            echo -e "${GREEN}Container $id stopped successfully.${NC}"
           else
-            err "Stopp von Container $id fehlgeschlagen."
+            err "Stop of container $id failed."
           fi
         else
           if qm stop "$id" 2>/dev/null; then
-            echo -e "${GREEN}VM $id erfolgreich gestoppt.${NC}"
+            echo -e "${GREEN}VM $id stopped successfully.${NC}"
           else
-            err "Stopp von VM $id fehlgeschlagen."
+            err "Stop of VM $id failed."
           fi
         fi
       fi
       ;;
     restart)
       if [[ "$current_status" != "running" ]]; then
-        echo -e "${YELLOW}$type $id ist nicht gestartet. Starte stattdessen...${NC}"
+        echo -e "${YELLOW}$type $id is not running. Starting instead...${NC}"
         perform_action "$id" "$type" "start" "$name"
       else
-        echo "Starte $type $id neu..."
+        echo "Restarting $type $id..."
         if [[ "$type" == "CT" ]]; then
           if pct stop "$id" 2>/dev/null && sleep 2 && pct start "$id" 2>/dev/null; then
-            echo -e "${GREEN}Container $id erfolgreich neu gestartet.${NC}"
+            echo -e "${GREEN}Container $id restarted successfully.${NC}"
           else
-            err "Neustart von Container $id fehlgeschlagen."
+            err "Restart of container $id failed."
           fi
         else
           if qm stop "$id" 2>/dev/null && sleep 2 && qm start "$id" 2>/dev/null; then
-            echo -e "${GREEN}VM $id erfolgreich neu gestartet.${NC}"
+            echo -e "${GREEN}VM $id restarted successfully.${NC}"
           else
-            err "Neustart von VM $id fehlgeschlagen."
+            err "Restart of VM $id failed."
           fi
         fi
       fi
       ;;
     status)
       if [[ "$type" == "CT" ]]; then
-        pct status "$id" 2>/dev/null || echo "Status konnte nicht abgerufen werden"
+        pct status "$id" 2>/dev/null || echo "Status could not be retrieved"
       else
-        qm status "$id" 2>/dev/null || echo "Status konnte nicht abgerufen werden"
+        qm status "$id" 2>/dev/null || echo "Status could not be retrieved"
       fi
       ;;
     spice)
       if [[ "$type" != "VM" ]]; then
-        err "SPICE ist nur für VMs verfügbar."
+        err "SPICE is only available for VMs."
       elif [[ "$current_status" != "running" ]]; then
-        err "VM muss für SPICE gestartet sein."
+        err "VM must be running for SPICE."
       else
         show_spice_info "$id" "$name"
       fi
       ;;
     enable_spice)
       if [[ "$type" != "VM" ]]; then
-        err "SPICE ist nur für VMs verfügbar."
+        err "SPICE is only available for VMs."
       else
         enable_spice "$id"
       fi
       ;;
     *)
-      err "Unbekannte Aktion: $action"
+      err "Unknown action: $action"
       ;;
   esac
 
   echo
-  read -r -p "Enter zum Fortfahren..." _
+  read -r -p "Press Enter to continue..." _
 }
 
 # ──────────────────────────────────────────────────────────────────
-# Konsole öffnen
+# Open console
 # CT: pct enter <id>
 # VM: Versuch qm terminal <id>, fallback zu qm monitor (Info)
 open_console() {
   local id="$1" type="$2" name="$3"
   echo
-  echo -e "${CYAN}Öffne Konsole für $type $id (${name})${NC}"
+  echo -e "${CYAN}Opening console for $type $id (${name})${NC}"
   if [[ "$type" == "CT" ]]; then
     if have pct; then
-      echo -e "${YELLOW}Starte 'pct enter' — CTRL+D oder exit zum Beenden.${NC}"
+      echo -e "${YELLOW}Launching 'pct enter' — CTRL+D or exit to quit.${NC}"
       pct enter "$id"
     else
-      err "pct nicht verfügbar."
+      err "pct not available."
     fi
   else
     if have qm; then
-      # Versuch: qm terminal (falls verfügbar). Falls Fehler, fallback zu qm monitor (nur Information).
+      # Try qm terminal if available. On failure, fallback to qm monitor (info only).
       if qm terminal "$id" 2>/dev/null; then
         # qm terminal startet interaktiv; when it exits continue.
         true
       else
-        echo -e "${YELLOW}'qm terminal' nicht verfügbar oder fehlgeschlagen. Versuche 'qm monitor' (nur Monitor)." 
-        echo -e "${YELLOW}Beende mit Ctrl+D oder 'quit'.${NC}"
-        qm monitor "$id" || err "Konnte keine Konsole für VM $id öffnen."
+        echo -e "${YELLOW}'qm terminal' not available or failed. Trying 'qm monitor' (monitor only)." 
+        echo -e "${YELLOW}Finish with Ctrl+D or 'quit'.${NC}"
+        qm monitor "$id" || err "Could not open console for VM $id."
       fi
     else
-      err "qm nicht verfügbar."
+      err "qm not available."
     fi
   fi
   echo
-  read -r -p "Enter zum Fortfahren..." _
+  read -r -p "Press Enter to continue..." _
 }
 
 # ──────────────────────────────────────────────────────────────────
-# Snapshot-Management (list/create/rollback/delete)
+# Snapshot management (list/create/rollback/delete)
 manage_snapshots() {
   local id="$1" type="$2" name="$3"
   local opt snapname
 
   while true; do
     echo
-    echo -e "${CYAN}Snapshots für $type $id (${name})${NC}"
-    echo "1) Auflisten"
-    echo "2) Snapshot erstellen"
-    echo "3) Snapshot wiederherstellen (rollback)"
-    echo "4) Snapshot löschen"
-    echo "5) Zurück"
-    read -r -p "Auswahl [1-5]: " opt
+    echo -e "${CYAN}Snapshots for $type $id (${name})${NC}"
+    echo "1) List"
+    echo "2) Create snapshot"
+    echo "3) Rollback snapshot"
+    echo "4) Delete snapshot"
+    echo "5) Back"
+    read -r -p "Choice [1-5]: " opt
     case "$opt" in
       1)
         echo
         if [[ "$type" == "CT" ]]; then
           if have pct; then
-            pct listsnapshot "$id" 2>/dev/null || echo "(keine Snapshots oder Fehler)"
+            pct listsnapshot "$id" 2>/dev/null || echo "(no snapshots or error)"
           else
-            err "pct nicht verfügbar."
+            err "pct not available."
           fi
         else
           if have qm; then
             qm listsnapshot "$id" 2>/dev/null || echo "(keine Snapshots oder Fehler)"
           else
-            err "qm nicht verfügbar."
+            err "qm not available."
           fi
         fi
         ;;
       2)
-        read -r -p "Name für neuen Snapshot: " snapname
+        read -r -p "Name for new snapshot: " snapname
         if [[ -z "$snapname" ]]; then
-          echo "Abgebrochen: leerer Name."
+          echo "Cancelled: empty name."
         else
           if [[ "$type" == "CT" ]]; then
             if pct snapshot "$id" "$snapname" 2>/dev/null; then
-              echo -e "${GREEN}Snapshot '${snapname}' für CT ${id} erstellt.${NC}"
+              echo -e "${GREEN}Snapshot '${snapname}' created for CT ${id}.${NC}"
             else
-              err "Snapshot-Erstellung fehlgeschlagen."
+              err "Snapshot creation failed."
             fi
           else
             if qm snapshot "$id" "$snapname" 2>/dev/null; then
-              echo -e "${GREEN}Snapshot '${snapname}' für VM ${id} erstellt.${NC}"
+              echo -e "${GREEN}Snapshot '${snapname}' created for VM ${id}.${NC}"
             else
-              err "Snapshot-Erstellung fehlgeschlagen."
+              err "Snapshot creation failed."
             fi
           fi
         fi
         ;;
       3)
-        read -r -p "Name des Snapshots zum Wiederherstellen: " snapname
+        read -r -p "Name of snapshot to rollback: " snapname
         if [[ -z "$snapname" ]]; then
-          echo "Abgebrochen: leerer Name."
+          echo "Cancelled: empty name."
         else
           if [[ "$type" == "CT" ]]; then
             if pct rollback "$id" "$snapname" 2>/dev/null; then
-              echo -e "${GREEN}CT ${id} auf Snapshot '${snapname}' zurückgesetzt.${NC}"
+              echo -e "${GREEN}CT ${id} rolled back to snapshot '${snapname}'.${NC}"
             else
-              err "Rollback fehlgeschlagen."
+              err "Rollback failed."
             fi
           else
             if qm rollback "$id" "$snapname" 2>/dev/null; then
-              echo -e "${GREEN}VM ${id} auf Snapshot '${snapname}' zurückgesetzt.${NC}"
+              echo -e "${GREEN}VM ${id} rolled back to snapshot '${snapname}'.${NC}"
             else
-              err "Rollback fehlgeschlagen."
+              err "Rollback failed."
             fi
           fi
         fi
         ;;
       4)
-        read -r -p "Name des Snapshots zum Löschen: " snapname
+        read -r -p "Name of snapshot to delete: " snapname
         if [[ -z "$snapname" ]]; then
-          echo "Abgebrochen: leerer Name."
+          echo "Cancelled: empty name."
         else
           if [[ "$type" == "CT" ]]; then
             if pct delsnapshot "$id" "$snapname" 2>/dev/null; then
-              echo -e "${GREEN}Snapshot '${snapname}' gelöscht.${NC}"
+              echo -e "${GREEN}Snapshot '${snapname}' deleted.${NC}"
             else
-              err "Löschen fehlgeschlagen."
+              err "Delete failed."
             fi
           else
             if qm delsnapshot "$id" "$snapname" 2>/dev/null; then
-              echo -e "${GREEN}Snapshot '${snapname}' gelöscht.${NC}"
+              echo -e "${GREEN}Snapshot '${snapname}' deleted.${NC}"
             else
-              err "Löschen fehlgeschlagen."
+              err "Delete failed."
             fi
           fi
         fi
         ;;
       5) return 0 ;;
       *)
-        echo "Ungültige Auswahl."
+        echo "Invalid choice."
         ;;
     esac
   done
 }
 
-# SPICE-Infos anzeigen
+# Show SPICE info
 show_spice_info() {
   local id="$1" name="$2"
 
@@ -500,11 +494,11 @@ show_spice_info() {
   # 4) Notnagel: deterministischer Port (Hinweis ausgeben)
   if [[ -z "$spice_port" ]]; then
     spice_port="$((61000 + id))"
-    echo -e "${YELLOW}Konnte SPICE-Port nicht ermitteln. Verwende Schätzung: ${spice_port}${NC}"
+    echo -e "${YELLOW}Could not determine SPICE port. Using estimate: ${spice_port}${NC}"
   fi
 
   echo -e "${GREEN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
-  echo -e "${GREEN}         SPICE-Verbindungsinformationen            ${NC}"
+  echo -e "${GREEN}         SPICE connection information            ${NC}"
   echo -e "${GREEN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
   echo -e "${CYAN}VM ID:${NC}      ${id}"
   echo -e "${CYAN}Host:${NC}       ${spice_host}"
@@ -512,16 +506,16 @@ show_spice_info() {
   echo -e "${CYAN}SPICE URI:${NC}  spice://${spice_host}:${spice_port}"
   echo -e "${GREEN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
   echo
-  echo -e "${YELLOW}Auf Ihrem lokalen PC:${NC}"
-  echo "1) SPICE Client installieren:"
+  echo -e "${YELLOW}On your local PC:${NC}"
+  echo "1) Install SPICE client:"
   echo "   Windows: virt-viewer"
   echo "   Linux:   sudo apt install virt-viewer"
   echo "   macOS:   brew install virt-viewer"
   echo
-  echo "2) Starten:"
+  echo "2) Launch:"
   echo -e "   ${GREEN}remote-viewer spice://${spice_host}:${spice_port}${NC}"
   echo
-  echo "3) .vv-Datei (lokal auf dem Host erstellt):"
+  echo "3) .vv file (created on the host):"
 
   local vv_file="/tmp/vm-${id}.vv"
   cat > "$vv_file" <<EOF
@@ -533,40 +527,40 @@ title=VM ${id} (${name})
 delete-this-file=1
 fullscreen=0
 EOF
-  echo -e "   ${GREEN}Datei erstellt: ${vv_file}${NC}"
-  echo "   (Diese Datei auf den Client kopieren und öffnen.)"
+  echo -e "   ${GREEN}File created: ${vv_file}${NC}"
+  echo "   (Copy this file to your client and open it.)"
 }
 
-# SPICE aktivieren (konservativ)
+# Enable SPICE (conservative)
 enable_spice() {
   local id="$1"
   local port="$((61000 + id))"
 
   qm set "$id" --vga qxl       >/dev/null 2>&1 || true
   if qm set "$id" --spice "port=${port},addr=0.0.0.0" >/dev/null 2>&1; then
-    echo -e "${GREEN}SPICE für VM ${id} aktiviert.${NC}"
+    echo -e "${GREEN}SPICE enabled for VM ${id}.${NC}"
     echo -e "${YELLOW}SPICE Port: ${port}${NC}"
-    echo -e "${YELLOW}VM-Neustart erforderlich, damit SPICE aktiv wird.${NC}"
+    echo -e "${YELLOW}VM restart required for SPICE to take effect.${NC}"
     echo
-    read -r -p "VM jetzt neu starten? (j/N): " restart_vm
+    read -r -p "Restart VM now? (y/N): " restart_vm
     if [[ "${restart_vm:-N}" =~ ^[jJyY]$ ]]; then
       perform_action "$id" "VM" "restart" "VM-${id}"
     fi
   else
-    err "SPICE konnte nicht aktiviert werden. Prüfe Berechtigungen/Konfiguration."
+    err "Could not enable SPICE. Check permissions/configuration."
   fi
 }
 
-# Berechtigungen prüfen
+# Check permissions
 check_permissions() {
   # Mindestens eines der beiden Tools muss vorhanden sein
   if ! have pct && ! have qm; then
-    err "Proxmox-Befehle (pct/qm) nicht verfügbar. Bitte auf einem Proxmox-Host ausführen."
+    err "Proxmox commands (pct/qm) not available. Run on a Proxmox host."
     exit 1
   fi
-  # Prüfen, ob mindestens einer der Befehle ausführbar ist (Berechtigung)
+  # Check if at least one command is executable (permissions)
   if have pct && ! pct list >/dev/null 2>&1 && have qm && ! qm list >/dev/null 2>&1; then
-    err "Keine Berechtigung für Proxmox-Befehle. Script als root ausführen."
+    err "No permission for Proxmox commands. Run the script as root."
     exit 1
   fi
 }
@@ -575,11 +569,11 @@ main() {
   check_permissions
   while true; do
     if ! show_main_menu; then
-      err "Menü konnte nicht angezeigt werden."
+      err "Could not display menu."
       exit 1
     fi
     if ! select_instance; then
-      echo "Kehre zum Hauptmenü zurück..."
+      echo "Returning to main menu..."
       sleep 1
     fi
   done
