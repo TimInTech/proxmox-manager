@@ -3,9 +3,6 @@
 # Updated: 2025-08-31
 set -Eeuo pipefail
 
-# Colors
-BOLD="\033[1m"; NC="\033[0m"
-BLUE="\033[34m"; CYAN="\033[36m"; GREEN="\033[32m"; YELLOW="\033[33m"; RED="\033[31m"
 
 # Graceful exit
 trap 'echo -e "\n\nScript terminated."; exit 0' INT TERM
@@ -14,7 +11,6 @@ trap 'echo -e "\n\nScript terminated."; exit 0' INT TERM
 # Helper functions
 # ──────────────────────────────────────────────────────────────────
 
-err() { echo -e "${BOLD}${RED}Error:${NC} $*" >&2; }
 
 have() { command -v "$1" >/dev/null 2>&1; }
 
@@ -59,17 +55,7 @@ collect_all_instances() {
 
   # CTs
   if have pct; then
-    while IFS= read -r line; do
-      [[ -z "$line" ]] && continue
-      [[ "$line" =~ ^[[:space:]]*VMID ]] && continue
-      [[ "$line" =~ ^[[:space:]]*[0-9]+ ]] || continue
 
-      local vmid status name symbol
-      vmid="$(awk '{print $1}' <<<"$line")"
-      status="$(awk '{print $2}' <<<"$line")"
-      status=${status:-unknown}
-      name="$(pct config "$vmid" 2>/dev/null | awk -F': ' '/^hostname:/{print $2}' | tr -d '\r')"
-      [[ -z "$name" ]] && name="CT-${vmid}"
 
       symbol="🟡"
       [[ "$status" == "running" ]] && symbol="🟢"
@@ -77,7 +63,7 @@ collect_all_instances() {
       [[ "$status" == "paused" ]] && symbol="🟠"
 
       instance_info+=("$vmid" "CT" "$symbol" "$name" "$status")
-    done < <(pct list 2>/dev/null || true)
+
   fi
 
   # VMs
@@ -150,7 +136,7 @@ show_main_menu() {
       "${all[i]}" "${all[i+1]}" "${all[i+4]}" "${all[i+2]}" "${all[i+3]}"
   done
   echo "─────────────────────────────────────────────────────────────"
-  echo -e "${BOLD}${GREEN}Total: $((${#all[@]}/5)) instances found${NC}"
+
   echo
 }
 
