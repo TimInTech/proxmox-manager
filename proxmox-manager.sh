@@ -56,19 +56,11 @@ collect_all_instances() {
 
   # CTs
   if have pct; then
-    while IFS= read -r line; do
-      [[ -z "$line" ]] && continue
-      [[ "$line" =~ ^[[:space:]]*VMID ]] && continue
-      [[ "$line" =~ ^[[:space:]]*[0-9]+ ]] || continue
+    while read -r vmid status _; do
+      [[ -z "$vmid" ]] && continue
 
-      local vmid status name symbol
-      vmid="$(awk '{print $1}' <<<"$line")"
-      status="$(awk '{for(i=1;i<=NF;i++) if($i=="running"||$i=="stopped"||$i=="paused"){print $i; exit}}' <<<"$line" || true)"
-      if [[ -n "$status" ]]; then
-        name="$(sed -E "s/^[[:space:]]*${vmid}[[:space:]]+//; s/[[:space:]]+${status}.*//" <<<"$line" | sed -E 's/^[[:space:]]+|[[:space:]]+$//')"
-      else
-        name="$(sed -E "s/^[[:space:]]*${vmid}[[:space:]]+//" <<<"$line" | sed -E 's/^[[:space:]]+|[[:space:]]+$//')"
-      fi
+      local name symbol
+      name="$(pct config "$vmid" 2>/dev/null | awk -F': ' '/^hostname:/ {print $2}' | sed -E 's/^[[:space:]]+|[[:space:]]+$//')"
       [[ -z "$name" ]] && name="CT-${vmid}"
       [[ -z "$status" ]] && status="unknown"
 
@@ -78,7 +70,7 @@ collect_all_instances() {
       [[ "$status" == "paused" ]] && symbol="🟠"
 
       instance_info+=("$vmid" "CT" "$symbol" "$name" "$status")
-    done < <(pct list 2>/dev/null || true)
+    done < <(pct list 2>/dev/null | awk 'NR>1 {print $1, $2}' || true)
   fi
 
   # VMs
