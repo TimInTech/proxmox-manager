@@ -59,7 +59,7 @@ collect_all_instances() {
   # CTs
   if have pct; then
 
-      [[ -z "$status" ]] && status="unknown"
+
 
       symbol="🟡"
       [[ "$status" == "running" ]] && symbol="🟢"
