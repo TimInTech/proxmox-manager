@@ -1,8 +1,14 @@
 #!/usr/bin/env bash
-# Version 1.5 – Snapshot management & console access
-# Updated: 2025-08-31
+# Version 1.5.1 – Snapshot management & console access
+# Updated: 2025-09-01
 set -Eeuo pipefail
 
+# Colors (fallback to no color on non-TTY or if NO_COLOR is set)
+if [[ -t 1 && -z "${NO_COLOR:-}" ]]; then
+  BOLD=$'\e[1m'; RED=$'\e[31m'; GREEN=$'\e[32m'; YELLOW=$'\e[33m'; BLUE=$'\e[34m'; CYAN=$'\e[36m'; NC=$'\e[0m'
+else
+  BOLD=''; RED=''; GREEN=''; YELLOW=''; BLUE=''; CYAN=''; NC=''
+fi
 
 # Graceful exit
 trap 'echo -e "\n\nScript terminated."; exit 0' INT TERM
@@ -11,8 +17,11 @@ trap 'echo -e "\n\nScript terminated."; exit 0' INT TERM
 # Helper functions
 # ──────────────────────────────────────────────────────────────────
 
-
 have() { command -v "$1" >/dev/null 2>&1; }
+
+err() {
+  echo -e "${RED}Error:${NC} $*" >&2
+}
 
 # Determine whether ID is a CT or VM
 get_instance_type() {
@@ -46,8 +55,6 @@ check_status() {
   fi
 }
 
-
-
 # List all instances (VMs & CTs) and output a flat list (5 fields each):
 # VMID, TYPE, SYMBOL, NAME, STATUS
 collect_all_instances() {
@@ -55,7 +62,21 @@ collect_all_instances() {
 
   # CTs
   if have pct; then
+    while IFS= read -r line; do
+      [[ -z "$line" ]] && continue
+      [[ "$line" =~ ^[[:space:]]*VMID ]] && continue
+      [[ "$line" =~ ^[[:space:]]*[0-9]+ ]] || continue
 
+      local vmid status name symbol
+      vmid="$(awk '{print $1}' <<<"$line")"
+      status="$(awk '{for(i=1;i<=NF;i++) if($i=="running"||$i=="stopped"||$i=="paused"){print $i; exit}}' <<<"$line" || true)"
+      if [[ -n "$status" ]]; then
+        name="$(sed -E "s/^[[:space:]]*${vmid}[[:space:]]+//; s/[[:space:]]+${status}.*//" <<<"$line" | sed -E 's/^[[:space:]]+|[[:space:]]+$//')"
+      else
+        name="$(sed -E "s/^[[:space:]]*${vmid}[[:space:]]+//" <<<"$line" | sed -E 's/^[[:space:]]+|[[:space:]]+$//')"
+      fi
+      [[ -z "$name" ]] && name="CT-${vmid}"
+      [[ -z "$status" ]] && status="unknown"
 
       symbol="🟡"
       [[ "$status" == "running" ]] && symbol="🟢"
@@ -63,7 +84,7 @@ collect_all_instances() {
       [[ "$status" == "paused" ]] && symbol="🟠"
 
       instance_info+=("$vmid" "CT" "$symbol" "$name" "$status")
-
+    done < <(pct list 2>/dev/null || true)
   fi
 
   # VMs
@@ -136,7 +157,6 @@ show_main_menu() {
       "${all[i]}" "${all[i+1]}" "${all[i+4]}" "${all[i+2]}" "${all[i+3]}"
   done
   echo "─────────────────────────────────────────────────────────────"
-
   echo
 }
 
@@ -207,17 +227,15 @@ select_action() {
   PS3="Select an action: "
   select opt in "${actions[@]}"; do
     case "${opt:-}" in
-      "Start")        perform_action "$id" "$type" "start"   "$name" ;;
-      "Stop")        perform_action "$id" "$type" "stop"    "$name" ;;
-      "Restart")     perform_action "$id" "$type" "restart" "$name" ;;
-      "Check status")  perform_action "$id" "$type" "status"  "$name" ;;
-      "Open console") open_console "$id" "$type" "$name" ;;
+      "Start")          perform_action "$id" "$type" "start"   "$name" ;;
+      "Stop")           perform_action "$id" "$type" "stop"    "$name" ;;
+      "Restart")        perform_action "$id" "$type" "restart" "$name" ;;
+      "Check status")   perform_action "$id" "$type" "status"  "$name" ;;
+      "Open console")   open_console "$id" "$type" "$name" ;;
       "Manage snapshots") manage_snapshots "$id" "$type" "$name" ;;
-      "SPICE Viewer Info")
-                        perform_action "$id" "$type" "spice"   "$name" ;;
-      "Enable SPICE")
-                        perform_action "$id" "$type" "enable_spice" "$name" ;;
-      "Back to main menu") return 0 ;;
+      "SPICE Viewer Info")  perform_action "$id" "$type" "spice"        "$name" ;;
+      "Enable SPICE")       perform_action "$id" "$type" "enable_spice" "$name" ;;
+      "Back to main menu")  return 0 ;;
       *) echo "Invalid choice.";;
     esac
   done
@@ -328,7 +346,7 @@ perform_action() {
 # ──────────────────────────────────────────────────────────────────
 # Open console
 # CT: pct enter <id>
-# VM: Versuch qm terminal <id>, fallback zu qm monitor (Info)
+# VM: qm terminal <id>, fallback zu qm monitor (Info)
 open_console() {
   local id="$1" type="$2" name="$3"
   echo
@@ -342,12 +360,10 @@ open_console() {
     fi
   else
     if have qm; then
-      # Try qm terminal if available. On failure, fallback to qm monitor (info only).
       if qm terminal "$id" 2>/dev/null; then
-        # qm terminal startet interaktiv; when it exits continue.
         true
       else
-        echo -e "${YELLOW}'qm terminal' not available or failed. Trying 'qm monitor' (monitor only)." 
+        echo -e "${YELLOW}'qm terminal' not available or failed. Trying 'qm monitor' (monitor only).${NC}"
         echo -e "${YELLOW}Finish with Ctrl+D or 'quit'.${NC}"
         qm monitor "$id" || err "Could not open console for VM $id."
       fi
@@ -543,14 +559,9 @@ enable_spice() {
 
 # Check permissions
 check_permissions() {
-  # Mindestens eines der beiden Tools muss vorhanden sein
-  if ! have pct && ! have qm; then
-    err "Proxmox commands (pct/qm) not available. Run on a Proxmox host."
-    exit 1
-  fi
-  # Check if at least one command is executable (permissions)
-  if have pct && ! pct list >/dev/null 2>&1 && have qm && ! qm list >/dev/null 2>&1; then
-    err "No permission for Proxmox commands. Run the script as root."
+  # Mindestens eines der beiden Tools muss erfolgreich sein
+  if ! { (have pct && pct list >/dev/null 2>&1) || (have qm && qm list >/dev/null 2>&1); }; then
+    err "Proxmox commands (pct/qm) not available or no permission. Run on a Proxmox host as root."
     exit 1
   fi
 }
