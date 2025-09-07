@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
-# Version 1.5.1 – Snapshot management & console access
-# Updated: 2025-09-01
+# Version 1.5.2 – Fehlerbehebung für status-Handling & Menüanzeige
+# Updated: 2025-09-07
 set -Eeuo pipefail
 
 # Colors (fallback to no color on non-TTY or if NO_COLOR is set)
@@ -13,9 +13,9 @@ fi
 # Graceful exit
 trap 'echo -e "\n\nScript terminated."; exit 0' INT TERM
 
-# ──────────────────────────────────────────────────────────────────
+# ────────────────────────────────────────────────────────────────
 # Helper functions
-# ──────────────────────────────────────────────────────────────────
+# ────────────────────────────────────────────────────────────────
 
 have() { command -v "$1" >/dev/null 2>&1; }
 
@@ -39,24 +39,50 @@ get_instance_type() {
 
 # Simple status extraction ("running"/"stopped"/"paused"/"unknown")
 check_status() {
-  local id="$1" type="$2"
+  local id="$1" type="${2:-}"
+  local out status
+
+  if [[ -z "$type" ]]; then
+    type="$(get_instance_type "$id")"
+  fi
+
   if [[ "$type" == "CT" ]]; then
     if have pct; then
-      pct status "$id" 2>/dev/null | awk '{for(i=1;i<=NF;i++) if($i=="running"||$i=="stopped"||$i=="paused"){print $i; exit}}' || echo "unknown"
+      out="$(pct status "$id" 2>/dev/null || true)"
     else
-      echo "unknown"
+      echo "unknown"; return
+    fi
+  elif [[ "$type" == "VM" ]]; then
+    if have qm; then
+      out="$(qm status "$id" 2>/dev/null || true)"
+    else
+      echo "unknown"; return
     fi
   else
-    if have qm; then
-      qm status "$id" 2>/dev/null | awk '{for(i=1;i<=NF;i++) if($i=="running"||$i=="stopped"||$i=="paused"){print $i; exit}}' || echo "unknown"
-    else
-      echo "unknown"
-    fi
+    echo "unknown"; return
   fi
+
+  # Look for known keywords in the output (robust against different output formats)
+  if grep -qE '\brunning\b' <<<"$out"; then
+    status="running"
+  elif grep -qE '\bstopped\b' <<<"$out"; then
+    status="stopped"
+  elif grep -qE '\bpaused\b' <<<"$out"; then
+    status="paused"
+  else
+    # Fallback: try to extract last word which sometimes contains status
+    status="$(awk '{print tolower($NF)}' <<<"$out" | sed -n 's/[^a-z].*//p' || true)"
+    case "$status" in
+      running|stopped|paused) ;;
+      *) status="unknown" ;;
+    esac
+  fi
+
+  echo "$status"
 }
 
 # List all instances (VMs & CTs) and output a flat list (5 fields each):
-# VMID, TYPE, SYMBOL, NAME, STATUS
+# VMID, TYPE, STATUS, SYMBOL, NAME
 collect_all_instances() {
   local -a instance_info=()
 
@@ -67,15 +93,16 @@ collect_all_instances() {
       [[ "$line" =~ ^[[:space:]]*VMID ]] && continue
       [[ "$line" =~ ^[[:space:]]*[0-9]+ ]] || continue
 
-      local vmid status name symbol
+      local vmid name status symbol
       vmid="$(awk '{print $1}' <<<"$line")"
-      status="$(awk '{for(i=1;i<=NF;i++) if($i=="running"||$i=="stopped"||$i=="paused"){print $i; exit}}' <<<"$line" || true)"
-      if [[ -n "$status" ]]; then
-        name="$(sed -E "s/^[[:space:]]*${vmid}[[:space:]]+//; s/[[:space:]]+${status}.*//" <<<"$line" | sed -E 's/^[[:space:]]+|[[:space:]]+$//')"
-      else
-        name="$(sed -E "s/^[[:space:]]*${vmid}[[:space:]]+//" <<<"$line" | sed -E 's/^[[:space:]]+|[[:space:]]+$//')"
-      fi
+
+      # Try to extract name from the listing line; if not present, fallback to CT-<id>
+      # Listing lines may include status at the end, so remove it if found
+      name="$(sed -E "s/^[[:space:]]*${vmid}[[:space:]]+//; s/[[:space:]]+(running|stopped|paused).*//I" <<<"$line" | sed -E 's/^[[:space:]]+|[[:space:]]+$//')"
       [[ -z "$name" ]] && name="CT-${vmid}"
+
+      # Use reliable status lookup
+      status="$(check_status "$vmid" "CT")"
       [[ -z "$status" ]] && status="unknown"
 
       symbol="🟡"
@@ -83,7 +110,8 @@ collect_all_instances() {
       [[ "$status" == "stopped" ]] && symbol="🔴"
       [[ "$status" == "paused" ]] && symbol="🟠"
 
-      instance_info+=("$vmid" "CT" "$symbol" "$name" "$status")
+      # Append in canonical order: vmid, type, status, symbol, name
+      instance_info+=("$vmid" "CT" "$status" "$symbol" "$name")
     done < <(pct list 2>/dev/null || true)
   fi
 
@@ -94,15 +122,14 @@ collect_all_instances() {
       [[ "$line" =~ ^[[:space:]]*VMID ]] && continue
       [[ "$line" =~ ^[[:space:]]*[0-9]+ ]] || continue
 
-      local vmid status name symbol
+      local vmid name status symbol
       vmid="$(awk '{print $1}' <<<"$line")"
-      status="$(awk '{for(i=1;i<=NF;i++) if($i=="running"||$i=="stopped"||$i=="paused"){print $i; exit}}' <<<"$line" || true)"
-      if [[ -n "$status" ]]; then
-        name="$(sed -E "s/^[[:space:]]*${vmid}[[:space:]]+//; s/[[:space:]]+${status}.*//" <<<"$line" | sed -E 's/^[[:space:]]+|[[:space:]]+$//')"
-      else
-        name="$(sed -E "s/^[[:space:]]*${vmid}[[:space:]]+//" <<<"$line" | sed -E 's/^[[:space:]]+|[[:space:]]+$//')"
-      fi
+
+      name="$(sed -E "s/^[[:space:]]*${vmid}[[:space:]]+//; s/[[:space:]]+(running|stopped|paused).*//I" <<<"$line" | sed -E 's/^[[:space:]]+|[[:space:]]+$//')"
       [[ -z "$name" ]] && name="VM-${vmid}"
+
+      # Use reliable status lookup
+      status="$(check_status "$vmid" "VM")"
       [[ -z "$status" ]] && status="unknown"
 
       symbol="🟡"
@@ -110,15 +137,16 @@ collect_all_instances() {
       [[ "$status" == "stopped" ]] && symbol="🔴"
       [[ "$status" == "paused" ]] && symbol="🟠"
 
-      instance_info+=("$vmid" "VM" "$symbol" "$name" "$status")
+      instance_info+=("$vmid" "VM" "$status" "$symbol" "$name")
     done < <(qm list 2>/dev/null || true)
   fi
 
-  # Sortierung nach VMID
+  # If no instances, return empty
   if ((${#instance_info[@]}==0)); then
     return 0
   fi
 
+  # Sort by VMID (numerically)
   local -a map=() sorted_info=()
   for ((i=0; i<${#instance_info[@]}; i+=5)); do
     map+=("${instance_info[i]}:$i")
@@ -154,7 +182,7 @@ show_main_menu() {
   echo "─────────────────────────────────────────────────────────────"
   for ((i=0; i<${#all[@]}; i+=5)); do
     printf "%-6s %-4s %-8s %-6s %s\n" \
-      "${all[i]}" "${all[i+1]}" "${all[i+4]}" "${all[i+2]}" "${all[i+3]}"
+      "${all[i]}" "${all[i+1]}" "${all[i+2]}" "${all[i+3]}" "${all[i+4]}"
   done
   echo "─────────────────────────────────────────────────────────────"
   echo
@@ -169,11 +197,11 @@ select_instance() {
   fi
 
   echo "Available actions:"
-  echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+  echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
   echo "• Enter VMID (e.g., 100)"
   echo "• 'r' to refresh"
   echo "• 'q' to quit"
-  echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+  echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
   echo
 
   while true; do
@@ -189,7 +217,7 @@ select_instance() {
           local found=0 type="" name=""
           for ((i=0; i<${#all[@]}; i+=5)); do
             if [[ "${all[i]}" == "$choice" ]]; then
-              type="${all[i+1]}"; name="${all[i+3]}"; found=1; break
+              type="${all[i+1]}"; name="${all[i+4]}"; found=1; break
             fi
           done
           if ((found==1)); then
@@ -272,7 +300,7 @@ perform_action() {
       ;;
     stop)
       if [[ "$current_status" != "running" ]]; then
-        echo -e "${GREEN}$type $id is already stopped.${NC}"
+        echo -e "${GREEN}$type $id is not running.${NC}"
       else
         echo "Stopping $type $id..."
         if [[ "$type" == "CT" ]]; then
@@ -346,7 +374,7 @@ perform_action() {
 # ──────────────────────────────────────────────────────────────────
 # Open console
 # CT: pct enter <id>
-# VM: qm terminal <id>, fallback zu qm monitor (Info)
+# VM: qm terminal <id>, fallback to qm monitor (Info)
 open_console() {
   local id="$1" type="$2" name="$3"
   echo
@@ -401,7 +429,7 @@ manage_snapshots() {
           fi
         else
           if have qm; then
-            qm listsnapshot "$id" 2>/dev/null || echo "(keine Snapshots oder Fehler)"
+            qm listsnapshot "$id" 2>/dev/null || echo "(no snapshots or error)"
           else
             err "qm not available."
           fi
