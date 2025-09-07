@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 # Proxmox VM/CT Management Tool
-# Version 2.7.1 — 2025-09-07
-# - Fix: sort -k1,1 statt -k1,1,1
-# - Stabiles CT-Namen-Parsing: $NF + Fallback pct config hostname
+# Version 2.7.2 — 2025-09-07
+# - Fix: Header-Zeilen sicher ignorieren (nur numerische IDs)
+# - CT-Namen: $NF + Fallback pct config hostname
 # - Root-Prüfung, LC_ALL=C, kein sudo
 
 set -Eeuo pipefail
@@ -30,11 +30,17 @@ trim() { local v="$*"; v="${v#"${v%%[![:space:]]*}"}"; v="${v%"${v##*[![:space:]
 require_root() { (( EUID == 0 )) || { err "Als root ausführen."; exit 1; } }
 require_tools() { { have qm || have pct; } || { err "qm/pct fehlen. Auf Proxmox-Host starten."; exit 1; } }
 
+# Nur Zeilen mit führender numerischer ID zulassen
+is_data_line() {
+  # erlaubt führende Spaces, dann Ziffern, dann Space/Tab
+  [[ "$1" =~ ^[[:space:]]*[0-9]+[[:space:]]+ ]]
+}
+
 # ===== Typ/Status =====
 type_of_id() {
   local id="$1"
-  if have pct && pct list 2>/dev/null | awk 'NR>1{print $1}' | grep -qx -- "$id"; then printf 'CT'; return; fi
-  if have qm  && qm  list 2>/dev/null | awk 'NR>1{print $1}' | grep -qx -- "$id"; then printf 'VM'; return; fi
+  if have pct && pct list 2>/dev/null | awk 'NR>1 {print $1}' | grep -qx -- "$id"; then printf 'CT'; return; fi
+  if have qm  && qm  list 2>/dev/null | awk 'NR>1 {print $1}' | grep -qx -- "$id"; then printf 'VM'; return; fi
   printf ''
 }
 
@@ -56,8 +62,7 @@ collect_instances() {
   if have pct; then
     while IFS= read -r line; do
       [[ -z "${line// /}" ]] && continue
-      [[ "$line" =~ ^VMID[[:space:]] ]] && continue
-      awk 'NF && $1 ~ /^[0-9]+$/' >/dev/null <<<"$line" || continue
+      is_data_line "$line" || continue
       local id status name sym
       id="$(awk '{print $1}' <<<"$line")"
       status="$(awk '{print $2}' <<<"$line")"
@@ -72,8 +77,7 @@ collect_instances() {
   if have qm; then
     while IFS= read -r line; do
       [[ -z "${line// /}" ]] && continue
-      [[ "$line" =~ ^VMID[[:space:]] ]] && continue
-      awk 'NF && $1 ~ /^[0-9]+$/' >/dev/null <<<"$line" || continue
+      is_data_line "$line" || continue
       local id status name sym
       id="$(awk '{print $1}' <<<"$line")"
       name="$(awk '{print $2}' <<<"$line")"
