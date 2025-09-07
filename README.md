@@ -2,61 +2,79 @@
 
 ![Proxmox Console Screenshot](docs/screenshots/proxmox-console.png)
 
-A lightweight TUI helper to list & manage Proxmox VMs/containers via `qm`/`pct`.
+A lightweight terminal user interface (TUI) tool to manage Proxmox VMs and containers via `qm` and `pct`.
 
 ---
 
-## 🚀 Features
+## ✨ Features
 
-✔ Robust instance listing (supports names with spaces)  
-✔ Start / Stop / Restart / Status  
-✔ Open console (`pct enter`, `qm terminal` – fallback `qm monitor`)  
-✔ Snapshot management (list / create / rollback / delete)  
-✔ SPICE info & `.vv` file generation, enable SPICE  
-✔ Permission checks, clear TUI interface  
-✔ Status icons for quick overview
+- Clean overview with colored status icons (🟢 running, 🔴 stopped, 🟠 paused)  
+- Start / Stop / Restart / Status management  
+- Console access (`pct enter`, `qm terminal`, fallback `qm monitor`)  
+- Snapshot management: list, create, rollback, delete  
+- SPICE integration: show connection info, generate `.vv` viewer files, enable SPICE  
+- Built-in permission checks and root validation  
+- Works directly on a Proxmox host without extra dependencies  
 
 ---
 
-## ⚡ Quick Start (on a Proxmox node)
+## ⚡ Quick Start
+
+Run as **root** on a Proxmox host:
 
 ```bash
 apt update && apt install -y git
-cd /root && git clone https://github.com/TimInTech/proxmox-manager.git
+cd /root
+git clone https://github.com/TimInTech/proxmox-manager.git
 cd proxmox-manager
 chmod +x proxmox-manager.sh install_dependencies.sh
-./install_dependencies.sh    # optional helpers (shellcheck, remote-viewer, etc.)
+./install_dependencies.sh    # optional: helper tools (e.g. shellcheck, remote-viewer)
 ./proxmox-manager.sh
+````
+
+Optional: make it globally available:
+
+```bash
+cp proxmox-manager.sh /usr/local/sbin/proxmox-manager
+chmod +x /usr/local/sbin/proxmox-manager
+proxmox-manager
 ```
 
 ---
 
-## 📋 Notes
+## 📦 Requirements
 
-- **Run as root** on a Proxmox node (requires `qm` and/or `pct` installed)
-- **SPICE:** Tool displays `spice://HOST:PORT` and writes `/tmp/vm-<id>.vv` for local viewer use
-- **CI:** ShellCheck workflow lints the script on every push/PR
-- **Screenshot storage:** For further screenshots, place them in `docs/screenshots/`, filename standard: `proxmox-console-YYYYMMDD-HHMMSS-[context].png`
-
----
-
-## 🛠️ Function Details
-
-- **Intelligent status extraction:** Detects `running`, `stopped`, `paused`, and error cases.
-- **Snapshot management:** List snapshots, create, rollback, and delete directly from the TUI.
-- **SPICE integration:** Displays connection info and creates `.vv` viewer files for local use.
-- **Console fallback:** If `qm terminal` fails, automatically falls back to `qm monitor`.
+* Run as `root` on a Proxmox host
+* Proxmox CLI tools `qm` and/or `pct` must be available
+* For SPICE support: `remote-viewer` (Virt-Viewer) is recommended
 
 ---
 
-## 📚 Community
+## 🛠️ How It Works
 
-For feedback, feature requests or bug reports please open an issue!  
-Pull requests for new features are welcome.
+* Detects VMs and containers via `qm list` and `pct list`
+* Resolves container names reliably (handles missing/empty fields)
+* Status detection: `running`, `stopped`, `paused`, with fallback handling
+* SPICE: automatically provides connection URI (`spice://host:port`) and writes `.vv` files under `/tmp/`
 
 ---
 
-## 📝 License
+## 📌 Roadmap
 
-MIT License – see LICENSE
+* Optional JSON/YAML output for automation
+* Batch actions (start/stop multiple VMs/CTs)
+* Improved error logging
+* Packaging for Debian/Proxmox hosts
 
+---
+
+## 🤝 Contributing
+
+Contributions are welcome!
+Open an [issue](https://github.com/TimInTech/proxmox-manager/issues) for bug reports or feature requests, or submit a pull request.
+
+---
+
+## 📄 License
+
+MIT License – see [LICENSE](LICENSE).
