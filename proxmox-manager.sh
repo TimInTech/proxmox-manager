@@ -33,7 +33,7 @@ else
   NC=''
 fi
 
-trap 'printf "\n%s\n" "Beendet."; exit 0' INT TERM
+trap 'printf "\n%s\n" "Exiting."; exit 0' INT TERM
 
 have() { command -v "$1" >/dev/null 2>&1; }
 err() { printf '%b\n' "${RED}Error:${NC} $*" >&2; }
@@ -53,11 +53,11 @@ trim() {
 }
 
 require_root() { ((EUID == 0)) || {
-  err "Als root ausführen."
+  err "Please run as root."
   exit 1
 }; }
 require_tools() { { have qm || have pct; } || {
-  err "qm/pct fehlen. Auf Proxmox-Host starten."
+  err "qm/pct missing. Run on a Proxmox host."
   exit 1
 }; }
 
@@ -113,7 +113,7 @@ parse_args() {
     shift
   done
   if ((LIST_FLAG == 1 && JSON_FLAG == 1)); then
-    err "Optionen --list und --json sind nicht kombinierbar."
+    err "Options --list and --json are not combinable."
     exit 1
   fi
 }
@@ -249,7 +249,7 @@ print_table() {
   done < <(collect_instances | sort -n -t$'\t' -k1,1)
   if ((any == 0)); then
     printf '%b\n' "${RED}Keine VMs oder Container gefunden.${NC}"
-    printf '%s\n' "Direkt auf dem Proxmox-Host als root starten."
+    printf '%s\n' "Run directly on the Proxmox host as root."
     return 1
   fi
   printf '%s\n' "─────────────────────────────────────────────────────────────"
@@ -260,8 +260,8 @@ print_table() {
 main_menu() {
   header
   if ! print_table; then return 1; fi
-  echo "Eingaben: VMID starten | 'r' neu laden | 'q' beenden"
-  printf '%s' "Auswahl: "
+  echo "Input: enter VMID to open menu | 'r' refresh | 'q' quit"
+  printf '%s' "Selection: "
   local choice
   read_line choice
   case "$choice" in
@@ -281,10 +281,10 @@ main_menu() {
         if ((found == 1)); then
           action_menu "$choice" "$sel_type" "$sel_name"
         else
-          err "VMID $choice nicht gefunden."
+          err "VMID $choice not found."
         fi
       else
-        err "Ungültige Eingabe."
+        err "Invalid input."
       fi
       ;;
   esac
@@ -295,14 +295,14 @@ action_menu() {
   local st
   st="$(status_of "$id" "$ty")"
   echo
-  note "Aktionen für $ty $id ($name) — Status: $st"
+  note "Actions for $ty $id ($name) — Status: $st"
   echo "1) Start   2) Stop    3) Restart   4) Status"
-  echo "5) Konsole 6) Snapshots"
+  echo "5) Console 6) Snapshots"
   if [[ "$ty" == "VM" ]]; then
-    echo "7) SPICE-Info  8) SPICE aktivieren"
+    echo "7) SPICE info  8) Enable SPICE"
   fi
-  echo "9) Zurück"
-  printf '%s' "Auswahl [1-9]: "
+  echo "9) Back"
+  printf '%s' "Selection [1-9]: "
   local opt
   read_line opt
   case "$opt" in
@@ -327,9 +327,9 @@ action_menu() {
       fi
       ;;
     9) : ;;
-    *) err "Ungültig." ;;
+    *) err "Invalid." ;;
   esac
-  printf '%s' "Weiter mit Enter… "
+  printf '%s' "Press Enter to continue… "
   local _
   read_line _
 }
@@ -414,7 +414,7 @@ do_action() {
 
 open_console() {
   local id="$1" ty="$2" name="$3"
-  note "Konsole für $ty $id ($name) öffnen…"
+  note "Opening console for $ty $id ($name)…"
   if [[ "$ty" == "CT" ]]; then
     if have pct; then
       echo "CTRL+D zum Beenden."
@@ -427,14 +427,14 @@ open_console() {
       :
     else
       note "'qm terminal' nicht verfügbar. Fallback 'qm monitor'."
-      qm monitor "$id" || err "Konsole für VM $id fehlgeschlagen."
+  qm monitor "$id" || err "Console for VM $id failed."
     fi
   fi
 }
 
 snapshots_menu() {
   local id="$1" ty="$2" name="$3" s
-  echo "1) Auflisten  2) Erstellen  3) Rollback  4) Löschen  5) Zurück"
+  echo "1) List  2) Create  3) Rollback  4) Delete  5) Back"
   printf '%s' "Auswahl [1-5]: "
   read_line s
   case "$s" in
