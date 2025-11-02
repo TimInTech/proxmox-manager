@@ -1,13 +1,35 @@
+# Proxmox VM/CT Manager – Version 2.7.2 (updated 2025-09-07)
 # proxmox-manager
+
+<p align="center"><em>Terminal tool to manage Proxmox VMs and containers from the host shell</em></p>
 
 Languages: 🇬🇧 English (this file) • 🇩🇪 [Deutsch](README.de.md)
 
+<p align="center">
+  <a href="https://github.com/TimInTech/timintech-proxmox-manager/stargazers"><img alt="GitHub Stars" src="https://img.shields.io/github/stars/TimInTech/timintech-proxmox-manager?style=flat&color=yellow"></a>
+  <a href="https://github.com/TimInTech/timintech-proxmox-manager/network/members"><img alt="GitHub Forks" src="https://img.shields.io/github/forks/TimInTech/timintech-proxmox-manager?style=flat&color=blue"></a>
+  <a href="LICENSE"><img alt="License" src="https://img.shields.io/github/license/TimInTech/timintech-proxmox-manager?style=flat"></a>
+  <a href="https://buymeacoffee.com/timintech"><img alt="Buy Me A Coffee" src="https://img.shields.io/badge/Buy%20Me%20A%20Coffee-FFDD00?logo=buymeacoffee&logoColor=000&labelColor=555555&style=flat"></a>
+</p>
+
 ![TUI – Proxmox VM/CT Management Tool](docs/screenshots/Screenshot.png)
 
+---
 *TUI overview with VM/CT status, actions, and JSON export.*
+
+## Quick Links
+- Main script: [`proxmox-manager.sh`](proxmox-manager.sh)
+- Optional helper: [`install_dependencies.sh`](install_dependencies.sh)
+- Project overview: [Quickstart](#quickstart) · [Usage](#usage) · [CLI Options](#cli-options) · [Troubleshooting](#troubleshooting)
+- Audit artefacts: [`.audit/`](.audit/)
+- Issues & feedback: [Create issue](../../issues)
+
+---
 
 ## What it is
 Minimal TUI helper to list, control and inspect Proxmox VMs/CTs. JSON mode for automation.
+
+---
 
 ## Installation (with Git, updateable)
 ```bash
@@ -21,53 +43,169 @@ chmod +x proxmox-manager.sh install_dependencies.sh
 ./proxmox-manager.sh --json  # machine-readable
 ```
 
+## ✅ Requirements
+
+* Proxmox VE 7.4, 8.x, or 9.x host
+* Run directly on the Proxmox node as `root`
+* `qm` and/or `pct` CLI tools available on the host
+* Optional helpers: `remote-viewer` for SPICE, `jq` for utilities, `shellcheck` for linting
+
 <details><summary>SSH clone (if you use GitHub SSH keys)</summary>
+
+```bash
 git clone --depth=1 git@github.com:TimInTech/proxmox-manager.git
+```
 
 </details>
 
-Note: If Git asks for username/password you probably used a wrong or private URL. Use the public one above.
+---
 
-Update (Git variant)
+## Introduction
+
+This repository contains a lightweight terminal UI script that lists and manages both VMs and LXC containers on a Proxmox host. It provides status-aware actions, console access, snapshot helpers, and SPICE integration without depending on external services.
+
+*Note:* If Git asks for username/password you probably used a wrong or private URL. Use the public one above.
+
+> The script targets interactive use on the Proxmox host itself.
+
+---
+
+### Update (Git variant)
+
+```bash
 cd /root/proxmox-manager
 git pull
+```
 
-Installation (without Git)
+## Technologies & Dependencies
+
+![Proxmox VE](https://img.shields.io/badge/Proxmox-VE-EE7F2D?logo=proxmox&logoColor=white&style=flat)
+![Debian](https://img.shields.io/badge/Debian-11--13-A81D33?logo=debian&logoColor=white&style=flat)
+![Ubuntu](https://img.shields.io/badge/Ubuntu-24.04-E95420?logo=ubuntu&logoColor=white&style=flat)
+![Bash](https://img.shields.io/badge/Bash-✔-4EAA25?logo=gnubash&logoColor=white&style=flat)
+![systemd](https://img.shields.io/badge/systemd-✔-FFDD00?logo=linux&logoColor=black&style=flat)
+![SPICE](https://img.shields.io/badge/SPICE-✔-CC0000?logo=redhat&logoColor=white&style=flat)
+![virt-viewer](https://img.shields.io/badge/Virt--Viewer-✔-555555?style=flat)
+![jq](https://img.shields.io/badge/jq-✔-3E6E93?style=flat)
+![ShellCheck](https://img.shields.io/badge/ShellCheck-✔-4B9CD3?style=flat)
+
+---
+
+## 📊 Status
+
+Stable for day-to-day VM and LXC management on the host shell.
+
+---
+
+## Quickstart
+
+### Installation
+
+```bash
+apt update && apt install -y git
+```
+
+### Installation (without Git)
+
+```bash
 cd /root
 mkdir -p proxmox-manager && cd proxmox-manager
 curl -fsSL -o proxmox-manager.sh https://raw.githubusercontent.com/TimInTech/proxmox-manager/main/proxmox-manager.sh
 curl -fsSL -o install_dependencies.sh https://raw.githubusercontent.com/TimInTech/proxmox-manager/main/install_dependencies.sh
 chmod +x proxmox-manager.sh install_dependencies.sh
-./install_dependencies.sh    # optional
-./proxmox-manager.sh
+./install_dependencies.sh   # optional: remote-viewer, jq, shellcheck
+```
 
-Update (no-Git variant)
+### Run
+
+```bash
+./proxmox-manager.sh
+```
+
+### Optional system-wide install
+
+```bash
+cp proxmox-manager.sh /usr/local/sbin/proxmox-manager
+chmod +x /usr/local/sbin/proxmox-manager
+proxmox-manager
+```
+
+### Update (no-Git variant)
+
+```bash
 cd /root/proxmox-manager
 curl -fsSL -o proxmox-manager.sh https://raw.githubusercontent.com/TimInTech/proxmox-manager/main/proxmox-manager.sh
 curl -fsSL -o install_dependencies.sh https://raw.githubusercontent.com/TimInTech/proxmox-manager/main/install_dependencies.sh
 chmod +x proxmox-manager.sh install_dependencies.sh
+```
 
-Dependencies
+## Dependencies
 
-jq recommended for --json
+* `jq` recommended for `--json`
+* `remote-viewer` (package: `virt-viewer`) optional for VM consoles
+* Usually run as `root` on Proxmox hosts
 
-remote-viewer (package: virt-viewer) optional to open VM consoles
+## Features
 
-Usually run as root on Proxmox hosts
+* Unified VM and CT overview with status symbols: 🟢 running · 🔴 stopped · 🟠 paused · 🟡 unknown
+* Actions: start, stop, restart, and status for each ID
+* Console helpers: `pct enter`, `qm terminal`, or fallback `qm monitor`
+* Snapshot helpers: list, create, rollback, delete snapshots
+* SPICE tools: connection details, `.vv` file generation, optional SPICE enablement
+* Built-in root check, locale normalization, and resilient ID parsing
 
-Uninstall
+---
+
+## CLI Options
+
+* `--list` – print plain table of all VMs/CTs
+* `--json` – output JSON array (`id`, `type`, `status`, `symbol`, `name`)
+* `--no-clear` – disable terminal clearing
+* `--once` – run only once and exit
+* `--help` – show usage and exit
+
+---
+
+## Uninstall
 
 Remove program directory:
 
+```bash
 rm -rf /root/proxmox-manager
-
+```
 
 Optionally remove optional dependencies again:
 
+```bash
 sudo apt purge -y jq virt-viewer shellcheck
 sudo apt autoremove -y
+```
 
-License
+---
 
-MIT
+## SPICE Notes
+
+* `remote-viewer` (virt-viewer) offers the best experience for `.vv` files.
+* If a VM lacks a SPICE device, the helper can add one; restart the VM afterwards.
+
+---
+
+## Troubleshooting
+
+* **No entries:** run as `root` with `qm`/`pct` available
+* **Console unavailable:** `qm terminal` requires serial console; fallback `qm monitor`
+* **Missing SPICE port:** configure or enable via helper
+* **JSON issues:** output works standalone, `jq` optional to consume it
+
+---
+
+## Contributing
+
+Pull requests and issues welcome. Run `shellcheck` locally before committing.
+
+---
+
+## License
+
+[MIT](LICENSE)
 
