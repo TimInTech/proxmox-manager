@@ -1,4 +1,7 @@
-#!/usr/bin/env bash
+git rev-parse --abbrev-ref HEAD        # aktueller Branch
+git log --oneline --decorate -n 10    # letzte 10 lokale commits
+git fetch origin
+git log --oneline origin/$(git rev-parse --abbrev-ref HEAD) -n 10  # letzte 10 remote commits auf dem gleichen branch#!/usr/bin/env bash
 # install_dependencies.sh - install optional helpers for proxmox-manager
 # Idempotent install script for Debian/Proxmox nodes
 
@@ -20,7 +23,7 @@ for pkg in "${PKGS[@]}"; do
   fi
 done
 
-if (( ${#MISSING[@]} )); then
+if ((${#MISSING[@]})); then
   log "Updating package lists..."
   if ! apt-get update; then
     err "apt-get update failed"
