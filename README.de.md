@@ -1,15 +1,15 @@
 # proxmox-manager
 
-Languages: 🇬🇧 English (this file) • 🇩🇪 [Deutsch](README.de.md)
+Languages: 🇬🇧 [English](README.md) • 🇩🇪 Deutsch (diese Datei)
 
 ![TUI – Proxmox VM/CT Management Tool](docs/screenshots/Screenshot.png)
 
-*TUI overview with VM/CT status, actions, and JSON export.*
+*TUI-Übersicht mit VM/CT-Status, Aktionen und JSON-Export.*
 
-## What it is
-Minimal TUI helper to list, control and inspect Proxmox VMs/CTs. JSON mode for automation.
+## Zweck
+Schlankes TUI-Tool zum Auflisten, Steuern und Inspizieren von Proxmox VMs/CTs. JSON-Modus für Automatisierung.
 
-## Installation (with Git, updateable)
+## Installation (mit Git, updatefähig)
 ```bash
 sudo apt update && sudo apt install -y git
 cd /root
@@ -17,22 +17,22 @@ git clone --depth=1 https://github.com/TimInTech/proxmox-manager.git
 cd proxmox-manager
 chmod +x proxmox-manager.sh install_dependencies.sh
 ./install_dependencies.sh    # optional (jq, remote-viewer, shellcheck)
-./proxmox-manager.sh         # interactive
-./proxmox-manager.sh --json  # machine-readable
+./proxmox-manager.sh         # interaktiv
+./proxmox-manager.sh --json  # maschinenlesbar
 ```
 
-<details><summary>SSH clone (if you use GitHub SSH keys)</summary>
+<details><summary>SSH-Variante (falls GitHub-SSH-Keys vorhanden)</summary>
 git clone --depth=1 git@github.com:TimInTech/proxmox-manager.git
 
 </details>
 
-Note: If Git asks for username/password you probably used a wrong or private URL. Use the public one above.
+Hinweis: Wenn Git nach Zugangsdaten fragt, war meist eine falsche/private URL im Spiel. Obige öffentliche URL nutzen.
 
-Update (Git variant)
+Update (Git-Variante)
 cd /root/proxmox-manager
 git pull
 
-Installation (without Git)
+Installation (ohne Git)
 cd /root
 mkdir -p proxmox-manager && cd proxmox-manager
 curl -fsSL -o proxmox-manager.sh https://raw.githubusercontent.com/TimInTech/proxmox-manager/main/proxmox-manager.sh
@@ -41,33 +41,33 @@ chmod +x proxmox-manager.sh install_dependencies.sh
 ./install_dependencies.sh    # optional
 ./proxmox-manager.sh
 
-Update (no-Git variant)
+Update (ohne-Git)
 cd /root/proxmox-manager
 curl -fsSL -o proxmox-manager.sh https://raw.githubusercontent.com/TimInTech/proxmox-manager/main/proxmox-manager.sh
 curl -fsSL -o install_dependencies.sh https://raw.githubusercontent.com/TimInTech/proxmox-manager/main/install_dependencies.sh
 chmod +x proxmox-manager.sh install_dependencies.sh
 
-Dependencies
+Abhängigkeiten
 
-jq recommended for --json
+jq empfohlen für --json
 
-remote-viewer (package: virt-viewer) optional to open VM consoles
+remote-viewer (Paket: virt-viewer) optional für VM-Konsole
 
-Usually run as root on Proxmox hosts
+Ausführung meist als root auf PVE-Hosts
 
-Uninstall
+Deinstallieren
 
-Remove program directory:
+Programmpfad entfernen:
 
 rm -rf /root/proxmox-manager
 
 
-Optionally remove optional dependencies again:
+Optionale Abhängigkeiten rückgängig machen:
 
 sudo apt purge -y jq virt-viewer shellcheck
 sudo apt autoremove -y
 
-License
+Lizenz
 
 MIT
 
