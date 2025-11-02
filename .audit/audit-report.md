@@ -19,19 +19,20 @@ Datum: 2025-11-02
 
 ## Wesentliche Befunde (Priorisiert)
 
-1) Betriebs-/Security-Hardening (High priority, operational)
+1. Betriebs-/Security-Hardening (High priority, operational)
    - Empfehlung: Aktiviere GitHub Secret Scanning und Dependabot Security Alerts
      in den Repository Settings.
    - Empfehlung: Aktiviere Branch Protection und Required Status Checks (mindestens
      ShellCheck / shfmt / gitleaks).
 
-2) Repository-Checks & Automation (Medium)
-   - `shfmt`-Änderungen wurden vorgeschlagen — diese vereinheitlichen Format und
-     verringern CI-Fails.
-   - `markdownlint` ist nicht installiert auf dem Host; README enthält mehrere
-     MD-Lint-Warnungen (stilistisch).
+1. Repository-Checks & Automation (Medium)
 
-3) Geheimnisse & Artefakte (Medium)
+- `shfmt`-Änderungen wurden vorgeschlagen — diese vereinheitlichen Format und
+  verringern CI-Fails.
+- Markdownlint ist nun als CI-Workflow aktiv und zentrale Markdown-Dateien
+  wurden für MD013 (80 Zeichen) bereinigt.
+
+1. Geheimnisse & Artefakte (Medium)
    - Grep-basierter Scan hat nichts Kritisches gefunden. Für höhere Sicherheit
      empfehle ich einen Lauf mit `gitleaks` oder `trufflehog` in CI.
 
@@ -42,10 +43,16 @@ Datum: 2025-11-02
   - Enable Dependabot security alerts and auto fixes
   - Configure Branch Protection for `main` requiring CI checks
 
-- CI Ergänzungen (bereitgestellt):
+- CI Ergänzungen (bereitgestellt/aktiv):
+  - Smoke-Test Workflow (`.github/workflows/smoke.yml`) —
+    führt `./proxmox-manager.sh --json` in einer Mock-Umgebung (qm/pct) aus,
+    validiert die JSON-Ausgabe mit `jq` und lädt `out.json` als Artefakt hoch.
+  - Markdownlint Workflow (`.github/workflows/markdownlint.yml`) —
+    lintet alle Markdown-Dateien mit 80-Zeichen-Grenze (MD013) und
+    ausgeschlossenen Pfaden (`docs/screenshots`, `.audit`).
   - Gitleaks-Workflow (siehe `.github/workflows/gitleaks.yml`) —
-    führt Secret-Scanning in PRs und Pushes aus und schreibt Report nach
-    `.audit/gitleaks-report.json`.
+    führt Secret-Scanning in PRs und Pushes aus und kann Reports nach
+    `.audit/gitleaks-report.json` schreiben.
 
 - Optional: installiere `markdownlint` in CI oder lokal, und bereinige die README
   Warnungen.
@@ -70,16 +77,31 @@ grep -RIn --exclude-dir=.git -E '[A-Za-z0-9+/]{40,}={0,2}' .
 
 # Optional, tieferer Scan (falls gitleaks installiert)
 gitleaks detect --source . --report-path ./.audit/gitleaks-report.json
+
+# Markdownlint lokal laufen lassen (80-Zeichen-Grenze)
+npx --yes markdownlint-cli2 "**/*.md" "!docs/screenshots/**" "!.audit/**"
+
+# Smoke-Test lokal simulieren (Mocks erzeugen und JSON prüfen)
+export PROXMOX_MANAGER_ALLOW_NONROOT=1
+PATH="$PWD/.bin:$PATH" ./proxmox-manager.sh --json > ./.audit/instances.json || true
+jq . ./.audit/instances.json >/dev/null
 ```
 <!-- markdownlint-enable MD013 -->
 
 ## Weiteres / Nächste Schritte
 
-- Ich habe bereits einen GitHub Actions Workflow hinzugefügt, der `gitleaks`
-  laufen lässt. Wenn du möchtest, kann ich zusätzlich:
-  - Markdown-Lint Workflow ergänzen
-  - Einen PR vorbereiten, der `shfmt`-Änderungen sauber zusammenführt
-  - `gitleaks` konfigurieren, um tolerierbare Ausnahmen (allowlist) zu verwenden
+- Umgesetzt:
+  - Smoke-Workflow und Markdownlint-Workflow hinzugefügt und konfiguriert.
+  - Markdown-Dateien (`CODE_OF_CONDUCT.md`, `CONTRIBUTING.md`, `SECURITY.md`)
+    für MD013 bereinigt.
+  - Projekt-/Issue-Organisation aktualisiert; erledigte Issues geschlossen
+    (#9 Englisch-Umstellung, #10 Board/Spalten-Organisation, #12 Markdownlint,
+    #14 Smoke-CI).
+
+- Offen/priorisierbar:
+  - Gitleaks-Run in Actions auslösen und Findings triagieren (#11).
+  - Vulnerability Scan (z. B. Trivy) als CI ergänzen und Report nach `.audit/`
+    schreiben (#13).
 
 ## Abschluss
 
