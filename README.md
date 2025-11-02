@@ -1,6 +1,8 @@
-# Proxmox VM/CT Manager – Version 2.7.2 (updated 2025-09-07)
 # proxmox-manager
 
+Proxmox VM/CT Manager – Version 2.7.2 (updated 2025-09-07)
+
+<!-- markdownlint-disable MD013 -->
 <p align="center"><em>Terminal tool to manage Proxmox VMs and containers from the host shell</em></p>
 
 Languages: 🇬🇧 English (this file) • 🇩🇪 [Deutsch](README.de.md)
@@ -11,27 +13,42 @@ Languages: 🇬🇧 English (this file) • 🇩🇪 [Deutsch](README.de.md)
   <a href="LICENSE"><img alt="License" src="https://img.shields.io/github/license/TimInTech/timintech-proxmox-manager?style=flat"></a>
   <a href="https://buymeacoffee.com/timintech"><img alt="Buy Me A Coffee" src="https://img.shields.io/badge/Buy%20Me%20A%20Coffee-FFDD00?logo=buymeacoffee&logoColor=000&labelColor=555555&style=flat"></a>
 </p>
+<!-- markdownlint-enable MD013 -->
 
 ![TUI – Proxmox VM/CT Management Tool](docs/screenshots/Screenshot.png)
 
 ---
+
 *TUI overview with VM/CT status, actions, and JSON export.*
 
 ## Quick Links
+
 - Main script: [`proxmox-manager.sh`](proxmox-manager.sh)
 - Optional helper: [`install_dependencies.sh`](install_dependencies.sh)
-- Project overview: [Quickstart](#quickstart) · [Usage](#usage) · [CLI Options](#cli-options) · [Troubleshooting](#troubleshooting)
+- Project overview:
+  [Quickstart](#quickstart) ·
+  [Requirements](#requirements) ·
+  [Introduction](#introduction) ·
+  [Technologies & Dependencies](#technologies--dependencies) ·
+  [Status](#status) ·
+  [Dependencies](#dependencies) ·
+  [Features](#features) ·
+  [CLI Options](#cli-options) ·
+  [Uninstall](#uninstall) ·
+  [Troubleshooting](#troubleshooting)
 - Audit artefacts: [`.audit/`](.audit/)
 - Issues & feedback: [Create issue](../../issues)
 
 ---
 
 ## What it is
+
 Minimal TUI helper to list, control and inspect Proxmox VMs/CTs. JSON mode for automation.
 
 ---
 
 ## Installation (with Git, updateable)
+
 ```bash
 sudo apt update && sudo apt install -y git
 cd /root
@@ -43,12 +60,13 @@ chmod +x proxmox-manager.sh install_dependencies.sh
 ./proxmox-manager.sh --json  # machine-readable
 ```
 
-## ✅ Requirements
+## Requirements
 
-* Proxmox VE 7.4, 8.x, or 9.x host
-* Run directly on the Proxmox node as `root`
-* `qm` and/or `pct` CLI tools available on the host
-* Optional helpers: `remote-viewer` for SPICE, `jq` for utilities, `shellcheck` for linting
+- Proxmox VE 7.4, 8.x, or 9.x host
+- Run directly on the Proxmox node as `root`
+- `qm` and/or `pct` CLI tools available on the host
+- Optional helpers: `remote-viewer` for SPICE, `jq` for utilities,
+  `shellcheck` for linting
 
 <details><summary>SSH clone (if you use GitHub SSH keys)</summary>
 
@@ -62,9 +80,13 @@ git clone --depth=1 git@github.com:TimInTech/proxmox-manager.git
 
 ## Introduction
 
-This repository contains a lightweight terminal UI script that lists and manages both VMs and LXC containers on a Proxmox host. It provides status-aware actions, console access, snapshot helpers, and SPICE integration without depending on external services.
+This repository contains a lightweight terminal UI script that lists and manages
+both VMs and LXC containers on a Proxmox host. It provides status-aware actions,
+console access, snapshot helpers, and SPICE integration without depending on
+external services.
 
-*Note:* If Git asks for username/password you probably used a wrong or private URL. Use the public one above.
+*Note:* If Git asks for username/password you probably used a wrong or private
+URL. Use the public one above.
 
 > The script targets interactive use on the Proxmox host itself.
 
@@ -79,6 +101,7 @@ git pull
 
 ## Technologies & Dependencies
 
+<!-- markdownlint-disable MD013 -->
 ![Proxmox VE](https://img.shields.io/badge/Proxmox-VE-EE7F2D?logo=proxmox&logoColor=white&style=flat)
 ![Debian](https://img.shields.io/badge/Debian-11--13-A81D33?logo=debian&logoColor=white&style=flat)
 ![Ubuntu](https://img.shields.io/badge/Ubuntu-24.04-E95420?logo=ubuntu&logoColor=white&style=flat)
@@ -88,10 +111,11 @@ git pull
 ![virt-viewer](https://img.shields.io/badge/Virt--Viewer-✔-555555?style=flat)
 ![jq](https://img.shields.io/badge/jq-✔-3E6E93?style=flat)
 ![ShellCheck](https://img.shields.io/badge/ShellCheck-✔-4B9CD3?style=flat)
+<!-- markdownlint-enable MD013 -->
 
 ---
 
-## 📊 Status
+## Status
 
 Stable for day-to-day VM and LXC management on the host shell.
 
@@ -141,28 +165,30 @@ chmod +x proxmox-manager.sh install_dependencies.sh
 
 ## Dependencies
 
-* `jq` recommended for `--json`
-* `remote-viewer` (package: `virt-viewer`) optional for VM consoles
-* Usually run as `root` on Proxmox hosts
+- `jq` recommended for `--json`
+- `remote-viewer` (package: `virt-viewer`) optional for VM consoles
+- Usually run as `root` on Proxmox hosts
 
 ## Features
 
-* Unified VM and CT overview with status symbols: 🟢 running · 🔴 stopped · 🟠 paused · 🟡 unknown
-* Actions: start, stop, restart, and status for each ID
-* Console helpers: `pct enter`, `qm terminal`, or fallback `qm monitor`
-* Snapshot helpers: list, create, rollback, delete snapshots
-* SPICE tools: connection details, `.vv` file generation, optional SPICE enablement
-* Built-in root check, locale normalization, and resilient ID parsing
+- Unified VM and CT overview with status symbols: 🟢 running · 🔴 stopped · 🟠
+  paused · 🟡 unknown
+- Actions: start, stop, restart, and status for each ID
+- Console helpers: `pct enter`, `qm terminal`, or fallback `qm monitor`
+- Snapshot helpers: list, create, rollback, delete snapshots
+- SPICE tools: connection details, `.vv` file generation, optional SPICE
+  enablement
+- Built-in root check, locale normalization, and resilient ID parsing
 
 ---
 
 ## CLI Options
 
-* `--list` – print plain table of all VMs/CTs
-* `--json` – output JSON array (`id`, `type`, `status`, `symbol`, `name`)
-* `--no-clear` – disable terminal clearing
-* `--once` – run only once and exit
-* `--help` – show usage and exit
+- `--list` – print plain table of all VMs/CTs
+- `--json` – output JSON array (`id`, `type`, `status`, `symbol`, `name`)
+- `--no-clear` – disable terminal clearing
+- `--once` – run only once and exit
+- `--help` – show usage and exit
 
 ---
 
@@ -185,17 +211,17 @@ sudo apt autoremove -y
 
 ## SPICE Notes
 
-* `remote-viewer` (virt-viewer) offers the best experience for `.vv` files.
-* If a VM lacks a SPICE device, the helper can add one; restart the VM afterwards.
+- `remote-viewer` (virt-viewer) offers the best experience for `.vv` files.
+- If a VM lacks a SPICE device, the helper can add one; restart the VM afterwards.
 
 ---
 
 ## Troubleshooting
 
-* **No entries:** run as `root` with `qm`/`pct` available
-* **Console unavailable:** `qm terminal` requires serial console; fallback `qm monitor`
-* **Missing SPICE port:** configure or enable via helper
-* **JSON issues:** output works standalone, `jq` optional to consume it
+- **No entries:** run as `root` with `qm`/`pct` available
+- **Console unavailable:** `qm terminal` requires serial console; fallback `qm monitor`
+- **Missing SPICE port:** configure or enable via helper
+- **JSON issues:** output works standalone, `jq` optional to consume it
 
 ---
 
@@ -208,4 +234,3 @@ Pull requests and issues welcome. Run `shellcheck` locally before committing.
 ## License
 
 [MIT](LICENSE)
-
