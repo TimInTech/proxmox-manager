@@ -1,0 +1,41 @@
+name: "Smoke test: proxmox-manager"
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  smoke:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup jq
+        run: sudo apt-get update && sudo apt-get install -y jq
+
+      - name: Create qm/pct mock scripts
+        run: |
+          set -euo pipefail
+          mkdir -p "$GITHUB_WORKSPACE/.bin"
+          # qm mock (base64 to avoid YAML quoting issues)
+          echo "IyEvdXNyL2Jpbi9lbnYgYmFzaApjYXNlICIkMSIgaW4KICBsaXN0KQogICAgZWNobyAiMTAwIHZtMSBydW5uaW5nIgogICAgZWNobyAiMTAxIHZtMiBzdG9wcGVkIgogICAgOzsKICBjb25maWcpCiAgICBlY2hvICJuYW1lOiB2bS0kMiIKICAgIDs7CiAgc3RhdHVzKQogICAgZWNobyAicnVubmluZyIKICAgIDs7CiAgKikKICAgIGVjaG8gInFtIG1vY2s6ICRAIiA+JjIKICAgIDs7CmVzYWMK" | base64 -d > "$GITHUB_WORKSPACE/.bin/qm"
+          # pct mock
+          echo "IyEvdXNyL2Jpbi9lbnYgYmFzaApjYXNlICIkMSIgaW4KICBsaXN0KQogICAgZWNobyAiMjAwIGN0MSBydW5uaW5nIgogICAgOzsKICBjb25maWcpCiAgICBlY2hvICJob3N0bmFtZTogY3QtJDIiCiAgICA7OwogIHN0YXR1cykKICAgIGVjaG8gInJ1bm5pbmciCiAgICA7OwogICopCiAgICBlY2hvICJwY3QgbW9jazogJEAiID4mMgogICAgOzsKZXNhYwo=" | base64 -d > "$GITHUB_WORKSPACE/.bin/pct"
+          chmod +x "$GITHUB_WORKSPACE/.bin/qm" "$GITHUB_WORKSPACE/.bin/pct"
+          echo "$GITHUB_WORKSPACE/.bin" >> $GITHUB_PATH
+
+      - name: Run proxmox-manager smoke
+        env:
+          PROXMOX_MANAGER_ALLOW_NONROOT: "1"
+        run: |
+          set -euo pipefail
+          chmod +x ./proxmox-manager.sh
+          ./proxmox-manager.sh --json > out.json || true
+          jq . < out.json >/dev/null
+
+      - name: Upload output
+        uses: actions/upload-artifact@v4
+        with:
+          name: proxmox-manager-smoke
+          path: out.json

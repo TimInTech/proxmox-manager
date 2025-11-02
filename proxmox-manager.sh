@@ -52,10 +52,17 @@ trim() {
   printf '%s' "$v"
 }
 
-require_root() { ((EUID == 0)) || {
-  err "Please run as root."
-  exit 1
-}; }
+require_root() {
+  # Allow CI or explicit overrides to bypass root check by setting
+  # PROXMOX_MANAGER_ALLOW_NONROOT=1 in the environment.
+  if [[ "${PROXMOX_MANAGER_ALLOW_NONROOT:-0}" == "1" ]]; then
+    return 0
+  fi
+  ((EUID == 0)) || {
+    err "Please run as root."
+    exit 1
+  }
+}
 require_tools() { { have qm || have pct; } || {
   err "qm/pct missing. Run on a Proxmox host."
   exit 1
