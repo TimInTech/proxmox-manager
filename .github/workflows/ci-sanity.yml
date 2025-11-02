@@ -1,0 +1,52 @@
+name: Sanity Checks
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - "**/*.sh"
+      - ".github/workflows/ci-sanity.yml"
+      - ".editorconfig"
+  pull_request:
+    paths:
+      - "**/*.sh"
+      - ".github/workflows/ci-sanity.yml"
+      - ".editorconfig"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  lint:
+    name: shellcheck & shfmt
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install lint tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y shellcheck shfmt
+
+      - name: shellcheck
+        run: |
+          set -euo pipefail
+          files="$(git ls-files '*.sh')"
+          if [[ -z "$files" ]]; then
+            echo "No shell scripts to lint."
+            exit 0
+          fi
+          echo "$files" | xargs -r -n1 shellcheck -S style -x
+
+      - name: shfmt (check mode)
+        run: |
+          set -euo pipefail
+          files="$(git ls-files '*.sh')"
+          if [[ -z "$files" ]]; then
+            echo "No shell scripts to format."
+            exit 0
+          fi
+          echo "$files" | xargs -r shfmt -d -ci -sr -i 2
