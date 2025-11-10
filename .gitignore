@@ -17,3 +17,8 @@ Thumbs.db
 # Local test artifacts
 .bin/
 out.json
+.venv/
+node_modules/
+vendor/bundle/
+.bundle/
+.npm-cache/
