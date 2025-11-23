@@ -1,0 +1,42 @@
+name: "Vulnerability Scan (Trivy)"
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  security-events: write
+
+jobs:
+  trivy-scan:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Run Trivy filesystem scan
+        uses: aquasecurity/trivy-action@v0.14.0
+        with:
+          scan-type: fs
+          scan-ref: .
+          ignore-unfixed: true
+          vuln-type: 'os,library'
+          security-checks: 'vuln,secret,config'
+          severity: 'CRITICAL,HIGH,MEDIUM'
+          format: 'sarif'
+          output: 'trivy-results.sarif'
+
+      - name: Upload SARIF to Code Scanning
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: trivy-results.sarif
+
+      - name: Archive raw Trivy results
+        uses: actions/upload-artifact@v4
+        with:
+          name: trivy-scan-sarif
+          path: trivy-results.sarif
