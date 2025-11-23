@@ -1,0 +1,19 @@
+# Byte-compiled / temp files
+*.pyc
+__pycache__/
+
+# Editor swap files
+*~
+.*.swp
+.*.swo
+
+# Logs
+*.log
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Local test artifacts
+.bin/
+out.json
