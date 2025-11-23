@@ -14,6 +14,11 @@ __pycache__/
 .DS_Store
 Thumbs.db
 
+# Trivy scan reports (committed via workflow)
+.audit/trivy-report.json
+.audit/trivy-report.txt
+trivy-results.sarif
+
 # Local test artifacts
 .bin/
 out.json
