@@ -1,236 +1,426 @@
-# proxmox-manager
+# Gitleaks
 
-Proxmox VM/CT Manager – Version 2.7.2 (updated 2025-09-07)
+```
+┌─○───┐
+│ │╲  │
+│ │ ○ │
+│ ○ ░ │
+└─░───┘
+```
 
-<!-- markdownlint-disable MD013 -->
-<p align="center"><em>Terminal tool to manage Proxmox VMs and containers from the host shell</em></p>
-
-Languages: 🇬🇧 English (this file) • 🇩🇪 [Deutsch](README.de.md)
-
-<p align="center">
-  <a href="https://github.com/TimInTech/timintech-proxmox-manager/stargazers"><img alt="GitHub Stars" src="https://img.shields.io/github/stars/TimInTech/timintech-proxmox-manager?style=flat&color=yellow"></a>
-  <a href="https://github.com/TimInTech/timintech-proxmox-manager/network/members"><img alt="GitHub Forks" src="https://img.shields.io/github/forks/TimInTech/timintech-proxmox-manager?style=flat&color=blue"></a>
-  <a href="LICENSE"><img alt="License" src="https://img.shields.io/github/license/TimInTech/timintech-proxmox-manager?style=flat"></a>
-  <a href="https://buymeacoffee.com/timintech"><img alt="Buy Me A Coffee" src="https://img.shields.io/badge/Buy%20Me%20A%20Coffee-FFDD00?logo=buymeacoffee&logoColor=000&labelColor=555555&style=flat"></a>
+<p align="left">
+  <p align="left">
+	  <a href="https://github.com/zricethezav/gitleaks/actions/workflows/test.yml">
+		  <img alt="Github Test" src="https://github.com/zricethezav/gitleaks/actions/workflows/test.yml/badge.svg">
+	  </a>
+	  <a href="https://hub.docker.com/r/zricethezav/gitleaks">
+		  <img src="https://img.shields.io/docker/pulls/zricethezav/gitleaks.svg" />
+	  </a>
+	  <a href="https://github.com/zricethezav/gitleaks-action">
+        	<img alt="gitleaks badge" src="https://img.shields.io/badge/protected%20by-gitleaks-blue">
+    	 </a>
+	  <a href="https://twitter.com/intent/follow?screen_name=zricethezav">
+		  <img src="https://img.shields.io/twitter/follow/zricethezav?label=Follow%20zricethezav&style=social&color=blue" alt="Follow @zricethezav" />
+	  </a>
+  </p>
 </p>
-<!-- markdownlint-enable MD013 -->
 
-![TUI – Proxmox VM/CT Management Tool](docs/screenshots/Screenshot.png)
+### Join our Discord! [![Discord](https://img.shields.io/discord/1102689410522284044.svg?label=&logo=discord&logoColor=ffffff&color=7389D8&labelColor=6A7EC2)](https://discord.gg/8Hzbrnkr7E)
 
----
+Gitleaks is a SAST tool for **detecting** and **preventing** hardcoded secrets like passwords, api keys, and tokens in git repos. Gitleaks is an **easy-to-use, all-in-one solution** for detecting secrets, past or present, in your code.
 
-*TUI overview with VM/CT status, actions, and JSON export.*
+```
+➜  ~/code(master) gitleaks detect --source . -v
 
-## Quick Links
+    ○
+    │╲
+    │ ○
+    ○ ░
+    ░    gitleaks
 
-- Main script: [`proxmox-manager.sh`](proxmox-manager.sh)
-- Optional helper: [`install_dependencies.sh`](install_dependencies.sh)
-- Project overview:
-  [Quickstart](#quickstart) ·
-  [Requirements](#requirements) ·
-  [Introduction](#introduction) ·
-  [Technologies & Dependencies](#technologies--dependencies) ·
-  [Status](#status) ·
-  [Dependencies](#dependencies) ·
-  [Features](#features) ·
-  [CLI Options](#cli-options) ·
-  [Uninstall](#uninstall) ·
-  [Troubleshooting](#troubleshooting)
-- Audit artefacts: [`.audit/`](.audit/)
-- Issues & feedback: [Create issue](../../issues)
 
----
-
-## What it is
-
-Minimal TUI helper to list, control and inspect Proxmox VMs/CTs. JSON mode for automation.
-
----
-
-## Installation (with Git, updateable)
-
-```bash
-sudo apt update && sudo apt install -y git
-cd /root
-git clone --depth=1 https://github.com/TimInTech/proxmox-manager.git
-cd proxmox-manager
-chmod +x proxmox-manager.sh install_dependencies.sh
-./install_dependencies.sh    # optional (jq, remote-viewer, shellcheck)
-./proxmox-manager.sh         # interactive
-./proxmox-manager.sh --json  # machine-readable
+Finding:     "export BUNDLE_ENTERPRISE__CONTRIBSYS__COM=cafebabe:deadbeef",
+Secret:      cafebabe:deadbeef
+RuleID:      sidekiq-secret
+Entropy:     2.609850
+File:        cmd/generate/config/rules/sidekiq.go
+Line:        23
+Commit:      cd5226711335c68be1e720b318b7bc3135a30eb2
+Author:      John
+Email:       john@users.noreply.github.com
+Date:        2022-08-03T12:31:40Z
+Fingerprint: cd5226711335c68be1e720b318b7bc3135a30eb2:cmd/generate/config/rules/sidekiq.go:sidekiq-secret:23
 ```
 
-## Requirements
+## Getting Started
 
-- Proxmox VE 7.4, 8.x, or 9.x host
-- Run directly on the Proxmox node as `root`
-- `qm` and/or `pct` CLI tools available on the host
-- Optional helpers: `remote-viewer` for SPICE, `jq` for utilities,
-  `shellcheck` for linting
+Gitleaks can be installed using Homebrew, Docker, or Go. Gitleaks is also available in binary form for many popular platforms and OS types on the [releases page](https://github.com/zricethezav/gitleaks/releases). In addition, Gitleaks can be implemented as a pre-commit hook directly in your repo or as a GitHub action using [Gitleaks-Action](https://github.com/gitleaks/gitleaks-action).
 
-<details><summary>SSH clone (if you use GitHub SSH keys)</summary>
+### Installing
 
 ```bash
-git clone --depth=1 git@github.com:TimInTech/proxmox-manager.git
+# MacOS
+brew install gitleaks
+
+# Docker (DockerHub)
+docker pull zricethezav/gitleaks:latest
+docker run -v ${path_to_host_folder_to_scan}:/path zricethezav/gitleaks:latest [COMMAND] --source="/path" [OPTIONS]
+
+# Docker (ghcr.io)
+docker pull ghcr.io/gitleaks/gitleaks:latest
+docker run -v ${path_to_host_folder_to_scan}:/path ghcr.io/gitleaks/gitleaks:latest [COMMAND] --source="/path" [OPTIONS]
+
+# From Source
+git clone https://github.com/gitleaks/gitleaks.git
+cd gitleaks
+make build
 ```
 
-</details>
+### GitHub Action
 
----
+Check out the official [Gitleaks GitHub Action](https://github.com/gitleaks/gitleaks-action)
 
-## Introduction
-
-This repository contains a lightweight terminal UI script that lists and manages
-both VMs and LXC containers on a Proxmox host. It provides status-aware actions,
-console access, snapshot helpers, and SPICE integration without depending on
-external services.
-
-*Note:* If Git asks for username/password you probably used a wrong or private
-URL. Use the public one above.
-
-> The script targets interactive use on the Proxmox host itself.
-
----
-
-### Update (Git variant)
-
-```bash
-cd /root/proxmox-manager
-git pull
+```
+name: gitleaks
+on: [pull_request, push, workflow_dispatch]
+jobs:
+  scan:
+    name: gitleaks
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+        with:
+          fetch-depth: 0
+      - uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITLEAKS_LICENSE: ${{ secrets.GITLEAKS_LICENSE}} # Only required for Organizations, not personal accounts.
 ```
 
-## Technologies & Dependencies
+### Pre-Commit
 
-<!-- markdownlint-disable MD013 -->
-![Proxmox VE](https://img.shields.io/badge/Proxmox-VE-EE7F2D?logo=proxmox&logoColor=white&style=flat)
-![Debian](https://img.shields.io/badge/Debian-11--13-A81D33?logo=debian&logoColor=white&style=flat)
-![Ubuntu](https://img.shields.io/badge/Ubuntu-24.04-E95420?logo=ubuntu&logoColor=white&style=flat)
-![Bash](https://img.shields.io/badge/Bash-✔-4EAA25?logo=gnubash&logoColor=white&style=flat)
-![systemd](https://img.shields.io/badge/systemd-✔-FFDD00?logo=linux&logoColor=black&style=flat)
-![SPICE](https://img.shields.io/badge/SPICE-✔-CC0000?logo=redhat&logoColor=white&style=flat)
-![virt-viewer](https://img.shields.io/badge/Virt--Viewer-✔-555555?style=flat)
-![jq](https://img.shields.io/badge/jq-✔-3E6E93?style=flat)
-![ShellCheck](https://img.shields.io/badge/ShellCheck-✔-4B9CD3?style=flat)
-<!-- markdownlint-enable MD013 -->
+1. Install pre-commit from https://pre-commit.com/#install
+2. Create a `.pre-commit-config.yaml` file at the root of your repository with the following content:
 
----
+   ```
+   repos:
+     - repo: https://github.com/gitleaks/gitleaks
+       rev: v8.16.1
+       hooks:
+         - id: gitleaks
+   ```
 
-## Status
+   for a [native execution of GitLeaks](https://github.com/zricethezav/gitleaks/releases) or use the [`gitleaks-docker` pre-commit ID](https://github.com/zricethezav/gitleaks/blob/master/.pre-commit-hooks.yaml) for executing GitLeaks using the [official Docker images](#docker)
 
-Stable for day-to-day VM and LXC management on the host shell.
+3. Auto-update the config to the latest repos' versions by executing `pre-commit autoupdate`
+4. Install with `pre-commit install`
+5. Now you're all set!
 
----
-
-## Quickstart
-
-### Installation
-
-```bash
-apt update && apt install -y git
+```
+➜ git commit -m "this commit contains a secret"
+Detect hardcoded secrets.................................................Failed
 ```
 
-### Installation (without Git)
+Note: to disable the gitleaks pre-commit hook you can prepend `SKIP=gitleaks` to the commit command
+and it will skip running gitleaks
 
-```bash
-cd /root
-mkdir -p proxmox-manager && cd proxmox-manager
-curl -fsSL -o proxmox-manager.sh https://raw.githubusercontent.com/TimInTech/proxmox-manager/main/proxmox-manager.sh
-curl -fsSL -o install_dependencies.sh https://raw.githubusercontent.com/TimInTech/proxmox-manager/main/install_dependencies.sh
-chmod +x proxmox-manager.sh install_dependencies.sh
-./install_dependencies.sh   # optional: remote-viewer, jq, shellcheck
+```
+➜ SKIP=gitleaks git commit -m "skip gitleaks check"
+Detect hardcoded secrets................................................Skipped
 ```
 
-### Run
+## Usage
 
-```bash
-./proxmox-manager.sh
+```
+Usage:
+  gitleaks [command]
+
+Available Commands:
+  completion  generate the autocompletion script for the specified shell
+  detect      detect secrets in code
+  help        Help about any command
+  protect     protect secrets in code
+  version     display gitleaks version
+
+Flags:
+  -b, --baseline-path string       path to baseline with issues that can be ignored
+  -c, --config string              config file path
+                                   order of precedence:
+                                   1. --config/-c
+                                   2. env var GITLEAKS_CONFIG
+                                   3. (--source/-s)/.gitleaks.toml
+                                   If none of the three options are used, then gitleaks will use the default config
+      --exit-code int              exit code when leaks have been encountered (default 1)
+  -h, --help                       help for gitleaks
+  -l, --log-level string           log level (trace, debug, info, warn, error, fatal) (default "info")
+      --max-target-megabytes int   files larger than this will be skipped
+      --no-color                   turn off color for verbose output
+      --no-banner                  suppress banner
+      --redact                     redact secrets from logs and stdout
+  -f, --report-format string       output format (json, csv, junit, sarif) (default "json")
+  -r, --report-path string         report file
+  -s, --source string              path to source (default ".")
+  -v, --verbose                    show verbose output from scan
+
+Use "gitleaks [command] --help" for more information about a command.
 ```
 
-### Optional system-wide install
+### Commands
 
-```bash
-cp proxmox-manager.sh /usr/local/sbin/proxmox-manager
-chmod +x /usr/local/sbin/proxmox-manager
-proxmox-manager
+There are two commands you will use to detect secrets; `detect` and `protect`.
+
+#### Detect
+
+The `detect` command is used to scan repos, directories, and files. This command can be used on developer machines and in CI environments.
+
+When running `detect` on a git repository, gitleaks will parse the output of a `git log -p` command (you can see how this executed
+[here](https://github.com/zricethezav/gitleaks/blob/7240e16769b92d2a1b137c17d6bf9d55a8562899/git/git.go#L17-L25)).
+[`git log -p` generates patches](https://git-scm.com/docs/git-log#_generating_patch_text_with_p) which gitleaks will use to detect secrets.
+You can configure what commits `git log` will range over by using the `--log-opts` flag. `--log-opts` accepts any option for `git log -p`.
+For example, if you wanted to run gitleaks on a range of commits you could use the following command: `gitleaks detect --source . --log-opts="--all commitA..commitB"`.
+See the `git log` [documentation](https://git-scm.com/docs/git-log) for more information.
+
+You can scan files and directories by using the `--no-git` option.
+
+If you want to run only specific rules you can do so by using the `--enable-rule` option (with a rule ID as a parameter), this flag can be used multiple times. For example: `--enable-rule=atlassian-api-token` will only apply that rule. You can find a list of rules [here](config/gitleaks.toml).
+
+#### Protect
+
+The `protect` command is used to scan uncommitted changes in a git repo. This command should be used on developer machines in accordance with
+[shifting left on security](https://cloud.google.com/architecture/devops/devops-tech-shifting-left-on-security).
+When running `protect` on a git repository, gitleaks will parse the output of a `git diff` command (you can see how this executed
+[here](https://github.com/zricethezav/gitleaks/blob/7240e16769b92d2a1b137c17d6bf9d55a8562899/git/git.go#L48-L49)). You can set the
+`--staged` flag to check for changes in commits that have been `git add`ed. The `--staged` flag should be used when running Gitleaks
+as a pre-commit.
+
+**NOTE**: the `protect` command can only be used on git repos, running `protect` on files or directories will result in an error message.
+
+### Creating a baseline
+
+When scanning large repositories or repositories with a long history, it can be convenient to use a baseline. When using a baseline,
+gitleaks will ignore any old findings that are present in the baseline. A baseline can be any gitleaks report. To create a gitleaks report, run gitleaks with the `--report-path` parameter.
+
+```
+gitleaks detect --report-path gitleaks-report.json # This will save the report in a file called gitleaks-report.json
 ```
 
-### Update (no-Git variant)
+Once as baseline is created it can be applied when running the detect command again:
 
-```bash
-cd /root/proxmox-manager
-curl -fsSL -o proxmox-manager.sh https://raw.githubusercontent.com/TimInTech/proxmox-manager/main/proxmox-manager.sh
-curl -fsSL -o install_dependencies.sh https://raw.githubusercontent.com/TimInTech/proxmox-manager/main/install_dependencies.sh
-chmod +x proxmox-manager.sh install_dependencies.sh
+```
+gitleaks detect --baseline-path gitleaks-report.json --report-path findings.json
 ```
 
-## Dependencies
+After running the detect command with the --baseline-path parameter, report output (findings.json) will only contain new issues.
 
-- `jq` recommended for `--json`
-- `remote-viewer` (package: `virt-viewer`) optional for VM consoles
-- Usually run as `root` on Proxmox hosts
+### Verify Findings
 
-## Features
+You can verify a finding found by gitleaks using a `git log` command.
+Example output:
 
-- Unified VM and CT overview with status symbols: 🟢 running · 🔴 stopped · 🟠
-  paused · 🟡 unknown
-- Actions: start, stop, restart, and status for each ID
-- Console helpers: `pct enter`, `qm terminal`, or fallback `qm monitor`
-- Snapshot helpers: list, create, rollback, delete snapshots
-- SPICE tools: connection details, `.vv` file generation, optional SPICE
-  enablement
-- Built-in root check, locale normalization, and resilient ID parsing
-
----
-
-## CLI Options
-
-- `--list` – print plain table of all VMs/CTs
-- `--json` – output JSON array (`id`, `type`, `status`, `symbol`, `name`)
-- `--no-clear` – disable terminal clearing
-- `--once` – run only once and exit
-- `--help` – show usage and exit
-
----
-
-## Uninstall
-
-Remove program directory:
-
-```bash
-rm -rf /root/proxmox-manager
+```
+Finding:     aws_secret="AKIAIMNOJVGFDXXXE4OA"
+RuleID:      aws-access-token
+Secret       AKIAIMNOJVGFDXXXE4OA
+Entropy:     3.65
+File:        checks_test.go
+Line:        37
+Commit:      ec2fc9d6cb0954fb3b57201cf6133c48d8ca0d29
+Author:      Zachary Rice
+Email:       z@email.com
+Date:        2018-01-28T17:39:00Z
+Fingerprint: ec2fc9d6cb0954fb3b57201cf6133c48d8ca0d29:checks_test.go:aws-access-token:37
 ```
 
-Optionally remove optional dependencies again:
+We can use the following format to verify the leak:
 
-```bash
-sudo apt purge -y jq virt-viewer shellcheck
-sudo apt autoremove -y
+```
+git log -L {StartLine,EndLine}:{File} {Commit}
 ```
 
----
+So in this example it would look like:
 
-## SPICE Notes
+```
+git log -L 37,37:checks_test.go ec2fc9d6cb0954fb3b57201cf6133c48d8ca0d29
+```
 
-- `remote-viewer` (virt-viewer) offers the best experience for `.vv` files.
-- If a VM lacks a SPICE device, the helper can add one; restart the VM afterwards.
+Which gives us:
 
----
+```
+commit ec2fc9d6cb0954fb3b57201cf6133c48d8ca0d29
+Author: zricethezav <thisispublicanyways@gmail.com>
+Date:   Sun Jan 28 17:39:00 2018 -0500
 
-## Troubleshooting
+    [update] entropy check
 
-- **No entries:** run as `root` with `qm`/`pct` available
-- **Console unavailable:** `qm terminal` requires serial console; fallback `qm monitor`
-- **Missing SPICE port:** configure or enable via helper
-- **JSON issues:** output works standalone, `jq` optional to consume it
+diff --git a/checks_test.go b/checks_test.go
+--- a/checks_test.go
++++ b/checks_test.go
+@@ -28,0 +37,1 @@
++               "aws_secret= \"AKIAIMNOJVGFDXXXE4OA\"":          true,
 
----
+```
 
-## Contributing
+## Pre-Commit hook
 
-Pull requests and issues welcome. Run `shellcheck` locally before committing.
+You can run Gitleaks as a pre-commit hook by copying the example `pre-commit.py` script into
+your `.git/hooks/` directory.
 
----
+## Configuration
 
-## License
+Gitleaks offers a configuration format you can follow to write your own secret detection rules:
 
-[MIT](LICENSE)
+```toml
+# Title for the gitleaks configuration file.
+title = "Gitleaks title"
+
+# Extend the base (this) configuration. When you extend a configuration
+# the base rules take precedence over the extended rules. I.e., if there are
+# duplicate rules in both the base configuration and the extended configuration
+# the base rules will override the extended rules.
+# Another thing to know with extending configurations is you can chain together
+# multiple configuration files to a depth of 2. Allowlist arrays are appended
+# and can contain duplicates.
+# useDefault and path can NOT be used at the same time. Choose one.
+[extend]
+# useDefault will extend the base configuration with the default gitleaks config:
+# https://github.com/zricethezav/gitleaks/blob/master/config/gitleaks.toml
+useDefault = true
+# or you can supply a path to a configuration. Path is relative to where gitleaks
+# was invoked, not the location of the base config.
+path = "common_config.toml"
+
+# An array of tables that contain information that define instructions
+# on how to detect secrets
+[[rules]]
+
+# Unique identifier for this rule
+id = "awesome-rule-1"
+
+# Short human readable description of the rule.
+description = "awesome rule 1"
+
+# Golang regular expression used to detect secrets. Note Golang's regex engine
+# does not support lookaheads.
+regex = '''one-go-style-regex-for-this-rule'''
+
+# Golang regular expression used to match paths. This can be used as a standalone rule or it can be used
+# in conjunction with a valid `regex` entry.
+path = '''a-file-path-regex'''
+
+# Array of strings used for metadata and reporting purposes.
+tags = ["tag","another tag"]
+
+# Int used to extract secret from regex match and used as the group that will have
+# its entropy checked if `entropy` is set.
+secretGroup = 3
+
+# Float representing the minimum shannon entropy a regex group must have to be considered a secret.
+entropy = 3.5
+
+# Keywords are used for pre-regex check filtering. Rules that contain
+# keywords will perform a quick string compare check to make sure the
+# keyword(s) are in the content being scanned. Ideally these values should
+# either be part of the idenitifer or unique strings specific to the rule's regex
+# (introduced in v8.6.0)
+keywords = [
+  "auth",
+  "password",
+  "token",
+]
+
+# You can include an allowlist table for a single rule to reduce false positives or ignore commits
+# with known/rotated secrets
+[rules.allowlist]
+description = "ignore commit A"
+commits = [ "commit-A", "commit-B"]
+paths = [
+  '''go\.mod''',
+  '''go\.sum'''
+]
+# note: (rule) regexTarget defaults to check the _Secret_ in the finding.
+# if regexTarget is not specified then _Secret_ will be used.
+# Acceptable values for regexTarget are "match" and "line"
+regexTarget = "match"
+regexes = [
+  '''process''',
+  '''getenv''',
+]
+# note: stopwords targets the extracted secret, not the entire regex match
+# like 'regexes' does. (stopwords introduced in 8.8.0)
+stopwords = [
+  '''client''',
+  '''endpoint''',
+]
+
+
+# This is a global allowlist which has a higher order of precedence than rule-specific allowlists.
+# If a commit listed in the `commits` field below is encountered then that commit will be skipped and no
+# secrets will be detected for said commit. The same logic applies for regexes and paths.
+[allowlist]
+description = "global allow list"
+commits = [ "commit-A", "commit-B", "commit-C"]
+paths = [
+  '''gitleaks\.toml''',
+  '''(.*?)(jpg|gif|doc)'''
+]
+
+# note: (global) regexTarget defaults to check the _Secret_ in the finding.
+# if regexTarget is not specified then _Secret_ will be used.
+# Acceptable values for regexTarget are "match" and "line"
+regexTarget = "match"
+
+regexes = [
+  '''219-09-9999''',
+  '''078-05-1120''',
+  '''(9[0-9]{2}|666)-\d{2}-\d{4}''',
+]
+# note: stopwords targets the extracted secret, not the entire regex match
+# like 'regexes' does. (stopwords introduced in 8.8.0)
+stopwords = [
+  '''client''',
+  '''endpoint''',
+]
+```
+
+Refer to the default [gitleaks config](https://github.com/zricethezav/gitleaks/blob/master/config/gitleaks.toml) for examples or follow the [contributing guidelines](https://github.com/gitleaks/gitleaks/blob/master/CONTRIBUTING.md) if you would like to contribute to the default configuration. Additionally, you can check out [this gitleaks blog post](https://blog.gitleaks.io/stop-leaking-secrets-configuration-2-3-aeed293b1fbf) which covers advanced configuration setups.
+
+### Additional Configuration
+
+#### gitleaks:allow
+
+If you are knowingly committing a test secret that gitleaks will catch you can add a `gitleaks:allow` comment to that line which will instruct gitleaks
+to ignore that secret. Ex:
+
+```
+class CustomClass:
+    discord_client_secret = '8dyfuiRyq=vVc3RRr_edRk-fK__JItpZ'  #gitleaks:allow
+
+```
+
+#### .gitleaksignore
+
+You can ignore specific findings by creating a `.gitleaksignore` file at the root of your repo. In release v8.10.0 Gitleaks added a `Fingerprint` value to the Gitleaks report. Each leak, or finding, has a Fingerprint that uniquely identifies a secret. Add this fingerprint to the `.gitleaksignore` file to ignore that specific secret. See Gitleaks' [.gitleaksignore](https://github.com/zricethezav/gitleaks/blob/master/.gitleaksignore) for an example. Note: this feature is experimental and is subject to change in the future.
+
+## Sponsorships
+<p align="left">
+	<h3><a href="https://coderabbit.ai/?utm_source=oss&utm_medium=sponsorship&utm_campaign=gitleaks">coderabbit.ai</h3>
+	  <a href="https://coderabbit.ai/?utm_source=oss&utm_medium=sponsorship&utm_campaign=gitleaks">
+		  <img alt="CodeRabbit.ai Sponsorship" src="https://github.com/gitleaks/gitleaks/assets/15034943/76c30a85-887b-47ca-9956-17a8e55c6c41" width=200>
+	  </a>
+</p>
+<p align="left">
+	  <a href="https://www.tines.com/?utm_source=oss&utm_medium=sponsorship&utm_campaign=gitleaks">
+		  <img alt="Tines Sponsorship" src="https://user-images.githubusercontent.com/15034943/146411864-4878f936-b4f7-49a0-b625-f9f40c704bfa.png" width=200>
+	  </a>
+  </p>
+
+
+## Exit Codes
+
+You can always set the exit code when leaks are encountered with the --exit-code flag. Default exit codes below:
+
+```
+0 - no leaks present
+1 - leaks or error encountered
+126 - unknown flag
+```
