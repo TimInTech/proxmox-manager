@@ -29,11 +29,11 @@ The repository uses Trivy for automated vulnerability scanning:
   - Vulnerability detection
   - Secret scanning
   - Misconfiguration detection
-- **Schedule**: Runs on every push to main, pull requests, and weekly on
-  Mondays
+- **Schedule**: Runs on every push to main, pull requests, weekly on Mondays,
+  and manual workflow dispatch
 - **Reports**:
-  - `trivy-report.json` — Machine-readable JSON format
-  - `trivy-report.txt` — Human-readable table format
+  - `trivy-report.json` — Machine-readable JSON format (workflow artifact)
+  - `trivy-report.txt` — Human-readable table format (workflow artifact)
   - SARIF results uploaded to GitHub Security tab
 
 To run Trivy scan locally:

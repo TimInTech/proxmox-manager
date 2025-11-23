@@ -65,12 +65,3 @@ jobs:
             .audit/trivy-report.json
             .audit/trivy-report.txt
             trivy-results.sarif
-
-      - name: Commit Trivy reports to repository
-        if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch' || github.ref == 'refs/heads/main'
-        run: |
-          git config --local user.email "github-actions[bot]@users.noreply.github.com"
-          git config --local user.name "github-actions[bot]"
-          git add .audit/trivy-report.json .audit/trivy-report.txt || true
-          git diff --staged --quiet || git commit -m "chore: Update Trivy vulnerability scan reports"
-          git push || echo "No changes to push"
