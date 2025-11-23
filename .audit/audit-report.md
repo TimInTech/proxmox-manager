@@ -14,6 +14,8 @@ Datum: 2025-11-02
     Hauptskripte.
   - Secrets-scan (grep-basiert) — keine privaten Schlüssel oder Klartext-Secrets
     gefunden.
+  - Gitleaks-Scan (2025-11-23) — keine Secrets oder kritische Findings gefunden.
+    Report verfügbar unter `.audit/gitleaks-report.json`.
   - `ci_runs.json` Snapshot ist leer (keine CI-Lauf-Metadaten wurden in das
     Artefakt geschrieben).
 
@@ -33,8 +35,11 @@ Datum: 2025-11-02
   wurden für MD013 (80 Zeichen) bereinigt.
 
 1. Geheimnisse & Artefakte (Medium)
-   - Grep-basierter Scan hat nichts Kritisches gefunden. Für höhere Sicherheit
-     empfehle ich einen Lauf mit `gitleaks` oder `trufflehog` in CI.
+   - Grep-basierter Scan hat nichts Kritisches gefunden.
+   - **Gitleaks-Scan ausgeführt (2025-11-23)**: Keine Secrets gefunden. Der Scan
+     wurde erfolgreich durchgeführt und das Ergebnis ist in
+     `.audit/gitleaks-report.json` dokumentiert. Die gitleaks CI-Integration ist
+     einsatzbereit.
 
 ## Empfohlene Sofortmaßnahmen
 
@@ -98,8 +103,13 @@ jq . ./.audit/instances.json >/dev/null
     (#9 Englisch-Umstellung, #10 Board/Spalten-Organisation, #12 Markdownlint,
     #14 Smoke-CI).
 
+- Umgesetzt (2025-11-23):
+  - Gitleaks-Run ausgeführt und Findings triagiert (#11).
+    - Ergebnis: Keine Secrets oder kritische Findings gefunden.
+    - Report verfügbar unter `.audit/gitleaks-report.json`.
+    - Gitleaks-Workflow ist konfiguriert und bereit für CI-Nutzung.
+
 - Offen/priorisierbar:
-  - Gitleaks-Run in Actions auslösen und Findings triagieren (#11).
   - Vulnerability Scan (z. B. Trivy) als CI ergänzen und Report nach `.audit/`
     schreiben (#13).
 
