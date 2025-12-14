@@ -33,7 +33,5 @@ jobs:
           verbose: true
           # baseline_path: .gitleaks.baseline
 
-      - name: Upload SARIF Report to GitHub Code Scanning
-        uses: github/code-scanning-action/upload-sarif@v3
         with:
           sarif_file: gitleaks.sarif

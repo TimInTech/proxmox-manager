@@ -27,3 +27,4 @@ node_modules/
 vendor/bundle/
 .bundle/
 .npm-cache/
+gitleaks
