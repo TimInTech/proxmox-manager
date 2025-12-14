@@ -1,37 +1,27 @@
-name: Gitleaks Secret Scan
+name: gitleaks
 
 on:
   push:
-    branches: [main]
   pull_request:
-    # Trigger pull requests only when targeting main
-    branches: [main]
-  workflow_dispatch:
 
-# Restrict the token to the minimal permissions the job needs
 permissions:
   contents: read
-  security-events: write
 
 jobs:
-  gitleaks:
-    name: Gitleaks Scan
+  scan:
     runs-on: ubuntu-latest
-
     steps:
-      - name: Checkout Code (full history)
+      - name: Checkout
         uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
 
-      - name: Run Gitleaks and Create SARIF Report
+      - name: Run gitleaks
         uses: gitleaks/gitleaks-action@v2
         with:
-          report_format: sarif
-          output: gitleaks.sarif
-          redact: true
-          verbose: true
-          # baseline_path: .gitleaks.baseline
+          args: detect --source . --report-format json --report-path gitleaks-report.json
 
+      - name: Upload JSON report
+        if: always()
+        uses: actions/upload-artifact@v4
         with:
-          sarif_file: gitleaks.sarif
+          name: gitleaks-report
+          path: gitleaks-report.json
