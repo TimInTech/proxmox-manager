@@ -2,33 +2,16 @@
 
 ## Supported Versions
 
-<!-- markdownlint-disable MD060 -->
-| Version | Supported |
-| ------- | --------- |
-| main    | ✅        |
-<!-- markdownlint-enable MD060 -->
+| Version       | Supported |
+| ------------- | --------- |
+| `main` (latest) | ✅        |
 
-All unreleased changes merged into `main` are expected to pass the automated
-sanity workflows described in `.github/workflows/`.
+All changes are developed on `main`; use the latest revision for fixes.
 
 ## Reporting a Vulnerability
 
-1. **Öffnen Sie ein öffentliches GitHub Issue** in diesem Repository. Wählen
-   Sie einen Titel, der die Schwachstelle eindeutig aber nicht zu präzise
-   beschreibt, um eine sofortige Ausnutzung zu erschweren.
-2. Fügen Sie eine klare Beschreibung hinzu: Schritte zur Reproduktion,
-   erwartetes vs. tatsächliches Verhalten, potenzieller Impact sowie
-   (falls vorhanden) ein möglicher Mitigation/Korrektur-Vorschlag.
-3. Sie erhalten eine Bestätigung innerhalb von 72 Stunden (Kommentar oder
-   Label). Ziel: Innerhalb von 14 Tagen einen Fix oder eine Gegenmaßnahme
-   bereitstellen.
-4. Der Fortschritt (Analyse, Patch, Release) wird transparent im Issue
-   dokumentiert. Nach Merge eines Fixes erfolgt die Veröffentlichung im
-   nächsten regulären Release.
-5. Falls die Schwachstelle bereits aktiv ausnutzbar erscheint, kann das
-   Maintainer-Team Teilinformationen kurzfristig zurückhalten (z. B.
-   Exploit-Snippets), bis ein Fix veröffentlicht wurde.
-
-Durch diese öffentliche Meldung akzeptieren Sie das erhöhte Risiko einer
-frühen Ausnutzung durch Dritte. Bitte tätigen Sie keine Tests, die die
-Integrität oder Verfügbarkeit produktiver Systeme gefährden.
+- Please **report privately** via GitHub Security Advisories (Security → Report a vulnerability).
+- If advisories are not possible, email `security@example.com` with details.
+- Do **not** open public GitHub issues for security bugs; use issues only for non-security problems.
+- Include reproduction steps, impact, affected versions/commit, and any suggested mitigation.
+- We aim to acknowledge valid reports within 3 business days and share a fix or mitigation plan within 14 days when feasible. Public disclosure happens only after a coordinated fix is available.
