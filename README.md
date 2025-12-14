@@ -25,6 +25,8 @@ Languages: 🇬🇧 English (this file) • 🇩🇪 [Deutsch](README.de.md)
 
 - Main script: [`proxmox-manager.sh`](proxmox-manager.sh)
 - Optional helper: [`install_dependencies.sh`](install_dependencies.sh)
+- Documentation: English (this file) · German translation
+  [`README.de.md`](README.de.md)
 - Project overview:
   [Quickstart](#quickstart) ·
   [Requirements](#requirements) ·

@@ -4,23 +4,34 @@ on:
   push:
     branches: [main]
   pull_request:
+    # Trigger pull requests only when targeting main
+    branches: [main]
+  workflow_dispatch:
+
+# Restrict the token to the minimal permissions the job needs
+permissions:
+  contents: read
+  security-events: write
 
 jobs:
   gitleaks:
-    name: gitleaks
+    name: Gitleaks Scan
     runs-on: ubuntu-latest
+
     steps:
-      - name: checkout
+      - name: Checkout Code (full history)
         uses: actions/checkout@v4
-
-      - name: Run gitleaks
-        uses: zricethezav/gitleaks-action@v2
         with:
-          args: detect --source=. --report-format=json --report-path=.audit/gitleaks-report.json
+          fetch-depth: 0
 
-      - name: Upload gitleaks report
-        if: always()
-        uses: actions/upload-artifact@v4
+      - name: Run Gitleaks and Create SARIF Report
+        uses: gitleaks/gitleaks-action@v2
         with:
-          name: gitleaks-report
-          path: .audit/gitleaks-report.json
+          report_format: sarif
+          output: gitleaks.sarif
+          redact: true
+          verbose: true
+          # baseline_path: .gitleaks.baseline
+
+        with:
+          sarif_file: gitleaks.sarif
