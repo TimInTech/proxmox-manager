@@ -31,10 +31,9 @@ Thanks for your interest in improving `proxmox-manager`!
    - [ ] `./install_dependencies.sh` ran successfully (if relevant).
    - [ ] `shellcheck` and `shfmt` pass locally.
    - [ ] Documentation updated for behavior changes (`README.md`, `docs/`).
-   - [ ] Added or updated audit artifacts in `.audit/` if new checks were introduced.
+   - [ ] Security scans run locally if you touched sensitive areas; do not commit generated reports.
 
 ## Releasing
 
-Releases are drafted automatically via GitHub Release Drafter. Tagging
-`vX.Y.Z` on `main` will create a GitHub release. See
-`.github/release-drafter.yml` for configuration details.
+Tag `vX.Y.Z` on `main` when a new version is ready. Releases are published
+from `main`; there is no automated release-drafter workflow in this repo.
