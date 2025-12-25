@@ -3,11 +3,11 @@
 
 # 🧰 Proxmox Manager
 
-## **Simple CLI Helper for Proxmox VE**
+**Single-file Bash tool for managing Proxmox VMs and containers**
 
 [![CI](https://img.shields.io/github/actions/workflow/status/TimInTech/proxmox-manager/ci.yml?branch=main&style=for-the-badge&logo=github)](https://github.com/TimInTech/proxmox-manager/actions)
 [![Gitleaks](https://img.shields.io/github/actions/workflow/status/TimInTech/proxmox-manager/gitleaks.yml?branch=main&style=for-the-badge&logo=security)](https://github.com/TimInTech/proxmox-manager/actions)
-[![License](https://img.shields.io/github/license/TimInTech/proxmox-manager?style=for-the-badge&color=blue)](LICENSE)
+[![License](https://img.shields.io/github/license/TimInTech/proxmox-manager? style=for-the-badge&color=blue)](LICENSE)
 [![Shell](https://img.shields.io/badge/Shell-Bash-4EAA25?style=for-the-badge&logo=gnu-bash)](https://www.gnu.org/software/bash/)
 [![Proxmox VE](https://img.shields.io/badge/Proxmox-VE-orange?style=for-the-badge)](https://www.proxmox.com/)
 
@@ -18,124 +18,199 @@
 
 ---
 
-## ✨ Features
+## 📸 Screenshot
 
-✅ **Single Bash Script** – no daemon, no agents, no dependencies beyond standard CLI tools  
-✅ **Proxmox VE Native** – wraps `qm`, `pct`, and Proxmox APIs where useful  
-✅ **Interactive & Scriptable** – usable via menu or flags  
-✅ **Safe Defaults** – avoids destructive actions unless explicitly requested  
-✅ **CI-Linted** – ShellCheck enforced, secrets scanning enabled  
-✅ **Lean by Design** – no generated artifacts, no committed reports  
+![Proxmox Manager Screenshot](docs/screenshots/Screenshot.png)
 
 ---
 
-## 📦 Requirements
+## 🎯 What It Does
 
-- **Proxmox VE** (host or management node)
-- **Bash** (POSIX-compatible, tested with modern GNU Bash)
-- Standard utilities:
-  - `pvesh`, `qm`, `pct`
-  - `awk`, `sed`, `grep`, `curl`
+Proxmox Manager is a **single Bash script** that wraps Proxmox CLI tools (`qm`, `pct`) into an interactive menu or scriptable interface. No daemons, no agents, no dependencies beyond what ships with Proxmox VE.
 
-> No Python, no Docker, no external services required.
+**Core capabilities:**
+
+- List all VMs and containers with status (running, stopped, paused)
+- Start, stop, restart instances
+- Open console (LXC shell or QEMU terminal)
+- Manage snapshots (list, create, rollback, delete)
+- Enable and retrieve SPICE connection details for VMs
+- Machine-readable JSON output for automation
 
 ---
 
-## ⚡ Quickstart
+## 🚀 Installation
+
+Run directly on a Proxmox VE host:
 
 ```bash
 git clone https://github.com/TimInTech/proxmox-manager.git
 cd proxmox-manager
-chmod +x proxmox-manager.sh
-sudo ./proxmox-manager.sh
+chmod +x proxmox-manager. sh
 ```
 
-That's it. 🎉
-The script will guide you interactively.
+No build step.  No package installation. 
 
 ---
 
-## 🧭 Usage
+## 📋 Requirements
 
-### Interactive Mode (default)
+**System:**
+
+- Proxmox VE (tested on 7.x and 8.x)
+- Bash ≥ 4.0 (included in Proxmox)
+- Root privileges (or `PROXMOX_MANAGER_ALLOW_NONROOT=1` for CI overrides)
+
+**CLI tools (bundled with Proxmox):**
+
+- `qm` (VM management)
+- `pct` (container management)
+- Standard POSIX utilities (`awk`, `sed`, `grep`)
+
+No Python.  No Docker. No external APIs.
+
+---
+
+## 🛠️ Usage
+
+### Interactive mode (default)
 
 ```bash
 sudo ./proxmox-manager.sh
 ```
 
-Displays a menu for common VM / container management tasks.
+Displays a table of all VMs/containers with status symbols:
 
-### Non-interactive / Scripted
+- 🟢 running
+- 🔴 stopped
+- 🟠 paused
+- 🟡 unknown
+
+Enter a VMID to open an action menu. Press `r` to refresh, `q` to quit.
+
+### List mode (plain text)
 
 ```bash
-sudo ./proxmox-manager.sh <command> [options]
+sudo ./proxmox-manager.sh --list
 ```
 
-Run `--help` to see available commands and flags.
+Prints a formatted table.  Useful for logging or quick checks.
+
+### JSON mode (machine-readable)
+
+```bash
+sudo ./proxmox-manager.sh --json
+```
+
+Outputs VM/CT data as JSON array: 
+
+```json
+[
+  {"id": 100,"type":"VM","status":"running","symbol":"🟢","name":"web-server"},
+  {"id":101,"type":"CT","status":"stopped","symbol":"🔴","name":"db-container"}
+]
+```
+
+Use with `jq` or automation tools.
+
+### Non-interactive / scripted use
+
+The script is designed for interactive use. For automation, prefer `--list` or `--json` and parse output.
+
+All destructive actions (stop, restart, snapshot rollback) require confirmation in interactive mode.
+
+### Options
+
+```text
+--list       Print plain-text table (no TUI)
+--json       Print JSON output
+--no-clear   Do not clear screen in interactive mode
+--once       Run one refresh cycle (useful for recording)
+-h, --help   Show usage
+```
 
 ---
 
-## 🧩 What This Tool Is (and Is Not)
+## 🔐 Security
 
-### ✅ Is
-
-* A **helper** around Proxmox tooling
-* Focused on **daily admin tasks**
-* Designed to be **readable, auditable Bash**
-
-### ❌ Is Not
-
-* A replacement for Proxmox UI
-* A long-running service
-* A configuration management system
+- **Root required:** The script calls `qm`, `pct`, and other Proxmox tools that require elevated privileges. 
+- **No credentials stored:** Relies on Proxmox host authentication. 
+- **No outbound traffic:** All operations are local.
+- **CI hardening:**
+  - ShellCheck enforced on all `.sh` files. 
+  - Gitleaks scan prevents accidental secret commits.
+- **Vulnerability reporting:** See `SECURITY.md` for responsible disclosure.
 
 ---
 
-## 🛡️ Security Notes
+## 🧩 What It Is Not
 
-* Must be run as **root** (or via sudo) to access Proxmox tooling
-* No credentials stored
-* No outbound network traffic unless explicitly triggered by user actions
-* Repository enforces:
-
-  * **ShellCheck** on all shell scripts
-  * **Gitleaks** to prevent secret leaks
-* Vulnerabilities must be reported **privately** (see `SECURITY.md`)
+- **Not a UI replacement:** Use the Proxmox web UI for rich workflows.
+- **Not configuration management:** No Terraform/Ansible integration (yet).
+- **Not a daemon:** Runs on demand, exits immediately.
+- **Not multi-host:** Manages only the local Proxmox node. 
 
 ---
 
-## 🧪 CI & Quality
+## 🧪 CI & Testing
 
-* **CI**: ShellCheck on all `*.sh`
-* **Security**: Gitleaks scan, reports uploaded as artifacts only
-* **No committed artifacts** (reports, audit dumps, generated files)
+**Automated checks:**
 
-The repository is intentionally kept minimal and clean.
+- ShellCheck on every `.sh` file (strict mode:  `SC2086`, `SC2068`, etc.)
+- Gitleaks scan for secrets (reports uploaded as artifacts, never committed)
+- No generated files or scan outputs in the repository
+
+**Local testing:**
+
+```bash
+shellcheck proxmox-manager.sh
+```
+
+CI runs on every push and PR. 
 
 ---
 
 ## 🤝 Contributing
 
-Contributions are welcome if they keep the project **simple and focused**.
+Contributions welcome if they preserve the tool's simplicity. 
 
-1. Fork the repository
-2. Create a branch:
+**Guidelines:**
+
+1. Fork and create a feature branch: 
 
    ```bash
    git checkout -b feature/your-change
    ```
-3. Make changes (keep Bash readable!)
-4. Run ShellCheck locally if possible
-5. Commit and open a Pull Request
 
-Please **do not** commit generated files, reports, or scan outputs.
+2. Keep Bash readable.  Avoid external dependencies.
+
+3. Run ShellCheck locally:
+
+   ```bash
+   shellcheck proxmox-manager.sh
+   ```
+
+4. Commit with conventional format:
+
+   ```text
+   type(scope): summary
+   ```
+
+   Examples:  `feat(vm): add suspend action`, `fix(ct): handle missing hostname`
+
+5. Open a Pull Request.
+
+**Do NOT commit:**
+
+- Generated files (logs, reports, artifacts)
+- Scan outputs (Gitleaks, ShellCheck results)
+- Binary files or large test data
 
 ---
 
 ## 📜 License
 
-This project is licensed under the **MIT License**.
-See [LICENSE](LICENSE) for details.
+MIT License.  See [LICENSE](LICENSE) for full text.
 
 ---
 
@@ -143,7 +218,7 @@ See [LICENSE](LICENSE) for details.
 
 <div align="center">
 
-### Built to keep Proxmox administration boring ✨
+### Boring Proxmox administration, automated ✨
 
 [🐛 Report Bug](https://github.com/TimInTech/proxmox-manager/issues) •
 [✨ Request Feature](https://github.com/TimInTech/proxmox-manager/issues)
