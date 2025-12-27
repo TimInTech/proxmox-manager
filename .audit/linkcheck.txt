@@ -1,0 +1,10 @@
+README badge/image link review:
+- https://img.shields.io/github/actions/workflow/status/TimInTech/proxmox-manager/ci.yml?branch=main&style=for-the-badge&logo=github
+- https://img.shields.io/github/actions/workflow/status/TimInTech/proxmox-manager/gitleaks.yml?branch=main&style=for-the-badge&logo=git
+- https://img.shields.io/github/license/TimInTech/proxmox-manager?style=for-the-badge&color=blue
+- https://img.shields.io/badge/Shell-Bash-4EAA25?style=for-the-badge&logo=gnu-bash
+- https://img.shields.io/badge/Proxmox-VE-orange?style=for-the-badge
+- https://skillicons.dev/icons?i=linux,bash,debian
+- docs/screenshots/Screenshot.png
+
+All URLs updated to HTTPS and consistent badge formatting.

@@ -1,0 +1,42 @@
+{
+  "generated_at": "2025-02-14",
+  "findings": [
+    {
+      "id": "readme-badges",
+      "severity": "low",
+      "status": "fixed",
+      "title": "README badges and tech stack image rendering",
+      "details": "Fixed a stray space in the license badge URL and switched the tech stack graphic to a Markdown image for consistent GitHub rendering."
+    },
+    {
+      "id": "interactive-confirmations",
+      "severity": "medium",
+      "status": "fixed",
+      "title": "Missing confirmation before destructive actions",
+      "details": "Stop/restart actions and snapshot rollback/delete now prompt for confirmation in interactive mode."
+    },
+    {
+      "id": "spice-tempfile",
+      "severity": "low",
+      "status": "fixed",
+      "title": "Predictable SPICE .vv temp file",
+      "details": "Replaced the static /tmp file with a mktemp-generated path and added a confirmation prompt before enabling SPICE on 0.0.0.0."
+    },
+    {
+      "id": "ci-permissions",
+      "severity": "low",
+      "status": "fixed",
+      "title": "CI workflow hardening",
+      "details": "Added concurrency and scoped permissions for gitleaks artifact uploads; improved shellcheck file discovery."
+    }
+  ],
+  "notes": {
+    "tooling": {
+      "shellcheck": "not installed",
+      "shfmt": "not installed",
+      "markdownlint": "not installed"
+    },
+    "secrets_scan": "No matches for common secret patterns",
+    "repo_hygiene": "No obvious removable artifacts detected"
+  }
+}
