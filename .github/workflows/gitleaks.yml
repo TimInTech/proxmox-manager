@@ -6,6 +6,11 @@ on:
 
 permissions:
   contents: read
+  actions: write
+
+concurrency:
+  group: gitleaks-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   scan:

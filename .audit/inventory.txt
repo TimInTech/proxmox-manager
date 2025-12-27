@@ -1,0 +1,27 @@
+.
+..
+.audit
+.editorconfig
+.git
+.gitattributes
+.github
+.gitignore
+.gitleaks.baseline
+.markdownlint.yaml
+CODE_OF_CONDUCT.md
+CONTRIBUTING.md
+LICENSE
+README.md
+SECURITY.md
+docs
+install_dependencies.sh
+proxmox-manager.sh
+\n.github/workflows:
+.
+..
+ci.yml
+gitleaks.yml
+\nDocs screenshots:
+.
+..
+Screenshot.png

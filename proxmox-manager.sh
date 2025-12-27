@@ -43,13 +43,34 @@ note() { printf '%b\n' "${CYAN}$*${NC}"; }
 # ===== Helpers =====
 read_line() {
   local -n __o=$1
-  if ! IFS= read -r __o; then __o=''; fi
+  if ! IFS= read -r __o; then
+    __o=''
+  fi
 }
+
 trim() {
   local v="$*"
   v="${v#"${v%%[![:space:]]*}"}"
   v="${v%"${v##*[![:space:]]}"}"
   printf '%s' "$v"
+}
+
+confirm() {
+  local prompt="$1"
+  local reply
+
+  if [[ "${PROXMOX_MANAGER_ASSUME_YES:-0}" == "1" ]]; then
+    return 0
+  fi
+
+  if [[ ! -t 0 ]]; then
+    err "No TTY available for confirmation: $prompt"
+    return 1
+  fi
+
+  printf '%s' "$prompt"
+  read_line reply
+  [[ "$reply" =~ ^[yYjJ]$ ]]
 }
 
 require_root() {
@@ -63,10 +84,13 @@ require_root() {
     exit 1
   }
 }
-require_tools() { { have qm || have pct; } || {
-  err "qm/pct missing. Run on a Proxmox host."
-  exit 1
-}; }
+
+require_tools() {
+  { have qm || have pct; } || {
+    err "qm/pct missing. Run on a Proxmox host."
+    exit 1
+  }
+}
 
 usage() {
   cat <<'EOF'
@@ -106,7 +130,7 @@ parse_args() {
         shift
         break
         ;;
-      -*)
+      -* )
         err "Unbekannte Option: $1"
         usage
         exit 1
@@ -266,7 +290,9 @@ print_table() {
 
 main_menu() {
   header
-  if ! print_table; then return 1; fi
+  if ! print_table; then
+    return 1
+  fi
   echo "Input: enter VMID to open menu | 'r' refresh | 'q' quit"
   printf '%s' "Selection: "
   local choice
@@ -370,6 +396,10 @@ do_action() {
         ok "$ty $id ist nicht aktiv."
         return
       }
+      if ! confirm "Stop $ty $id ($name)? (y/N): "; then
+        note "Abbruch."
+        return
+      fi
       if [[ "$ty" == "CT" ]]; then
         if pct stop "$id" >/dev/null 2>&1; then
           ok "$ty $id gestoppt."
@@ -388,6 +418,10 @@ do_action() {
       if [[ "$st" != "running" ]]; then
         note "$ty $id lief nicht. Starte statt Neustart."
         do_action "$id" "$ty" start "$name"
+        return
+      fi
+      if ! confirm "Restart $ty $id ($name)? (y/N): "; then
+        note "Abbruch."
         return
       fi
       if [[ "$ty" == "CT" ]]; then
@@ -434,13 +468,14 @@ open_console() {
       :
     else
       note "'qm terminal' nicht verfügbar. Fallback 'qm monitor'."
-  qm monitor "$id" || err "Console for VM $id failed."
+      qm monitor "$id" || err "Console for VM $id failed."
     fi
   fi
 }
 
 snapshots_menu() {
   local id="$1" ty="$2" name="$3" s
+  local sn
   echo "1) List  2) Create  3) Rollback  4) Delete  5) Back"
   printf '%s' "Auswahl [1-5]: "
   read_line s
@@ -455,7 +490,9 @@ snapshots_menu() {
       }
       if [[ "$ty" == "CT" ]]; then
         pct snapshot "$id" "$sn" >/dev/null 2>&1 || err "Snapshot fehlgeschlagen."
-      else qm snapshot "$id" "$sn" >/dev/null 2>&1 || err "Snapshot fehlgeschlagen."; fi
+      else
+        qm snapshot "$id" "$sn" >/dev/null 2>&1 || err "Snapshot fehlgeschlagen."
+      fi
       ok "Snapshot '$sn' erstellt."
       ;;
     3)
@@ -465,9 +502,15 @@ snapshots_menu() {
         echo "Abbruch."
         return
       }
+      if ! confirm "Rollback $ty $id to '$sn'? (y/N): "; then
+        note "Abbruch."
+        return
+      fi
       if [[ "$ty" == "CT" ]]; then
         pct rollback "$id" "$sn" >/dev/null 2>&1 || err "Rollback fehlgeschlagen."
-      else qm rollback "$id" "$sn" >/dev/null 2>&1 || err "Rollback fehlgeschlagen."; fi
+      else
+        qm rollback "$id" "$sn" >/dev/null 2>&1 || err "Rollback fehlgeschlagen."
+      fi
       ok "Rollback auf '$sn' ok."
       ;;
     4)
@@ -477,9 +520,15 @@ snapshots_menu() {
         echo "Abbruch."
         return
       }
+      if ! confirm "Delete snapshot '$sn' for $ty $id? (y/N): "; then
+        note "Abbruch."
+        return
+      fi
       if [[ "$ty" == "CT" ]]; then
         pct delsnapshot "$id" "$sn" >/dev/null 2>&1 || err "Löschen fehlgeschlagen."
-      else qm delsnapshot "$id" "$sn" >/dev/null 2>&1 || err "Löschen fehlgeschlagen."; fi
+      else
+        qm delsnapshot "$id" "$sn" >/dev/null 2>&1 || err "Löschen fehlgeschlagen."
+      fi
       ok "Snapshot '$sn' gelöscht."
       ;;
     5) : ;;
@@ -495,8 +544,9 @@ spice_info() {
   [[ -z "$port" ]] && port="$(grep -E "(spice).*port" "/var/log/qemu-server/${id}.log" 2>/dev/null | tail -1 | sed -n 's/.*port=\([0-9]\+\).*/\1/p')"
   [[ -z "$port" ]] && port="$((61000 + id))"
   printf '%s\n' "SPICE: spice://${host}:${port}"
-  local vv="/tmp/vm-${id}.vv"
-  cat >"$vv" <<EOF
+  local vv
+  vv="$(mktemp -t "vm-${id}-XXXXXX.vv")"
+  cat >"$vv" <<VMVEOF
 [virt-viewer]
 type=spice
 host=${host}
@@ -504,13 +554,17 @@ port=${port}
 title=VM ${id} (${name})
 delete-this-file=1
 fullscreen=0
-EOF
+VMVEOF
   ok "Datei erstellt: ${vv}"
 }
 
 spice_enable() {
   local id="$1"
   local port="$((61000 + id))"
+  if ! confirm "Enable SPICE on 0.0.0.0:$port for VM ${id}? (y/N): "; then
+    note "Abbruch."
+    return
+  fi
   qm set "$id" --vga qxl >/dev/null 2>&1 || true
   if qm set "$id" --spice "port=${port},addr=0.0.0.0" >/dev/null 2>&1; then
     ok "SPICE für VM ${id} aktiviert. Port: ${port}. Neustart erforderlich."
@@ -555,4 +609,5 @@ main() {
       ;;
   esac
 }
+
 main "$@"
