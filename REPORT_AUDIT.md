@@ -78,6 +78,7 @@
 - Results: bash -n (exit 0), shellcheck (exit 0), tests/run.sh (exit 0)
 
 ## Rollback Instructions
+- Revert audit reports: git revert f4f13a1
 - Revert tests: git revert 6306648
 - Revert read_line fix: git revert 27cf250
 - Revert snapshot list fix: git revert 2419a52
