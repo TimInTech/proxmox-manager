@@ -7,11 +7,13 @@
 
 [![CI](https://img.shields.io/github/actions/workflow/status/TimInTech/proxmox-manager/ci.yml?branch=main&style=for-the-badge&logo=github)](https://github.com/TimInTech/proxmox-manager/actions)
 [![Gitleaks](https://img.shields.io/github/actions/workflow/status/TimInTech/proxmox-manager/gitleaks.yml?branch=main&style=for-the-badge&logo=security)](https://github.com/TimInTech/proxmox-manager/actions)
-[![License](https://img.shields.io/github/license/TimInTech/proxmox-manager? style=for-the-badge&color=blue)](LICENSE)
+[![License](https://img.shields.io/github/license/TimInTech/proxmox-manager?style=for-the-badge&color=blue)](LICENSE)
 [![Shell](https://img.shields.io/badge/Shell-Bash-4EAA25?style=for-the-badge&logo=gnu-bash)](https://www.gnu.org/software/bash/)
 [![Proxmox VE](https://img.shields.io/badge/Proxmox-VE-orange?style=for-the-badge)](https://www.proxmox.com/)
 
-<img src="https://skillicons.dev/icons?i=linux,bash,debian" alt="Tech Stack" />
+Shell · Proxmox VE
+
+![Tech Stack](https://skillicons.dev/icons?i=linux,bash,debian)
 
 </div>
 <!-- markdownlint-enable MD033 MD041 -->
@@ -104,7 +106,7 @@ Prints a formatted table.  Useful for logging or quick checks.
 sudo ./proxmox-manager.sh --json
 ```
 
-Outputs VM/CT data as JSON array: 
+Outputs VM/CT data as JSON array:
 
 ```json
 [
@@ -135,11 +137,11 @@ All destructive actions (stop, restart, snapshot rollback) require confirmation 
 
 ## 🔐 Security
 
-- **Root required:** The script calls `qm`, `pct`, and other Proxmox tools that require elevated privileges. 
-- **No credentials stored:** Relies on Proxmox host authentication. 
+- **Root required:** The script calls `qm`, `pct`, and other Proxmox tools that require elevated privileges.
+- **No credentials stored:** Relies on Proxmox host authentication.
 - **No outbound traffic:** All operations are local.
 - **CI hardening:**
-  - ShellCheck enforced on all `.sh` files. 
+  - ShellCheck enforced on all `.sh` files.
   - Gitleaks scan prevents accidental secret commits.
 - **Vulnerability reporting:** See `SECURITY.md` for responsible disclosure.
 
@@ -150,7 +152,7 @@ All destructive actions (stop, restart, snapshot rollback) require confirmation 
 - **Not a UI replacement:** Use the Proxmox web UI for rich workflows.
 - **Not configuration management:** No Terraform/Ansible integration (yet).
 - **Not a daemon:** Runs on demand, exits immediately.
-- **Not multi-host:** Manages only the local Proxmox node. 
+- **Not multi-host:** Manages only the local Proxmox node.
 
 ---
 
@@ -168,17 +170,17 @@ All destructive actions (stop, restart, snapshot rollback) require confirmation 
 shellcheck proxmox-manager.sh
 ```
 
-CI runs on every push and PR. 
+CI runs on every push and PR.
 
 ---
 
 ## 🤝 Contributing
 
-Contributions welcome if they preserve the tool's simplicity. 
+Contributions welcome if they preserve the tool's simplicity.
 
 **Guidelines:**
 
-1. Fork and create a feature branch: 
+1. Fork and create a feature branch:
 
    ```bash
    git checkout -b feature/your-change
