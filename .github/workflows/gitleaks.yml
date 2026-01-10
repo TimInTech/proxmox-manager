@@ -1,5 +1,4 @@
 name: gitleaks
-
 on:
   push:
   pull_request:
@@ -11,17 +10,22 @@ jobs:
   scan:
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Run gitleaks
-        uses: gitleaks/gitleaks-action@v2
+      - uses: actions/checkout@v4
         with:
-          args: detect --source . --report-format json --report-path gitleaks-report.json
+          fetch-depth: 0
 
-      - name: Upload JSON report
+      - name: Install gitleaks CLI
+        run: |
+          curl -sSfL https://raw.githubusercontent.com/gitleaks/gitleaks/master/scripts/install.sh | sudo bash -s -- -b /usr/local/bin
+
+      - name: Run gitleaks (workspace scan)
+        run: |
+          gitleaks detect --redact --source . \
+            --report-format=sarif --report-path=results.sarif --exit-code=1
+
+      - name: Upload SARIF report
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: gitleaks-report
-          path: gitleaks-report.json
+          name: gitleaks-results
+          path: results.sarif
