@@ -1,0 +1,8 @@
+id,severity,category,file,lines,summary,status,tests
+SEC-001,High,Security,proxmox-manager.sh,497-518,Insecure temp file for SPICE vv, fixed,"tests/run.sh; bash -n; shellcheck"
+SEC-002,High,Security,proxmox-manager.sh,521-526,SPICE binds to all interfaces by default, fixed,"tests/run.sh; bash -n; shellcheck"
+BUG-003,Medium,Correctness,proxmox-manager.sh,443-455,Snapshot listing fallthrough for CT/VM, fixed,"tests/run.sh; bash -n; shellcheck"
+BUG-004,Medium,Compatibility,proxmox-manager.sh,44-47,Bash 4.0 incompatible nameref, fixed,"tests/run.sh; bash -n; shellcheck"
+BUG-001,Medium,Docs,README.md,49,chmod typo in install instructions, fixed,docs-only
+BUG-002,Medium,Docs,README.md,52,Docs claim no package install, fixed,docs-only
+DOC-SEC-001,Low,Docs,SECURITY.md,14,Security contact placeholder, fixed,docs-only
