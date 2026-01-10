@@ -446,7 +446,13 @@ snapshots_menu() {
   printf '%s' "Auswahl [1-5]: "
   read_line s
   case "$s" in
-    1) [[ "$ty" == "CT" ]] && pct listsnapshot "$id" 2>/dev/null || qm listsnapshot "$id" 2>/dev/null || echo "(keine oder Fehler)" ;;
+    1)
+      if [[ "$ty" == "CT" ]]; then
+        pct listsnapshot "$id" 2>/dev/null || echo "(keine oder Fehler)"
+      else
+        qm listsnapshot "$id" 2>/dev/null || echo "(keine oder Fehler)"
+      fi
+      ;;
     2)
       printf 'Name: '
       read_line sn
