@@ -46,10 +46,11 @@ Run directly on a Proxmox VE host:
 ```bash
 git clone https://github.com/TimInTech/proxmox-manager.git
 cd proxmox-manager
-chmod +x proxmox-manager. sh
+chmod +x proxmox-manager.sh
 ```
 
-No build step.  No package installation. 
+No build step. The core script has no required extra packages.
+Optional helpers: ./install_dependencies.sh installs jq/virt-viewer/shellcheck for convenience.
 
 ---
 
@@ -60,6 +61,7 @@ No build step.  No package installation.
 - Proxmox VE (tested on 7.x and 8.x)
 - Bash ≥ 4.0 (included in Proxmox)
 - Root privileges (or `PROXMOX_MANAGER_ALLOW_NONROOT=1` for CI overrides)
+- SPICE bind address defaults to 127.0.0.1 (override via PROXMOX_MANAGER_SPICE_ADDR).
 
 **CLI tools (bundled with Proxmox):**
 
