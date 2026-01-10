@@ -1,0 +1,27 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+cmd="${1:-}"
+shift || true
+
+case "$cmd" in
+  list)
+    cat <<'EOL'
+VMID NAME STATUS MEM(MB) BOOTDISK(GB) PID
+200 vm-one running 1024 10.00 1234
+201 - stopped 1024 10.00 0
+EOL
+    ;;
+  config)
+    case "${1:-}" in
+      201) echo "name: vm-fallback" ;;
+      *) echo "name: vm-${1:-unknown}" ;;
+    esac
+    ;;
+  status)
+    echo "status: running"
+    ;;
+  *)
+    exit 0
+    ;;
+esac

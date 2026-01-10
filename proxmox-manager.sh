@@ -42,8 +42,9 @@ note() { printf '%b\n' "${CYAN}$*${NC}"; }
 
 # ===== Helpers =====
 read_line() {
-  local -n __o=$1
-  if ! IFS= read -r __o; then __o=''; fi
+  local __name="$1" __val=''
+  if ! IFS= read -r __val; then __val=''; fi
+  printf -v "$__name" '%s' "$__val"
 }
 trim() {
   local v="$*"
@@ -445,7 +446,13 @@ snapshots_menu() {
   printf '%s' "Auswahl [1-5]: "
   read_line s
   case "$s" in
-    1) [[ "$ty" == "CT" ]] && pct listsnapshot "$id" 2>/dev/null || qm listsnapshot "$id" 2>/dev/null || echo "(keine oder Fehler)" ;;
+    1)
+      if [[ "$ty" == "CT" ]]; then
+        pct listsnapshot "$id" 2>/dev/null || echo "(keine oder Fehler)"
+      else
+        qm listsnapshot "$id" 2>/dev/null || echo "(keine oder Fehler)"
+      fi
+      ;;
     2)
       printf 'Name: '
       read_line sn
@@ -495,7 +502,10 @@ spice_info() {
   [[ -z "$port" ]] && port="$(grep -E "(spice).*port" "/var/log/qemu-server/${id}.log" 2>/dev/null | tail -1 | sed -n 's/.*port=\([0-9]\+\).*/\1/p')"
   [[ -z "$port" ]] && port="$((61000 + id))"
   printf '%s\n' "SPICE: spice://${host}:${port}"
-  local vv="/tmp/vm-${id}.vv"
+  umask 077
+  local vv
+  vv="$(mktemp -p "${TMPDIR:-/tmp}" "vm-${id}.XXXXXX.vv")" || { err "mktemp failed"; return 1; }
+  chmod 600 "$vv" || true
   cat >"$vv" <<EOF
 [virt-viewer]
 type=spice
@@ -511,8 +521,9 @@ EOF
 spice_enable() {
   local id="$1"
   local port="$((61000 + id))"
+  local addr="${PROXMOX_MANAGER_SPICE_ADDR:-127.0.0.1}"
   qm set "$id" --vga qxl >/dev/null 2>&1 || true
-  if qm set "$id" --spice "port=${port},addr=0.0.0.0" >/dev/null 2>&1; then
+  if qm set "$id" --spice "port=${port},addr=${addr}" >/dev/null 2>&1; then
     ok "SPICE für VM ${id} aktiviert. Port: ${port}. Neustart erforderlich."
     printf '%s' "Jetzt neu starten? (y/N): "
     local a

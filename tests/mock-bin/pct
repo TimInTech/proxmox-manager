@@ -1,0 +1,27 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+cmd="${1:-}"
+shift || true
+
+case "$cmd" in
+  list)
+    cat <<'EOL'
+VMID       Status     Name
+100 running ct-one
+101 stopped -
+EOL
+    ;;
+  config)
+    case "${1:-}" in
+      101) echo "hostname: ct-fallback" ;;
+      *) echo "hostname: ct-${1:-unknown}" ;;
+    esac
+    ;;
+  status)
+    echo "status: running"
+    ;;
+  *)
+    exit 0
+    ;;
+esac
