@@ -42,8 +42,9 @@ note() { printf '%b\n' "${CYAN}$*${NC}"; }
 
 # ===== Helpers =====
 read_line() {
-  local -n __o=$1
-  if ! IFS= read -r __o; then __o=''; fi
+  local __name="$1" __val=''
+  if ! IFS= read -r __val; then __val=''; fi
+  printf -v "$__name" '%s' "$__val"
 }
 trim() {
   local v="$*"
