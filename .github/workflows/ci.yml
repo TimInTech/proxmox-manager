@@ -22,9 +22,9 @@ jobs:
       - name: Run shellcheck
         run: |
           set -euo pipefail
-          files=$(find . -name '*.sh' -print)
-          if [ -z "$files" ]; then
+          mapfile -d '' -t files < <(find . -maxdepth 4 -type f -name '*.sh' -print0)
+          if [ ${#files[@]} -eq 0 ]; then
             echo "No shell scripts found."
             exit 0
           fi
-          shellcheck $files
+          shellcheck -x "${files[@]}"
