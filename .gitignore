@@ -33,3 +33,9 @@ gitleaks-report.json
 gitleaks.sarif
 gitleaks.log
 .gitleaks/
+
+# local-only
+REPORT_PROXMOX_RESTORE.md
+reports/
+.audit/
+results.sarif

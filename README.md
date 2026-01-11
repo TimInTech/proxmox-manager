@@ -51,8 +51,8 @@ cd proxmox-manager
 chmod +x proxmox-manager.sh
 ```
 
-No build step. The core script has no required extra packages.
-Optional helpers: ./install_dependencies.sh installs jq/virt-viewer/shellcheck for convenience.
+No build step. The core script has no required extra packages; optional helpers are available.
+Run `./install_dependencies.sh` to install optional helpers for convenience: `jq`, `virt-viewer`, and `shellcheck`.
 
 ---
 
