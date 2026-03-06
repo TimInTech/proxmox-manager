@@ -36,6 +36,7 @@ gitleaks.log
 
 # local-only
 REPORT_PROXMOX_RESTORE.md
+REPORT_AUDIT.md
 reports/
 .audit/
 results.sarif

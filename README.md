@@ -54,9 +54,8 @@ chmod +x proxmox-manager.sh
 ```
 
 No build step. The core script has no required extra packages; optional helpers are available.
-Run `./install_dependencies.sh` to install optional helpers (`jq`, `virt-viewer`, `shellcheck`) and register `pman` as a global command.
 
-**To register `pman` as a global command** (requires root, run from the repo):
+**To install optional packages and register `pman` as a global command** (requires root, run from the repo):
 
 ```bash
 sudo ./install_dependencies.sh
@@ -179,8 +178,8 @@ All destructive actions (stop, restart, snapshot rollback) require confirmation 
 
 **Automated checks:**
 
-- ShellCheck on every `.sh` file (strict mode:  `SC2086`, `SC2068`, etc.)
-- Gitleaks scan for secrets (reports uploaded as artifacts, never committed)
+- ShellCheck on every `.sh` file
+- Gitleaks scan for secrets (scan results never committed)
 - No generated files or scan outputs in the repository
 
 **Local testing:**
