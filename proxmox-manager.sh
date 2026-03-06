@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Proxmox VM/CT Management Tool
-# Version 2.8.1 — 2026-03-06
+# Version 2.8.2 — 2026-03-06
 # - Refactored: clear section separation, log(), validate_vmid()
 # - UX: confirmation prompts for stop/restart, snapshot list before rollback/delete
 # - Header shows hostname and PVE version when available
@@ -8,6 +8,9 @@
 # - Fixed: spice_enable uses explicit integer cast for port arithmetic
 # - UX: print_table shows running/stopped count; header shows uptime
 # - Fix: open_console checks CT status before pct enter
+# - Fix: do_action shows Proxmox error details on failure
+# - Fix: snapshot name validated before Proxmox call
+# - UX: VMID-not-found message hints to refresh; action_menu empty=back
 # - Added keyboard legend in main menu
 
 set -Eeuo pipefail
@@ -94,6 +97,18 @@ validate_vmid() {
   local id="$1"
   if [[ ! "$id" =~ ^[0-9]+$ ]] || ((10#$id < 1 || 10#$id > 999999)); then
     err "Invalid VMID '$id'. Must be an integer between 1 and 999999."
+    return 1
+  fi
+  return 0
+}
+
+# validate_snapshot_name NAME — reject names Proxmox would refuse.
+# Valid: starts with alphanumeric, only [a-zA-Z0-9_-], max 40 chars.
+validate_snapshot_name() {
+  local sn="$1"
+  if [[ ! "$sn" =~ ^[a-zA-Z0-9][a-zA-Z0-9_-]{0,39}$ ]]; then
+    err "Invalid snapshot name '$sn'."
+    note "Name must start with a letter or digit, contain only [a-zA-Z0-9_-], and be at most 40 characters."
     return 1
   fi
   return 0
@@ -434,7 +449,7 @@ main_menu() {
         if ((found == 1)); then
           action_menu "$choice" "$sel_type" "$sel_name"
         else
-          err "VMID $choice not found."
+          err "VMID $choice not found. Press 'r' to refresh the list."
         fi
       else
         err "Invalid input: '$choice'. Enter a numeric VMID, 'r', or 'q'."
@@ -490,8 +505,8 @@ action_menu() {
         err "SPICE is only available for VMs."
       fi
       ;;
-    9) : ;;
-    *) err "Invalid selection." ;;
+    9 | '') : ;;
+    *) err "Invalid selection. Enter 1-9." ;;
   esac
   printf '\n%s' "Press Enter to continue... "
   local _dummy
@@ -515,17 +530,20 @@ do_action() {
         return
       fi
       note "Starting $ty $id ($name)..."
+      local _pve_out
       if [[ "$ty" == "CT" ]]; then
-        if pct start "$id" >/dev/null 2>&1; then
+        if _pve_out=$(pct start "$id" 2>&1); then
           ok "$ty $id started successfully."
         else
           err "Failed to start CT $id."
+          [[ -n "$_pve_out" ]] && note "Proxmox: $(printf '%s' "$_pve_out" | head -3)"
         fi
       else
-        if qm start "$id" >/dev/null 2>&1; then
+        if _pve_out=$(qm start "$id" 2>&1); then
           ok "$ty $id started successfully."
         else
           err "Failed to start VM $id."
+          [[ -n "$_pve_out" ]] && note "Proxmox: $(printf '%s' "$_pve_out" | head -3)"
         fi
       fi
       ;;
@@ -539,16 +557,18 @@ do_action() {
       confirm "Stop $ty $id ($name)?" || { note "Aborted."; return; }
       note "Stopping $ty $id ($name)..."
       if [[ "$ty" == "CT" ]]; then
-        if pct stop "$id" >/dev/null 2>&1; then
+        if _pve_out=$(pct stop "$id" 2>&1); then
           ok "$ty $id stopped."
         else
           err "Failed to stop CT $id."
+          [[ -n "$_pve_out" ]] && note "Proxmox: $(printf '%s' "$_pve_out" | head -3)"
         fi
       else
-        if qm stop "$id" >/dev/null 2>&1; then
+        if _pve_out=$(qm stop "$id" 2>&1); then
           ok "$ty $id stopped."
         else
           err "Failed to stop VM $id."
+          [[ -n "$_pve_out" ]] && note "Proxmox: $(printf '%s' "$_pve_out" | head -3)"
         fi
       fi
       ;;
@@ -563,16 +583,18 @@ do_action() {
       confirm "Restart $ty $id ($name)?" || { note "Aborted."; return; }
       note "Restarting $ty $id ($name)..."
       if [[ "$ty" == "CT" ]]; then
-        if pct stop "$id" >/dev/null 2>&1 && sleep 1 && pct start "$id" >/dev/null 2>&1; then
+        if _pve_out=$(pct stop "$id" 2>&1) && sleep 1 && _pve_out=$(pct start "$id" 2>&1); then
           ok "$ty $id restarted."
         else
           err "Failed to restart CT $id."
+          [[ -n "$_pve_out" ]] && note "Proxmox: $(printf '%s' "$_pve_out" | head -3)"
         fi
       else
-        if qm stop "$id" >/dev/null 2>&1 && sleep 1 && qm start "$id" >/dev/null 2>&1; then
+        if _pve_out=$(qm stop "$id" 2>&1) && sleep 1 && _pve_out=$(qm start "$id" 2>&1); then
           ok "$ty $id restarted."
         else
           err "Failed to restart VM $id."
+          [[ -n "$_pve_out" ]] && note "Proxmox: $(printf '%s' "$_pve_out" | head -3)"
         fi
       fi
       ;;
@@ -672,11 +694,21 @@ snapshots_menu() {
         note "Aborted — no name given."
         return
       fi
+      validate_snapshot_name "$sn" || return
       note "Creating snapshot '$sn' for $ty $id..."
+      local _snap_out
       if [[ "$ty" == "CT" ]]; then
-        pct snapshot "$id" "$sn" >/dev/null 2>&1 || { err "Snapshot creation failed."; return; }
+        if ! _snap_out=$(pct snapshot "$id" "$sn" 2>&1); then
+          err "Snapshot creation failed."
+          [[ -n "$_snap_out" ]] && note "Proxmox: $(printf '%s' "$_snap_out" | head -3)"
+          return
+        fi
       else
-        qm snapshot "$id" "$sn" >/dev/null 2>&1 || { err "Snapshot creation failed."; return; }
+        if ! _snap_out=$(qm snapshot "$id" "$sn" 2>&1); then
+          err "Snapshot creation failed."
+          [[ -n "$_snap_out" ]] && note "Proxmox: $(printf '%s' "$_snap_out" | head -3)"
+          return
+        fi
       fi
       ok "Snapshot '$sn' created."
       ;;
