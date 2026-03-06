@@ -54,7 +54,22 @@ chmod +x proxmox-manager.sh
 ```
 
 No build step. The core script has no required extra packages; optional helpers are available.
-Run `./install_dependencies.sh` to install optional helpers for convenience: `jq`, `virt-viewer`, and `shellcheck`.
+Run `./install_dependencies.sh` to install optional helpers (`jq`, `virt-viewer`, `shellcheck`) and register `pman` as a global command.
+
+**To register `pman` as a global command** (requires root, run from the repo):
+
+```bash
+sudo ./install_dependencies.sh
+```
+
+Afterwards `pman` is available system-wide via a symlink in `/usr/local/bin/`:
+
+```bash
+pman             # interactive menu
+pman --list      # plain-text table of all VMs/CTs
+pman --json      # machine-readable JSON output
+pman --version   # print version and exit
+```
 
 ---
 
@@ -82,7 +97,7 @@ No Python.  No Docker. No external APIs.
 ### Interactive mode (default)
 
 ```bash
-sudo ./proxmox-manager.sh
+pman
 ```
 
 Displays a table of all VMs/containers with status symbols:
@@ -98,7 +113,7 @@ A summary line below the table shows the count of running and stopped instances.
 ### List mode (plain text)
 
 ```bash
-sudo ./proxmox-manager.sh --list
+pman --list
 ```
 
 Prints a formatted table.  Useful for logging or quick checks.
@@ -106,7 +121,7 @@ Prints a formatted table.  Useful for logging or quick checks.
 ### JSON mode (machine-readable)
 
 ```bash
-sudo ./proxmox-manager.sh --json
+pman --json
 ```
 
 Outputs VM/CT data as JSON array:

@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Proxmox VM/CT Management Tool
-# Version 2.8.2 — 2026-03-06
+# Version 2.8.3 — 2026-03-06
 # - Refactored: clear section separation, log(), validate_vmid()
 # - UX: confirmation prompts for stop/restart, snapshot list before rollback/delete
 # - Header shows hostname and PVE version when available
@@ -11,6 +11,8 @@
 # - Fix: do_action shows Proxmox error details on failure
 # - Fix: snapshot name validated before Proxmox call
 # - UX: VMID-not-found message hints to refresh; action_menu empty=back
+# - Fix: _pve_out declared local in stop/restart; rollback/delete show Proxmox errors
+# - Fix: open_console checks VM status before qm terminal
 # - Added keyboard legend in main menu
 
 set -Eeuo pipefail
@@ -556,6 +558,7 @@ do_action() {
       fi
       confirm "Stop $ty $id ($name)?" || { note "Aborted."; return; }
       note "Stopping $ty $id ($name)..."
+      local _pve_out
       if [[ "$ty" == "CT" ]]; then
         if _pve_out=$(pct stop "$id" 2>&1); then
           ok "$ty $id stopped."
@@ -582,6 +585,7 @@ do_action() {
       fi
       confirm "Restart $ty $id ($name)?" || { note "Aborted."; return; }
       note "Restarting $ty $id ($name)..."
+      local _pve_out
       if [[ "$ty" == "CT" ]]; then
         if _pve_out=$(pct stop "$id" 2>&1) && sleep 1 && _pve_out=$(pct start "$id" 2>&1); then
           ok "$ty $id restarted."
@@ -636,6 +640,10 @@ open_console() {
       err "'pct' not found."
     fi
   else
+    if [[ "$(status_of "$id" VM)" != "running" ]]; then
+      err "VM $id is not running. Start it first."
+      return
+    fi
     if qm terminal "$id" 2>/dev/null; then
       :
     else
@@ -727,10 +735,19 @@ snapshots_menu() {
       fi
       confirm "Roll back $ty $id to snapshot '$sn'? This cannot be undone." || { note "Aborted."; return; }
       note "Rolling back $ty $id to '$sn'..."
+      local _rb_out
       if [[ "$ty" == "CT" ]]; then
-        pct rollback "$id" "$sn" >/dev/null 2>&1 || { err "Rollback failed."; return; }
+        if ! _rb_out=$(pct rollback "$id" "$sn" 2>&1); then
+          err "Rollback failed."
+          [[ -n "$_rb_out" ]] && note "Proxmox: $(printf '%s' "$_rb_out" | head -3)"
+          return
+        fi
       else
-        qm rollback "$id" "$sn" >/dev/null 2>&1 || { err "Rollback failed."; return; }
+        if ! _rb_out=$(qm rollback "$id" "$sn" 2>&1); then
+          err "Rollback failed."
+          [[ -n "$_rb_out" ]] && note "Proxmox: $(printf '%s' "$_rb_out" | head -3)"
+          return
+        fi
       fi
       ok "Rollback to '$sn' completed."
       ;;
@@ -749,10 +766,19 @@ snapshots_menu() {
       fi
       confirm "Delete snapshot '$sn' from $ty $id?" || { note "Aborted."; return; }
       note "Deleting snapshot '$sn'..."
+      local _del_out
       if [[ "$ty" == "CT" ]]; then
-        pct delsnapshot "$id" "$sn" >/dev/null 2>&1 || { err "Snapshot deletion failed."; return; }
+        if ! _del_out=$(pct delsnapshot "$id" "$sn" 2>&1); then
+          err "Snapshot deletion failed."
+          [[ -n "$_del_out" ]] && note "Proxmox: $(printf '%s' "$_del_out" | head -3)"
+          return
+        fi
       else
-        qm delsnapshot "$id" "$sn" >/dev/null 2>&1 || { err "Snapshot deletion failed."; return; }
+        if ! _del_out=$(qm delsnapshot "$id" "$sn" 2>&1); then
+          err "Snapshot deletion failed."
+          [[ -n "$_del_out" ]] && note "Proxmox: $(printf '%s' "$_del_out" | head -3)"
+          return
+        fi
       fi
       ok "Snapshot '$sn' deleted."
       ;;

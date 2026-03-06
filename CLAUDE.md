@@ -10,6 +10,7 @@ Single-file Bash tool (`proxmox-manager.sh`) wrapping Proxmox CLI tools (`qm`, `
 
 ```bash
 # Run interactive menu (requires root on Proxmox)
+pman                            # global shorthand (after install_dependencies.sh)
 sudo ./proxmox-manager.sh
 
 # Non-interactive / scriptable modes
@@ -26,7 +27,7 @@ tests/run.sh
 
 ## Architecture
 
-**`proxmox-manager.sh`** — the entire tool in one file (v2.8.2), structured as:
+**`proxmox-manager.sh`** — the entire tool in one file (v2.8.3), structured as:
 
 - `parse_args` / `require_root` / `require_tools` — startup validation. Root check bypassed when `PROXMOX_MANAGER_ALLOW_NONROOT=1` (CI/tests).
 - `validate_vmid()` — rejects non-numeric or out-of-range (1–999999) VMIDs before any Proxmox call.

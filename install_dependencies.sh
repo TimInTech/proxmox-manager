@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# install_dependencies.sh — install optional helpers for proxmox-manager
+# install_dependencies.sh — install optional helpers and global pman command for proxmox-manager
 # Idempotent install script for Debian/Proxmox VE nodes.
 #
 # Optional packages installed:
@@ -70,4 +70,25 @@ else
   _ok "Installed: ${MISSING[*]}"
 fi
 
-_ok "Done. All optional dependencies are available."
+# ---------------------------------------------------------------------------
+# Install pman — global symlink in /usr/local/bin
+# ---------------------------------------------------------------------------
+SCRIPT_DIR="$(cd "$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")" && pwd)"
+PMAN_SRC="${SCRIPT_DIR}/proxmox-manager.sh"
+PMAN_DST="/usr/local/bin/pman"
+
+if [[ ! -f "$PMAN_SRC" ]]; then
+  _err "proxmox-manager.sh not found at ${PMAN_SRC}. Run install_dependencies.sh from the repo root."
+  exit 1
+fi
+
+chmod +x "$PMAN_SRC"
+
+if [[ -L "$PMAN_DST" && "$(readlink -f "$PMAN_DST")" == "$(readlink -f "$PMAN_SRC")" ]]; then
+  _log "pman already installed: ${PMAN_DST}"
+else
+  ln -sf "$PMAN_SRC" "$PMAN_DST"
+  _ok "Installed: pman -> ${PMAN_SRC}"
+fi
+
+_ok "Done. All optional dependencies are available. Run 'pman' to start."
