@@ -34,12 +34,12 @@ Proxmox Manager is a **single Bash script** that wraps Proxmox CLI tools (`qm`, 
 
 - List all VMs and containers with status (running, stopped, paused)
 - Start, stop, restart instances — with confirmation prompt for destructive actions
-- Open console (LXC shell or QEMU terminal)
+- Open console (LXC shell or QEMU terminal) — verifies CT is running before entering
 - Manage snapshots (list, create, rollback, delete) — shows existing snapshots before rollback/delete
 - Enable and retrieve SPICE connection details for VMs
 - Machine-readable JSON and plain-text output for automation
 - Optional structured logging via `LOG_FILE` environment variable
-- Node hostname and PVE version displayed in the header
+- Node hostname, PVE version, and system uptime displayed in the header
 
 ---
 
@@ -93,6 +93,7 @@ Displays a table of all VMs/containers with status symbols:
 - `[?]` unknown
 
 Enter a VMID to open an action menu. Press `r` to refresh, `q` to quit.
+A summary line below the table shows the count of running and stopped instances.
 
 ### List mode (plain text)
 
