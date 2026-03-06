@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Proxmox VM/CT Management Tool
-# Version 2.8.3 — 2026-03-06
+# Version 2.8.4 — 2026-03-06
 # - Refactored: clear section separation, log(), validate_vmid()
 # - UX: confirmation prompts for stop/restart, snapshot list before rollback/delete
 # - Header shows hostname and PVE version when available
@@ -13,6 +13,7 @@
 # - UX: VMID-not-found message hints to refresh; action_menu empty=back
 # - Fix: _pve_out declared local in stop/restart; rollback/delete show Proxmox errors
 # - Fix: open_console checks VM status before qm terminal
+# - Fix: validate_snapshot_name() applied to rollback/delete; snapshots_menu error hint
 # - Added keyboard legend in main menu
 
 set -Eeuo pipefail
@@ -644,6 +645,7 @@ open_console() {
       err "VM $id is not running. Start it first."
       return
     fi
+    note "Press Ctrl+] to exit the VM terminal."
     if qm terminal "$id" 2>/dev/null; then
       :
     else
@@ -733,6 +735,7 @@ snapshots_menu() {
         note "Aborted — no name given."
         return
       fi
+      validate_snapshot_name "$sn" || return
       confirm "Roll back $ty $id to snapshot '$sn'? This cannot be undone." || { note "Aborted."; return; }
       note "Rolling back $ty $id to '$sn'..."
       local _rb_out
@@ -764,6 +767,7 @@ snapshots_menu() {
         note "Aborted — no name given."
         return
       fi
+      validate_snapshot_name "$sn" || return
       confirm "Delete snapshot '$sn' from $ty $id?" || { note "Aborted."; return; }
       note "Deleting snapshot '$sn'..."
       local _del_out
@@ -784,7 +788,7 @@ snapshots_menu() {
       ;;
 
     5) : ;;
-    *) err "Invalid selection." ;;
+    *) err "Invalid selection. Enter 1-5." ;;
   esac
 }
 
