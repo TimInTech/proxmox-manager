@@ -1,11 +1,13 @@
 #!/usr/bin/env bash
 # Proxmox VM/CT Management Tool
-# Version 2.8.0 — 2026-03-06
+# Version 2.8.1 — 2026-03-06
 # - Refactored: clear section separation, log(), validate_vmid()
 # - UX: confirmation prompts for stop/restart, snapshot list before rollback/delete
 # - Header shows hostname and PVE version when available
 # - Normalized output to English, added --version flag
 # - Fixed: spice_enable uses explicit integer cast for port arithmetic
+# - UX: print_table shows running/stopped count; header shows uptime
+# - Fix: open_console checks CT status before pct enter
 # - Added keyboard legend in main menu
 
 set -Eeuo pipefail
@@ -327,12 +329,14 @@ header() {
 
   # Gather optional host info (silently ignored on non-PVE systems)
   local node_info=""
-  local node_name pve_ver
+  local node_name pve_ver uptime_str
   node_name="$(hostname -s 2>/dev/null || true)"
   pve_ver="$(pveversion 2>/dev/null | awk '{print $2}' || true)"
+  uptime_str="$(uptime -p 2>/dev/null | sed 's/^up //' || true)"
   if [[ -n "$node_name" ]]; then
     node_info=" Node: ${node_name}"
     [[ -n "$pve_ver" ]] && node_info+="  |  PVE: ${pve_ver}"
+    [[ -n "$uptime_str" ]] && node_info+="  |  up ${uptime_str}"
   fi
 
   local version
@@ -363,10 +367,13 @@ print_table() {
   printf "%-6s %-6s %-10s %-5s %-30s\n" "ID" "Type" "Status" "Sym." "Name"
   printf '%b' "${NC}"
   printf '%s\n' "─────────────────────────────────────────────────────────────"
-  local any=0
+  local any=0 count_run=0 count_stop=0 count_other=0
   while IFS=$'\t' read -r id ty st sym nm; do
     [[ -z "$id" ]] && continue
     any=1
+    [[ "$st" == "running" ]] && count_run=$((count_run + 1))
+    [[ "$st" == "stopped" ]] && count_stop=$((count_stop + 1))
+    [[ "$st" != "running" && "$st" != "stopped" ]] && count_other=$((count_other + 1))
     # Print status column coloured, rest plain
     printf "%-6s %-6s " "$id" "$ty"
     _status_color "$st" "$(printf "%-10s" "$st")"
@@ -379,6 +386,10 @@ print_table() {
   fi
   printf '%s\n' "─────────────────────────────────────────────────────────────"
   printf '%s\n' "Status: [+] running  [-] stopped  [~] paused  [?] unknown"
+  printf "Count:  %b%s running%b  %b%s stopped%b" \
+    "$GREEN" "$count_run" "$NC" "$RED" "$count_stop" "$NC"
+  if (( count_other > 0 )); then printf "  %s other" "$count_other"; fi
+  printf '\n'
   return 0
 }
 
@@ -593,6 +604,10 @@ open_console() {
   note "Opening console for $ty $id ($name)..."
   if [[ "$ty" == "CT" ]]; then
     if have pct; then
+      if [[ "$(status_of "$id" CT)" != "running" ]]; then
+        err "CT $id is not running. Start it first."
+        return
+      fi
       echo "Press CTRL+D to exit the console."
       pct enter "$id"
     else
@@ -752,9 +767,9 @@ EOF
 spice_enable() {
   local id="$1"
   # Explicit integer cast to prevent arithmetic on a string variable
-  local id_int
+  local id_int port
   id_int=$(( 10#$id ))
-  local port=$(( 61000 + id_int ))
+  port=$(( 61000 + id_int ))
   local addr="${PROXMOX_MANAGER_SPICE_ADDR:-127.0.0.1}"
   qm set "$id" --vga qxl >/dev/null 2>&1 || true
   if qm set "$id" --spice "port=${port},addr=${addr}" >/dev/null 2>&1; then
