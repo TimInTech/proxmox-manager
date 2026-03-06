@@ -1,26 +1,35 @@
 #!/usr/bin/env bash
 # Proxmox VM/CT Management Tool
-# Version 2.7.2 — 2025-09-07
-# - Fix: Header-Zeilen sicher ignorieren (nur numerische IDs)
-# - CT-Namen: $NF + Fallback pct config hostname
-# - Root-Prüfung, LC_ALL=C, kein sudo
+# Version 2.8.0 — 2026-03-06
+# - Refactored: clear section separation, log(), validate_vmid()
+# - UX: confirmation prompts for stop/restart, snapshot list before rollback/delete
+# - Header shows hostname and PVE version when available
+# - Normalized output to English, added --version flag
+# - Fixed: spice_enable uses explicit integer cast for port arithmetic
+# - Added keyboard legend in main menu
 
 set -Eeuo pipefail
 IFS=$'\n\t'
 export LC_ALL=C
 
-# ===== Defaults =====
+# =============================================================================
+# DEFAULTS
+# =============================================================================
 CLEAR_SCREEN=1
 MODE="interactive"
 RUN_ONCE=0
 LIST_FLAG=0
 JSON_FLAG=0
+LOG_FILE="${LOG_FILE:-}"   # Set LOG_FILE=/path/to/file to enable file logging
 
-# ===== Colors (nur TTY) =====
+# =============================================================================
+# COLORS  (active only on a real TTY, or when NO_COLOR is unset)
+# =============================================================================
 if [[ -t 1 && -z "${NO_COLOR:-}" ]]; then
   BOLD=$'\e[1m'
   RED=$'\e[31m'
   GREEN=$'\e[32m'
+  YELLOW=$'\e[33m'
   BLUE=$'\e[34m'
   CYAN=$'\e[36m'
   NC=$'\e[0m'
@@ -28,30 +37,69 @@ else
   BOLD=''
   RED=''
   GREEN=''
+  YELLOW=''
   BLUE=''
   CYAN=''
   NC=''
 fi
 
+# =============================================================================
+# SIGNAL HANDLING
+# =============================================================================
 trap 'printf "\n%s\n" "Exiting."; exit 0' INT TERM
 
-have() { command -v "$1" >/dev/null 2>&1; }
-err() { printf '%b\n' "${RED}Error:${NC} $*" >&2; }
-ok() { printf '%b\n' "${GREEN}$*${NC}"; }
-note() { printf '%b\n' "${CYAN}$*${NC}"; }
+# =============================================================================
+# UTILITY FUNCTIONS
+# =============================================================================
 
-# ===== Helpers =====
+have()      { command -v "$1" >/dev/null 2>&1; }
+err()       { printf '%b\n' "${RED}Error:${NC} $*" >&2;  log "ERROR" "$*"; }
+ok()        { printf '%b\n' "${GREEN}$*${NC}";            log "OK"    "$*"; }
+note()      { printf '%b\n' "${CYAN}$*${NC}";             log "NOTE"  "$*"; }
+warn()      { printf '%b\n' "${YELLOW}Warning:${NC} $*";  log "WARN"  "$*"; }
+
+# log() — structured timestamped logging; writes to LOG_FILE when set.
+# Usage: log LEVEL message…
+log() {
+  local level="${1:-INFO}"
+  shift || true
+  local msg="$*"
+  local ts
+  ts="$(date '+%Y-%m-%d %H:%M:%S')"
+  if [[ -n "$LOG_FILE" ]]; then
+    printf '[%s] [%s] %s\n' "$ts" "$level" "$msg" >> "$LOG_FILE" 2>/dev/null || true
+  fi
+}
+
+# read_line NAME — safe single-line read into named variable.
 read_line() {
   local __name="$1" __val=''
   if ! IFS= read -r __val; then __val=''; fi
   printf -v "$__name" '%s' "$__val"
 }
+
+# trim STRING — strip leading/trailing whitespace.
 trim() {
   local v="$*"
   v="${v#"${v%%[![:space:]]*}"}"
   v="${v%"${v##*[![:space:]]}"}"
   printf '%s' "$v"
 }
+
+# validate_vmid ID — exit 1 and print error if ID is not a valid Proxmox VMID.
+# Valid range: positive integer 1–999999.
+validate_vmid() {
+  local id="$1"
+  if [[ ! "$id" =~ ^[0-9]+$ ]] || ((10#$id < 1 || 10#$id > 999999)); then
+    err "Invalid VMID '$id'. Must be an integer between 1 and 999999."
+    return 1
+  fi
+  return 0
+}
+
+# =============================================================================
+# GUARD FUNCTIONS
+# =============================================================================
 
 require_root() {
   # Allow CI or explicit overrides to bypass root check by setting
@@ -64,10 +112,29 @@ require_root() {
     exit 1
   }
 }
-require_tools() { { have qm || have pct; } || {
-  err "qm/pct missing. Run on a Proxmox host."
-  exit 1
-}; }
+
+require_tools() {
+  { have qm || have pct; } || {
+    err "Neither 'qm' nor 'pct' found. Run on a Proxmox VE host."
+    exit 1
+  }
+}
+
+# =============================================================================
+# ARGUMENT PARSING
+# =============================================================================
+
+# _script_version — extract version from the header comment of this script.
+_script_version() {
+  local line
+  while IFS= read -r line; do
+    if [[ "$line" =~ ^#[[:space:]]Version[[:space:]]+([^[:space:]]+) ]]; then
+      printf '%s\n' "${BASH_REMATCH[1]}"
+      return
+    fi
+  done < "${BASH_SOURCE[0]}"
+  printf 'unknown\n'
+}
 
 usage() {
   cat <<'EOF'
@@ -78,6 +145,7 @@ Options:
   --json       Print machine-readable JSON with VM/CT information
   --no-clear   Do not clear the screen in interactive mode
   --once       Run a single interactive refresh (useful for TTY recording)
+  --version    Print version and exit
   -h, --help   Show this help
 EOF
 }
@@ -99,6 +167,10 @@ parse_args() {
       --once)
         RUN_ONCE=1
         ;;
+      --version)
+        printf 'proxmox-manager.sh %s\n' "$(_script_version)"
+        exit 0
+        ;;
       -h | --help)
         usage
         exit 0
@@ -108,12 +180,12 @@ parse_args() {
         break
         ;;
       -*)
-        err "Unbekannte Option: $1"
+        err "Unknown option: $1"
         usage
         exit 1
         ;;
       *)
-        err "Unerwartetes Argument: $1"
+        err "Unexpected argument: $1"
         usage
         exit 1
         ;;
@@ -126,7 +198,10 @@ parse_args() {
   fi
 }
 
-# ===== JSON helpers =====
+# =============================================================================
+# JSON HELPERS
+# =============================================================================
+
 json_escape() {
   local s="$1"
   s="${s//\\/\\\\}"
@@ -137,13 +212,16 @@ json_escape() {
   printf '%s' "$s"
 }
 
-# Nur Zeilen mit führender numerischer ID zulassen
+# =============================================================================
+# DATA COLLECTION
+# =============================================================================
+
+# is_data_line LINE — true when LINE starts with an optional indent then digits.
 is_data_line() {
-  # erlaubt führende Spaces, dann Ziffern, dann Space/Tab
   [[ "$1" =~ ^[[:space:]]*[0-9]+[[:space:]]+ ]]
 }
 
-# ===== Typ/Status =====
+# type_of_id ID — prints "CT", "VM", or empty string.
 type_of_id() {
   local id="$1"
   if have pct && pct list 2>/dev/null | awk 'NR>1 {print $1}' | grep -qx -- "$id"; then
@@ -157,21 +235,21 @@ type_of_id() {
   printf ''
 }
 
+# status_of ID [TYPE] — prints the current status string.
 status_of() {
   local id="$1" t="${2:-}"
   [[ -z "$t" ]] && t="$(type_of_id "$id")"
   case "$t" in
     CT) pct status "$id" 2>/dev/null | awk '{print tolower($NF)}' || printf 'unknown' ;;
-    VM) qm status "$id" 2>/dev/null | awk '{print tolower($NF)}' || printf 'unknown' ;;
+    VM) qm  status "$id" 2>/dev/null | awk '{print tolower($NF)}' || printf 'unknown' ;;
     *) printf 'unknown' ;;
   esac
 }
 
-# ===== Namen =====
 ct_name_from_config() { pct config "$1" 2>/dev/null | awk -F': *' '/^hostname:/ {print $2; exit}'; }
-vm_name_from_config() { qm config "$1" 2>/dev/null | awk -F': *' '/^name:/     {print $2; exit}'; }
+vm_name_from_config() { qm  config "$1" 2>/dev/null | awk -F': *' '/^name:/     {print $2; exit}'; }
 
-# ===== Sammlung: ID<TAB>TYPE<TAB>STATUS<TAB>SYMBOL<TAB>NAME =====
+# collect_instances — emit TAB-separated rows: ID TYPE STATUS SYMBOL NAME
 collect_instances() {
   if have pct; then
     while IFS= read -r line; do
@@ -183,10 +261,10 @@ collect_instances() {
       name="$(awk '{print $NF}' <<<"$line")"
       [[ -z "$name" || "$name" == "-" ]] && name="$(ct_name_from_config "$id")"
       [[ -z "$name" ]] && name="CT-${id}"
-      sym="🟡"
-      [[ "$status" == "running" ]] && sym="🟢"
-      [[ "$status" == "stopped" ]] && sym="🔴"
-      [[ "$status" == "paused" ]] && sym="🟠"
+      sym="[?]"
+      [[ "$status" == "running" ]] && sym="[+]"
+      [[ "$status" == "stopped" ]] && sym="[-]"
+      [[ "$status" == "paused"  ]] && sym="[~]"
       printf "%s\tCT\t%s\t%s\t%s\n" "$id" "$status" "$sym" "$name"
     done < <(pct list 2>/dev/null || true)
   fi
@@ -201,10 +279,10 @@ collect_instances() {
       status="$(awk '{print $3}' <<<"$line")"
       [[ -z "$name" || "$name" == "-" ]] && name="$(vm_name_from_config "$id")"
       [[ -z "$name" ]] && name="VM-${id}"
-      sym="🟡"
-      [[ "$status" == "running" ]] && sym="🟢"
-      [[ "$status" == "stopped" ]] && sym="🔴"
-      [[ "$status" == "paused" ]] && sym="🟠"
+      sym="[?]"
+      [[ "$status" == "running" ]] && sym="[+]"
+      [[ "$status" == "stopped" ]] && sym="[-]"
+      [[ "$status" == "paused"  ]] && sym="[~]"
       printf "%s\tVM\t%s\t%s\t%s\n" "$id" "$status" "$sym" "$name"
     done < <(qm list 2>/dev/null || true)
   fi
@@ -230,45 +308,98 @@ print_json() {
       id_json="\"$(json_escape "$id_json")\""
     fi
     printf '%s{"id":%s,"type":"%s","status":"%s","symbol":"%s","name":"%s"}' \
-      "$sep" "$id_json" "$(json_escape "$ty")" "$(json_escape "$st")" "$(json_escape "$sym")" "$(json_escape "$nm")"
+      "$sep" "$id_json" "$(json_escape "$ty")" "$(json_escape "$st")" \
+      "$(json_escape "$sym")" "$(json_escape "$nm")"
   done
   printf ']\n'
 }
 
-# ===== UI =====
+# =============================================================================
+# UI — HEADER & TABLE
+# =============================================================================
+
+# header — clears screen (if enabled) and prints the tool banner.
+# When running on a Proxmox host, also shows node name and PVE version.
 header() {
   if ((CLEAR_SCREEN == 1)) && [[ -t 1 ]]; then
     clear
   fi
+
+  # Gather optional host info (silently ignored on non-PVE systems)
+  local node_info=""
+  local node_name pve_ver
+  node_name="$(hostname -s 2>/dev/null || true)"
+  pve_ver="$(pveversion 2>/dev/null | awk '{print $2}' || true)"
+  if [[ -n "$node_name" ]]; then
+    node_info=" Node: ${node_name}"
+    [[ -n "$pve_ver" ]] && node_info+="  |  PVE: ${pve_ver}"
+  fi
+
+  local version
+  version="$(_script_version)"
+
   printf '%b\n' "${BOLD}${BLUE}═══════════════════════════════════════════════════${NC}"
-  printf '%b\n' "${BOLD}${BLUE} Proxmox VM/CT Management Tool ${NC}"
+  printf '%b\n' "${BOLD}${BLUE}  Proxmox VM/CT Manager  v${version}${NC}"
+  if [[ -n "$node_info" ]]; then
+    printf '%b\n' "${BOLD}${BLUE}  ${node_info}${NC}"
+  fi
   printf '%b\n' "${BOLD}${BLUE}═══════════════════════════════════════════════════${NC}"
   echo
 }
 
+# _status_color STATUS TEXT — print TEXT in colour matching status.
+_status_color() {
+  local st="$1" txt="$2"
+  case "$st" in
+    running) printf '%b' "${GREEN}${txt}${NC}" ;;
+    stopped) printf '%b' "${RED}${txt}${NC}"   ;;
+    paused)  printf '%b' "${YELLOW}${txt}${NC}" ;;
+    *)       printf '%b' "${txt}"              ;;
+  esac
+}
+
 print_table() {
-  printf "%-6s %-6s %-10s %-6s %-30s\n" "ID" "Type" "Status" "Symb." "Name"
+  printf '%b' "${BOLD}"
+  printf "%-6s %-6s %-10s %-5s %-30s\n" "ID" "Type" "Status" "Sym." "Name"
+  printf '%b' "${NC}"
   printf '%s\n' "─────────────────────────────────────────────────────────────"
   local any=0
   while IFS=$'\t' read -r id ty st sym nm; do
     [[ -z "$id" ]] && continue
     any=1
-    printf "%-6s %-6s %-10s %-6s %-30s\n" "$id" "$ty" "$st" "$sym" "$nm"
+    # Print status column coloured, rest plain
+    printf "%-6s %-6s " "$id" "$ty"
+    _status_color "$st" "$(printf "%-10s" "$st")"
+    printf " %-5s %-30s\n" "$sym" "$nm"
   done < <(collect_instances | sort -n -t$'\t' -k1,1)
   if ((any == 0)); then
-    printf '%b\n' "${RED}Keine VMs oder Container gefunden.${NC}"
+    printf '%b\n' "${RED}No VMs or containers found.${NC}"
     printf '%s\n' "Run directly on the Proxmox host as root."
     return 1
   fi
   printf '%s\n' "─────────────────────────────────────────────────────────────"
-  printf '%s\n' "Legende: 🟢 running · 🔴 stopped · 🟠 paused · 🟡 unknown"
+  printf '%s\n' "Status: [+] running  [-] stopped  [~] paused  [?] unknown"
   return 0
+}
+
+# =============================================================================
+# INTERACTIVE MENUS
+# =============================================================================
+
+# confirm PROMPT — ask user for y/N; return 0 on yes, 1 on no/empty.
+confirm() {
+  local prompt="$1"
+  local ans
+  printf '%b' "${YELLOW}${prompt} [y/N]: ${NC}"
+  read_line ans
+  [[ "$ans" =~ ^[yY]$ ]]
 }
 
 main_menu() {
   header
   if ! print_table; then return 1; fi
-  echo "Input: enter VMID to open menu | 'r' refresh | 'q' quit"
+  echo
+  printf '%b\n' "${BOLD}Keys:${NC}  <VMID> = open action menu   r = refresh   q = quit"
   printf '%s' "Selection: "
   local choice
   read_line choice
@@ -277,6 +408,9 @@ main_menu() {
     r | R | '') return 0 ;;
     *)
       if [[ "$choice" =~ ^[0-9]+$ ]]; then
+        if ! validate_vmid "$choice"; then
+          return 0
+        fi
         local sel_type sel_name found=0
         while IFS=$'\t' read -r id ty _ _ nm; do
           if [[ "$id" == "$choice" ]]; then
@@ -292,7 +426,7 @@ main_menu() {
           err "VMID $choice not found."
         fi
       else
-        err "Invalid input."
+        err "Invalid input: '$choice'. Enter a numeric VMID, 'r', or 'q'."
       fi
       ;;
   esac
@@ -302,20 +436,31 @@ action_menu() {
   local id="$1" ty="$2" name="$3"
   local st
   st="$(status_of "$id" "$ty")"
+
   echo
-  note "Actions for $ty $id ($name) — Status: $st"
-  echo "1) Start   2) Stop    3) Restart   4) Status"
-  echo "5) Console 6) Snapshots"
+  printf '%b\n' "${BOLD}${CYAN}━━━  ${ty} ${id}  (${name})  ━━━${NC}"
+  # Status line with colour
+  printf "  Status: "
+  _status_color "$st" "$st"
+  printf '\n\n'
+
+  printf '%b\n' "${BOLD}Actions:${NC}"
+  printf '  %b1%b) Start        %b2%b) Stop         %b3%b) Restart\n' \
+    "$GREEN" "$NC" "$RED" "$NC" "$YELLOW" "$NC"
+  printf '  %b4%b) Status       %b5%b) Console      %b6%b) Snapshots\n' \
+    "$CYAN" "$NC" "$CYAN" "$NC" "$CYAN" "$NC"
   if [[ "$ty" == "VM" ]]; then
-    echo "7) SPICE info  8) Enable SPICE"
+    printf '  %b7%b) SPICE info   %b8%b) Enable SPICE\n' \
+      "$CYAN" "$NC" "$CYAN" "$NC"
   fi
-  echo "9) Back"
+  printf '  %b9%b) Back\n' "$BOLD" "$NC"
+  echo
   printf '%s' "Selection [1-9]: "
   local opt
   read_line opt
   case "$opt" in
     1) do_action "$id" "$ty" start "$name" ;;
-    2) do_action "$id" "$ty" stop "$name" ;;
+    2) do_action "$id" "$ty" stop  "$name" ;;
     3) do_action "$id" "$ty" restart "$name" ;;
     4) do_action "$id" "$ty" status "$name" ;;
     5) open_console "$id" "$ty" "$name" ;;
@@ -324,183 +469,269 @@ action_menu() {
       if [[ "$ty" == "VM" ]]; then
         spice_info "$id" "$name"
       else
-        err "Nur für VMs."
+        err "SPICE is only available for VMs."
       fi
       ;;
     8)
       if [[ "$ty" == "VM" ]]; then
         spice_enable "$id"
       else
-        err "Nur für VMs."
+        err "SPICE is only available for VMs."
       fi
       ;;
     9) : ;;
-    *) err "Invalid." ;;
+    *) err "Invalid selection." ;;
   esac
-  printf '%s' "Press Enter to continue… "
-  local _
-  read_line _
+  printf '\n%s' "Press Enter to continue... "
+  local _dummy
+  read_line _dummy
 }
+
+# =============================================================================
+# ACTIONS
+# =============================================================================
 
 do_action() {
   local id="$1" ty="$2" act="$3" name="$4"
   local st
   st="$(status_of "$id" "$ty")"
+
   case "$act" in
+    # ------------------------------------------------------------------
     start)
-      [[ "$st" == "running" ]] && {
-        ok "$ty $id läuft bereits."
+      if [[ "$st" == "running" ]]; then
+        ok "$ty $id ($name) is already running."
         return
-      }
+      fi
+      note "Starting $ty $id ($name)..."
       if [[ "$ty" == "CT" ]]; then
         if pct start "$id" >/dev/null 2>&1; then
-          ok "$ty $id gestartet."
+          ok "$ty $id started successfully."
         else
-          err "Start CT $id fehlgeschlagen."
+          err "Failed to start CT $id."
         fi
       else
         if qm start "$id" >/dev/null 2>&1; then
-          ok "$ty $id gestartet."
+          ok "$ty $id started successfully."
         else
-          err "Start VM $id fehlgeschlagen."
+          err "Failed to start VM $id."
         fi
       fi
       ;;
+
+    # ------------------------------------------------------------------
     stop)
-      [[ "$st" != "running" ]] && {
-        ok "$ty $id ist nicht aktiv."
+      if [[ "$st" != "running" ]]; then
+        ok "$ty $id ($name) is not running (status: $st)."
         return
-      }
+      fi
+      confirm "Stop $ty $id ($name)?" || { note "Aborted."; return; }
+      note "Stopping $ty $id ($name)..."
       if [[ "$ty" == "CT" ]]; then
         if pct stop "$id" >/dev/null 2>&1; then
-          ok "$ty $id gestoppt."
+          ok "$ty $id stopped."
         else
-          err "Stop CT $id fehlgeschlagen."
+          err "Failed to stop CT $id."
         fi
       else
         if qm stop "$id" >/dev/null 2>&1; then
-          ok "$ty $id gestoppt."
+          ok "$ty $id stopped."
         else
-          err "Stop VM $id fehlgeschlagen."
+          err "Failed to stop VM $id."
         fi
       fi
       ;;
+
+    # ------------------------------------------------------------------
     restart)
       if [[ "$st" != "running" ]]; then
-        note "$ty $id lief nicht. Starte statt Neustart."
+        note "$ty $id ($name) is not running. Starting instead of restarting."
         do_action "$id" "$ty" start "$name"
         return
       fi
+      confirm "Restart $ty $id ($name)?" || { note "Aborted."; return; }
+      note "Restarting $ty $id ($name)..."
       if [[ "$ty" == "CT" ]]; then
         if pct stop "$id" >/dev/null 2>&1 && sleep 1 && pct start "$id" >/dev/null 2>&1; then
-          ok "$ty $id neu gestartet."
+          ok "$ty $id restarted."
         else
-          err "Restart CT fehlgeschlagen."
+          err "Failed to restart CT $id."
         fi
       else
         if qm stop "$id" >/dev/null 2>&1 && sleep 1 && qm start "$id" >/dev/null 2>&1; then
-          ok "$ty $id neu gestartet."
+          ok "$ty $id restarted."
         else
-          err "Restart VM fehlgeschlagen."
+          err "Failed to restart VM $id."
         fi
       fi
       ;;
+
+    # ------------------------------------------------------------------
     status)
+      note "Status for $ty $id ($name):"
       if [[ "$ty" == "CT" ]]; then
         if ! pct status "$id" 2>/dev/null; then
-          err "Status CT $id nicht abrufbar."
+          err "Could not retrieve status for CT $id."
         fi
       else
         if ! qm status "$id" 2>/dev/null; then
-          err "Status VM $id nicht abrufbar."
+          err "Could not retrieve status for VM $id."
         fi
       fi
       ;;
-    *) err "Unbekannte Aktion: $act" ;;
+
+    *) err "Unknown action: $act" ;;
   esac
 }
 
+# =============================================================================
+# CONSOLE
+# =============================================================================
+
 open_console() {
   local id="$1" ty="$2" name="$3"
-  note "Opening console for $ty $id ($name)…"
+  note "Opening console for $ty $id ($name)..."
   if [[ "$ty" == "CT" ]]; then
     if have pct; then
-      echo "CTRL+D zum Beenden."
+      echo "Press CTRL+D to exit the console."
       pct enter "$id"
     else
-      err "pct fehlt."
+      err "'pct' not found."
     fi
   else
     if qm terminal "$id" 2>/dev/null; then
       :
     else
-      note "'qm terminal' nicht verfügbar. Fallback 'qm monitor'."
-  qm monitor "$id" || err "Console for VM $id failed."
+      note "'qm terminal' not available. Falling back to 'qm monitor'."
+      qm monitor "$id" || err "Console for VM $id failed."
     fi
   fi
 }
 
+# =============================================================================
+# SNAPSHOTS
+# =============================================================================
+
+# _list_snapshots ID TYPE — print snapshot list; returns 1 if none found.
+_list_snapshots() {
+  local id="$1" ty="$2"
+  local out
+  if [[ "$ty" == "CT" ]]; then
+    out="$(pct listsnapshot "$id" 2>/dev/null || true)"
+  else
+    out="$(qm listsnapshot "$id" 2>/dev/null || true)"
+  fi
+  if [[ -z "$out" ]]; then
+    note "No snapshots found for $ty $id."
+    return 1
+  fi
+  printf '%b\n' "${BOLD}Snapshots for $ty $id:${NC}"
+  printf '%s\n' "$out"
+  return 0
+}
+
 snapshots_menu() {
-  local id="$1" ty="$2" name="$3" s
-  echo "1) List  2) Create  3) Rollback  4) Delete  5) Back"
-  printf '%s' "Auswahl [1-5]: "
+  local id="$1" ty="$2" name="$3"
+  echo
+  printf '%b\n' "${BOLD}Snapshot menu — $ty $id ($name)${NC}"
+  echo "  1) List snapshots"
+  echo "  2) Create snapshot"
+  echo "  3) Rollback to snapshot"
+  echo "  4) Delete snapshot"
+  echo "  5) Back"
+  echo
+  printf '%s' "Selection [1-5]: "
+  local s
   read_line s
   case "$s" in
     1)
-      if [[ "$ty" == "CT" ]]; then
-        pct listsnapshot "$id" 2>/dev/null || echo "(keine oder Fehler)"
-      else
-        qm listsnapshot "$id" 2>/dev/null || echo "(keine oder Fehler)"
-      fi
+      _list_snapshots "$id" "$ty" || true
       ;;
+
     2)
-      printf 'Name: '
+      printf '%s' "Snapshot name: "
+      local sn
       read_line sn
-      [[ -z "$sn" ]] && {
-        echo "Abbruch."
+      sn="$(trim "$sn")"
+      if [[ -z "$sn" ]]; then
+        note "Aborted — no name given."
         return
-      }
+      fi
+      note "Creating snapshot '$sn' for $ty $id..."
       if [[ "$ty" == "CT" ]]; then
-        pct snapshot "$id" "$sn" >/dev/null 2>&1 || err "Snapshot fehlgeschlagen."
-      else qm snapshot "$id" "$sn" >/dev/null 2>&1 || err "Snapshot fehlgeschlagen."; fi
-      ok "Snapshot '$sn' erstellt."
+        pct snapshot "$id" "$sn" >/dev/null 2>&1 || { err "Snapshot creation failed."; return; }
+      else
+        qm snapshot "$id" "$sn" >/dev/null 2>&1 || { err "Snapshot creation failed."; return; }
+      fi
+      ok "Snapshot '$sn' created."
       ;;
+
     3)
-      printf 'Rollback zu Snapshot: '
+      # Show existing snapshots before asking for a name
+      _list_snapshots "$id" "$ty" || true
+      echo
+      printf '%s' "Roll back to snapshot name: "
+      local sn
       read_line sn
-      [[ -z "$sn" ]] && {
-        echo "Abbruch."
+      sn="$(trim "$sn")"
+      if [[ -z "$sn" ]]; then
+        note "Aborted — no name given."
         return
-      }
+      fi
+      confirm "Roll back $ty $id to snapshot '$sn'? This cannot be undone." || { note "Aborted."; return; }
+      note "Rolling back $ty $id to '$sn'..."
       if [[ "$ty" == "CT" ]]; then
-        pct rollback "$id" "$sn" >/dev/null 2>&1 || err "Rollback fehlgeschlagen."
-      else qm rollback "$id" "$sn" >/dev/null 2>&1 || err "Rollback fehlgeschlagen."; fi
-      ok "Rollback auf '$sn' ok."
+        pct rollback "$id" "$sn" >/dev/null 2>&1 || { err "Rollback failed."; return; }
+      else
+        qm rollback "$id" "$sn" >/dev/null 2>&1 || { err "Rollback failed."; return; }
+      fi
+      ok "Rollback to '$sn' completed."
       ;;
+
     4)
-      printf 'Snapshot löschen: '
+      # Show existing snapshots before asking for a name
+      _list_snapshots "$id" "$ty" || true
+      echo
+      printf '%s' "Snapshot to delete: "
+      local sn
       read_line sn
-      [[ -z "$sn" ]] && {
-        echo "Abbruch."
+      sn="$(trim "$sn")"
+      if [[ -z "$sn" ]]; then
+        note "Aborted — no name given."
         return
-      }
+      fi
+      confirm "Delete snapshot '$sn' from $ty $id?" || { note "Aborted."; return; }
+      note "Deleting snapshot '$sn'..."
       if [[ "$ty" == "CT" ]]; then
-        pct delsnapshot "$id" "$sn" >/dev/null 2>&1 || err "Löschen fehlgeschlagen."
-      else qm delsnapshot "$id" "$sn" >/dev/null 2>&1 || err "Löschen fehlgeschlagen."; fi
-      ok "Snapshot '$sn' gelöscht."
+        pct delsnapshot "$id" "$sn" >/dev/null 2>&1 || { err "Snapshot deletion failed."; return; }
+      else
+        qm delsnapshot "$id" "$sn" >/dev/null 2>&1 || { err "Snapshot deletion failed."; return; }
+      fi
+      ok "Snapshot '$sn' deleted."
       ;;
+
     5) : ;;
-    *) err "Ungültig." ;;
+    *) err "Invalid selection." ;;
   esac
 }
+
+# =============================================================================
+# SPICE
+# =============================================================================
 
 spice_info() {
   local id="$1" name="$2"
   local host port
   host="$(hostname -I 2>/dev/null | awk '{print $1}')"
-  port="$(qm monitor "$id" <<<"info spice" 2>/dev/null | awk '/port/ {for(i=1;i<=NF;i++) if($i ~ /^[0-9]+$/){print $i; exit}}')"
-  [[ -z "$port" ]] && port="$(grep -E "(spice).*port" "/var/log/qemu-server/${id}.log" 2>/dev/null | tail -1 | sed -n 's/.*port=\([0-9]\+\).*/\1/p')"
-  [[ -z "$port" ]] && port="$((61000 + id))"
+  port="$(qm monitor "$id" <<<"info spice" 2>/dev/null \
+    | awk '/port/ {for(i=1;i<=NF;i++) if($i ~ /^[0-9]+$/){print $i; exit}}')"
+  [[ -z "$port" ]] && port="$(grep -E "(spice).*port" "/var/log/qemu-server/${id}.log" 2>/dev/null \
+    | tail -1 | sed -n 's/.*port=\([0-9]\+\).*/\1/p' || true)"
+  # Ensure port is a valid integer before arithmetic; use explicit integer cast
+  local id_int
+  id_int=$(( 10#$id ))
+  [[ -z "$port" ]] && port="$(( 61000 + id_int ))"
+
   printf '%s\n' "SPICE: spice://${host}:${port}"
   umask 077
   local vv
@@ -515,26 +746,29 @@ title=VM ${id} (${name})
 delete-this-file=1
 fullscreen=0
 EOF
-  ok "Datei erstellt: ${vv}"
+  ok "SPICE connection file: ${vv}"
 }
 
 spice_enable() {
   local id="$1"
-  local port="$((61000 + id))"
+  # Explicit integer cast to prevent arithmetic on a string variable
+  local id_int
+  id_int=$(( 10#$id ))
+  local port=$(( 61000 + id_int ))
   local addr="${PROXMOX_MANAGER_SPICE_ADDR:-127.0.0.1}"
   qm set "$id" --vga qxl >/dev/null 2>&1 || true
   if qm set "$id" --spice "port=${port},addr=${addr}" >/dev/null 2>&1; then
-    ok "SPICE für VM ${id} aktiviert. Port: ${port}. Neustart erforderlich."
-    printf '%s' "Jetzt neu starten? (y/N): "
-    local a
-    read_line a
-    [[ "$a" =~ ^[yYjJ]$ ]] && do_action "$id" "VM" restart "VM-${id}"
+    ok "SPICE enabled for VM ${id}. Port: ${port}. A restart is required."
+    confirm "Restart VM ${id} now?" && do_action "$id" "VM" restart "VM-${id}"
   else
-    err "SPICE konnte nicht aktiviert werden."
+    err "Could not enable SPICE for VM ${id}."
   fi
 }
 
-# ===== Main =====
+# =============================================================================
+# ENTRY POINT
+# =============================================================================
+
 main() {
   parse_args "$@"
   require_root
@@ -542,6 +776,7 @@ main() {
   if [[ ! -t 1 ]]; then
     CLEAR_SCREEN=0
   fi
+  log "INFO" "Starting proxmox-manager (mode=$MODE)"
   case "$MODE" in
     list)
       if print_table; then
@@ -561,9 +796,10 @@ main() {
       done
       ;;
     *)
-      err "Unbekannter Modus: $MODE"
+      err "Unknown mode: $MODE"
       exit 1
       ;;
   esac
 }
+
 main "$@"
