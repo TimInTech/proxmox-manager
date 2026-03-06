@@ -33,11 +33,13 @@ Proxmox Manager is a **single Bash script** that wraps Proxmox CLI tools (`qm`, 
 **Core capabilities:**
 
 - List all VMs and containers with status (running, stopped, paused)
-- Start, stop, restart instances
+- Start, stop, restart instances — with confirmation prompt for destructive actions
 - Open console (LXC shell or QEMU terminal)
-- Manage snapshots (list, create, rollback, delete)
+- Manage snapshots (list, create, rollback, delete) — shows existing snapshots before rollback/delete
 - Enable and retrieve SPICE connection details for VMs
-- Machine-readable JSON output for automation
+- Machine-readable JSON and plain-text output for automation
+- Optional structured logging via `LOG_FILE` environment variable
+- Node hostname and PVE version displayed in the header
 
 ---
 
@@ -60,7 +62,7 @@ Run `./install_dependencies.sh` to install optional helpers for convenience: `jq
 
 **System:**
 
-- Proxmox VE (tested on 7.x and 8.x)
+- Proxmox VE (tested on 7.x, 8.x, and 9.x)
 - Bash ≥ 4.0 (included in Proxmox)
 - Root privileges (or `PROXMOX_MANAGER_ALLOW_NONROOT=1` for CI overrides)
 - SPICE bind address defaults to 127.0.0.1 (override via PROXMOX_MANAGER_SPICE_ADDR).
@@ -85,10 +87,10 @@ sudo ./proxmox-manager.sh
 
 Displays a table of all VMs/containers with status symbols:
 
-- 🟢 running
-- 🔴 stopped
-- 🟠 paused
-- 🟡 unknown
+- `[+]` running
+- `[-]` stopped
+- `[~]` paused
+- `[?]` unknown
 
 Enter a VMID to open an action menu. Press `r` to refresh, `q` to quit.
 
@@ -110,8 +112,8 @@ Outputs VM/CT data as JSON array:
 
 ```json
 [
-  {"id": 100,"type":"VM","status":"running","symbol":"🟢","name":"web-server"},
-  {"id":101,"type":"CT","status":"stopped","symbol":"🔴","name":"db-container"}
+  {"id":100,"type":"VM","status":"running","symbol":"[+]","name":"web-server"},
+  {"id":101,"type":"CT","status":"stopped","symbol":"[-]","name":"db-container"}
 ]
 ```
 
@@ -128,6 +130,7 @@ All destructive actions (stop, restart, snapshot rollback) require confirmation 
 ```text
 --list       Print plain-text table (no TUI)
 --json       Print JSON output
+--version    Print version and exit
 --no-clear   Do not clear screen in interactive mode
 --once       Run one refresh cycle (useful for recording)
 -h, --help   Show usage
@@ -168,6 +171,7 @@ All destructive actions (stop, restart, snapshot rollback) require confirmation 
 
 ```bash
 shellcheck proxmox-manager.sh
+tests/run.sh   # 8 tests against mock-bin/ stubs, no real Proxmox needed
 ```
 
 CI runs on every push and PR.
