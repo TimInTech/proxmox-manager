@@ -58,7 +58,7 @@ No build step. The core script has no required extra packages; optional helpers 
 **To install optional packages and register `pman` as a global command** (requires root, run from the repo):
 
 ```bash
-sudo ./install_dependencies.sh
+./install_dependencies.sh
 ```
 
 Afterwards `pman` is available system-wide via a symlink in `/usr/local/bin/`:
