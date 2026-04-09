@@ -28,3 +28,9 @@ jobs:
             exit 0
           fi
           shellcheck -x "${files[@]}"
+
+      - name: Check shell formatting (shfmt)
+        run: |
+          curl -sS https://webinstall.dev/shfmt | bash
+          export PATH="$HOME/.local/bin:$PATH"
+          shfmt -d proxmox-manager.sh

@@ -40,3 +40,13 @@ REPORT_AUDIT.md
 reports/
 .audit/
 results.sarif
+
+# Claude / Copilot local config (never commit)
+CLAUDE.md
+.claude/
+*.copilot
+.copilot/
+
+# Misc local artifacts
+*.bak
+*.tmp

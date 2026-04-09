@@ -143,12 +143,40 @@ All destructive actions (stop, restart, snapshot rollback) require confirmation 
 ### Options
 
 ```text
---list       Print plain-text table (no TUI)
---json       Print JSON output
---version    Print version and exit
---no-clear   Do not clear screen in interactive mode
---once       Run one refresh cycle (useful for recording)
--h, --help   Show usage
+--list                Print plain-text table (no TUI)
+--json                Print JSON output
+--version             Print version and exit
+--no-clear            Do not clear screen in interactive mode
+--once                Run one refresh cycle (useful for recording)
+--filter <status>     Filter by status: running, stopped, paused
+--timeout <seconds>   Stop timeout in seconds (default: 60); force-stops on timeout
+--force               Skip all confirmation prompts (for automation/scripts)
+-h, --help            Show usage
+```
+
+---
+
+### Shell Completions
+
+Bash (system-wide):
+
+```bash
+sudo cp completions/pman.bash /etc/bash_completion.d/pman
+```
+
+Bash (current user — add to `~/.bashrc`):
+
+```bash
+source /path/to/proxmox-manager/completions/pman.bash
+```
+
+Zsh:
+
+```bash
+mkdir -p ~/.zsh/completions
+cp completions/pman.zsh ~/.zsh/completions/_pman
+echo 'fpath=(~/.zsh/completions $fpath)' >> ~/.zshrc
+echo 'autoload -Uz compinit && compinit' >> ~/.zshrc
 ```
 
 ---
