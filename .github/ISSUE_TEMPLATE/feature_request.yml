@@ -1,0 +1,48 @@
+name: Feature Request
+description: Suggest a new feature or improvement for proxmox-manager / pman
+labels: ["enhancement"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Have an idea that would make pman more useful?
+        Please describe your use case clearly — good context leads to better features.
+
+  - type: textarea
+    id: use_case
+    attributes:
+      label: Use Case / Problem
+      description: What problem are you trying to solve? Why does the current behaviour fall short?
+      placeholder: |
+        When managing 20+ VMs I often need to filter by status before bulk operations,
+        but the current --list output always shows everything …
+    validations:
+      required: true
+
+  - type: textarea
+    id: proposed_solution
+    attributes:
+      label: Proposed Solution
+      description: Describe the feature or change you'd like to see, including any CLI flags or UX changes.
+      placeholder: |
+        Add a `--filter <status>` flag to `--list` and `--json` modes …
+    validations:
+      required: true
+
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives Considered
+      description: Any workarounds you currently use, or other approaches you considered.
+      placeholder: "I currently pipe through grep, but that strips the colour output …"
+    validations:
+      required: false
+
+  - type: textarea
+    id: additional_context
+    attributes:
+      label: Additional Context
+      description: |
+        Anything else relevant: Proxmox version, number of VMs, related issues, screenshots, etc.
+    validations:
+      required: false

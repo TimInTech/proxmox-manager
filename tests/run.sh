@@ -102,6 +102,109 @@ else
 fi
 
 # ---------------------------------------------------------------------------
+# Unit tests: validate_vmid()
+# Source script functions into the current shell without triggering main "$@".
+# grep -v '^main ' removes only the "main "$@"" call (the sole line starting
+# with "main "); main() and main_menu() definitions are unaffected.
+# ---------------------------------------------------------------------------
+# shellcheck source=./proxmox-manager.sh disable=SC1091
+source <(grep -v '^main ' "$SCRIPT")
+
+_vmid_test() {
+  local id="$1" expect_exit="$2" label="$3" actual_exit=0
+  validate_vmid "$id" >/dev/null 2>&1 && actual_exit=0 || actual_exit=$?
+  if [[ "$actual_exit" == "$expect_exit" ]]; then
+    _pass "validate_vmid: $label"
+  else
+    _fail "validate_vmid: $label (expected exit $expect_exit, got $actual_exit)"
+  fi
+}
+
+# Valid VMIDs — expect exit 0
+_vmid_test "1"       0 "min valid (1)"
+_vmid_test "100"     0 "typical (100)"
+_vmid_test "999999"  0 "max valid (999999)"
+
+# Invalid VMIDs — expect exit 1
+_vmid_test "0"        1 "below minimum (0)"
+_vmid_test "1000000"  1 "above maximum (1000000)"
+_vmid_test "abc"      1 "non-numeric (abc)"
+_vmid_test ""         1 "empty string"
+
+# ---------------------------------------------------------------------------
+# Unit tests: validate_snapshot_name()
+# (functions already sourced above)
+# ---------------------------------------------------------------------------
+_snap_test() {
+  local name="$1" expect_exit="$2" label="$3" actual_exit=0
+  validate_snapshot_name "$name" >/dev/null 2>&1 && actual_exit=0 || actual_exit=$?
+  if [[ "$actual_exit" == "$expect_exit" ]]; then
+    _pass "validate_snapshot_name: $label"
+  else
+    _fail "validate_snapshot_name: $label (expected exit $expect_exit, got $actual_exit)"
+  fi
+}
+
+# Valid names — expect exit 0
+_snap_test "snap1"     0 "simple alphanumeric"
+_snap_test "my-snap_2" 0 "with hyphen and underscore"
+_snap_test "$(printf 'a%.0s' {1..40})" 0 "exactly 40 chars (max valid)"
+
+# Invalid names — expect exit 1
+_snap_test "_snap"     1 "starts with underscore"
+_snap_test "-bad"      1 "starts with hyphen"
+_snap_test "snap name" 1 "contains space"
+_snap_test "snap!"     1 "contains special character"
+_snap_test "$(printf 'a%.0s' {1..41})" 1 "41 chars (too long)"
+
+# ---------------------------------------------------------------------------
+# Tests: --filter flag
+# ---------------------------------------------------------------------------
+filter_run_out="$("$SCRIPT" --list --filter running)"
+filter_stop_out="$("$SCRIPT" --list --filter stopped)"
+
+# Match only data rows (start with VMID = digits), not legend or count lines.
+if printf '%s\n' "$filter_run_out" | grep -qE '^[[:space:]]*[0-9]+.*running'; then
+  _pass "--filter running output contains running data rows"
+else
+  _fail "--filter running output missing running data rows"
+fi
+
+if ! printf '%s\n' "$filter_run_out" | grep -qE '^[[:space:]]*[0-9]+.*stopped'; then
+  _pass "--filter running output excludes stopped data rows"
+else
+  _fail "--filter running output contains stopped data rows (should be excluded)"
+fi
+
+if printf '%s\n' "$filter_stop_out" | grep -qE '^[[:space:]]*[0-9]+.*stopped'; then
+  _pass "--filter stopped output contains stopped data rows"
+else
+  _fail "--filter stopped output missing stopped data rows"
+fi
+
+if ! printf '%s\n' "$filter_stop_out" | grep -qE '^[[:space:]]*[0-9]+.*running'; then
+  _pass "--filter stopped output excludes running data rows"
+else
+  _fail "--filter stopped output contains running data rows (should be excluded)"
+fi
+
+# --filter paused: mock has no paused entries → no rows → print_table returns 1
+"$SCRIPT" --list --filter paused >/dev/null 2>&1 && filter_paused_exit=0 || filter_paused_exit=$?
+if [[ "$filter_paused_exit" == "1" ]]; then
+  _pass "--filter paused exits 1 when no matching entries"
+else
+  _fail "--filter paused should exit 1 (no entries), got $filter_paused_exit"
+fi
+
+# --filter invalid value → exit 1 from parse_args
+"$SCRIPT" --list --filter invalid >/dev/null 2>&1 && filter_inv_exit=0 || filter_inv_exit=$?
+if [[ "$filter_inv_exit" == "1" ]]; then
+  _pass "--filter invalid value exits 1"
+else
+  _fail "--filter invalid value should exit 1, got $filter_inv_exit"
+fi
+
+# ---------------------------------------------------------------------------
 # Summary
 # ---------------------------------------------------------------------------
 echo

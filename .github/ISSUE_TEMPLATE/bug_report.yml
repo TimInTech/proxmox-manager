@@ -1,0 +1,77 @@
+name: Bug Report
+description: Report a bug in proxmox-manager / pman
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for taking the time to report a bug.
+        Please fill in as much detail as possible so we can reproduce it quickly.
+
+  - type: dropdown
+    id: proxmox_version
+    attributes:
+      label: Proxmox VE Version
+      description: Run `pveversion` on your Proxmox host.
+      options:
+        - "8.x"
+        - "9.x"
+        - "other (specify in additional context)"
+    validations:
+      required: true
+
+  - type: input
+    id: pman_version
+    attributes:
+      label: pman / proxmox-manager.sh Version
+      description: Run `pman --version` or `./proxmox-manager.sh --version`.
+      placeholder: "e.g. 2.8.4"
+    validations:
+      required: true
+
+  - type: input
+    id: os
+    attributes:
+      label: Host OS / Shell
+      description: OS where pman runs (the Proxmox host itself).
+      placeholder: "e.g. Debian 12, bash 5.2"
+    validations:
+      required: false
+
+  - type: textarea
+    id: steps_to_reproduce
+    attributes:
+      label: Steps to Reproduce
+      description: Minimal steps that reliably trigger the bug.
+      placeholder: |
+        1. Run `pman --list`
+        2. Select VMID 100
+        3. Choose action "Stop"
+        4. See error …
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected Behaviour
+      placeholder: "What did you expect to happen?"
+    validations:
+      required: true
+
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual Behaviour
+      placeholder: "What actually happened? Include any error messages."
+    validations:
+      required: true
+
+  - type: textarea
+    id: logs
+    attributes:
+      label: Relevant Logs / Output
+      description: Paste any terminal output, error messages, or log snippets.
+      render: shell
+    validations:
+      required: false

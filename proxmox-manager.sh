@@ -1,20 +1,15 @@
 #!/usr/bin/env bash
 # Proxmox VM/CT Management Tool
-# Version 2.8.4 — 2026-03-06
-# - Refactored: clear section separation, log(), validate_vmid()
-# - UX: confirmation prompts for stop/restart, snapshot list before rollback/delete
-# - Header shows hostname and PVE version when available
-# - Normalized output to English, added --version flag
-# - Fixed: spice_enable uses explicit integer cast for port arithmetic
-# - UX: print_table shows running/stopped count; header shows uptime
-# - Fix: open_console checks CT status before pct enter
-# - Fix: do_action shows Proxmox error details on failure
-# - Fix: snapshot name validated before Proxmox call
-# - UX: VMID-not-found message hints to refresh; action_menu empty=back
-# - Fix: _pve_out declared local in stop/restart; rollback/delete show Proxmox errors
-# - Fix: open_console checks VM status before qm terminal
-# - Fix: validate_snapshot_name() applied to rollback/delete; snapshots_menu error hint
-# - Added keyboard legend in main menu
+# Version 2.9.0 — 2026-04-09
+# - feat: --filter STATUS flag for --list/--json (running|stopped|paused)
+# - feat: --timeout SECS flag for stop operations; exit-124 fallback with --overrule-shutdown
+# - feat: --force flag to skip all confirm() prompts
+# - fix: restart uses native pct reboot / qm reboot (atomic, no sleep)
+# - perf: type_of_id() uses _type_cache; populated as side-effect of main_menu loop
+# - perf: collect_instances() replaces awk subshells with IFS read + parameter expansion
+# - infra: CHANGELOG.md, GitHub issue templates, PR template, release.yml, FUNDING.yml
+# - infra: Bash and Zsh completion scripts in completions/
+# - tests: 29 tests (was 8); unit tests for validate_vmid, validate_snapshot_name, --filter
 
 set -Eeuo pipefail
 IFS=$'\n\t'
@@ -29,6 +24,10 @@ RUN_ONCE=0
 LIST_FLAG=0
 JSON_FLAG=0
 LOG_FILE="${LOG_FILE:-}"   # Set LOG_FILE=/path/to/file to enable file logging
+FILTER_STATUS=""           # Filter output by status: running|stopped|paused (empty = no filter)
+STOP_TIMEOUT="${STOP_TIMEOUT:-60}"  # Timeout in seconds for stop operations; env-overridable
+FORCE_MODE=0               # Set to 1 via --force to skip all confirm() prompts
+declare -A _type_cache=()  # ID→type cache populated by main_menu; used by type_of_id()
 
 # =============================================================================
 # COLORS  (active only on a real TTY, or when NO_COLOR is unset)
@@ -161,12 +160,15 @@ usage() {
 Usage: proxmox-manager.sh [options]
 
 Options:
-  --list       Print a plain-text overview of all VMs/CTs (no TUI)
-  --json       Print machine-readable JSON with VM/CT information
-  --no-clear   Do not clear the screen in interactive mode
-  --once       Run a single interactive refresh (useful for TTY recording)
-  --version    Print version and exit
-  -h, --help   Show this help
+  --list            Print a plain-text overview of all VMs/CTs (no TUI)
+  --json            Print machine-readable JSON with VM/CT information
+  --filter STATUS   Filter --list/--json output (running|stopped|paused)
+  --no-clear        Do not clear the screen in interactive mode
+  --once            Run a single interactive refresh (useful for TTY recording)
+  --timeout SECS    Timeout for stop operations in seconds (default: 60)
+  --force           Skip all confirmation prompts (use with care)
+  --version         Print version and exit
+  -h, --help        Show this help
 EOF
 }
 
@@ -186,6 +188,33 @@ parse_args() {
         ;;
       --once)
         RUN_ONCE=1
+        ;;
+      --filter)
+        if [[ $# -lt 2 ]]; then
+          err "--filter requires a value: running, stopped, or paused."
+          exit 1
+        fi
+        FILTER_STATUS="$2"
+        case "$FILTER_STATUS" in
+          running|stopped|paused) ;;
+          *) err "Invalid --filter value '$FILTER_STATUS'. Valid: running, stopped, paused."; exit 1 ;;
+        esac
+        shift   # consume the STATUS value; outer shift consumes --filter
+        ;;
+      --timeout)
+        if [[ $# -lt 2 ]]; then
+          err "--timeout requires a value in seconds (e.g., --timeout 30)."
+          exit 1
+        fi
+        STOP_TIMEOUT="$2"
+        if [[ ! "$STOP_TIMEOUT" =~ ^[0-9]+$ ]] || (( STOP_TIMEOUT < 1 )); then
+          err "--timeout requires a positive integer (seconds), got '$STOP_TIMEOUT'."
+          exit 1
+        fi
+        shift   # consume the SECS value; outer shift consumes --timeout
+        ;;
+      --force)
+        FORCE_MODE=1
         ;;
       --version)
         printf 'proxmox-manager.sh %s\n' "$(_script_version)"
@@ -242,17 +271,21 @@ is_data_line() {
 }
 
 # type_of_id ID — prints "CT", "VM", or empty string.
+# Checks _type_cache first; falls back to pct/qm list on a cache miss and stores the result.
 type_of_id() {
   local id="$1"
+  if [[ -n "${_type_cache[$id]:-}" ]]; then
+    printf '%s' "${_type_cache[$id]}"
+    return
+  fi
+  local result=''
   if have pct && pct list 2>/dev/null | awk 'NR>1 {print $1}' | grep -qx -- "$id"; then
-    printf 'CT'
-    return
+    result='CT'
+  elif have qm && qm list 2>/dev/null | awk 'NR>1 {print $1}' | grep -qx -- "$id"; then
+    result='VM'
   fi
-  if have qm && qm list 2>/dev/null | awk 'NR>1 {print $1}' | grep -qx -- "$id"; then
-    printf 'VM'
-    return
-  fi
-  printf ''
+  _type_cache["$id"]="$result"
+  printf '%s' "$result"
 }
 
 # status_of ID [TYPE] — prints the current status string.
@@ -275,10 +308,10 @@ collect_instances() {
     while IFS= read -r line; do
       [[ -z "${line// /}" ]] && continue
       is_data_line "$line" || continue
-      local id status name sym
-      id="$(awk '{print $1}' <<<"$line")"
-      status="$(awk '{print $2}' <<<"$line")"
-      name="$(awk '{print $NF}' <<<"$line")"
+      local id status name sym _t _rest
+      _t="${line#"${line%%[![:space:]]*}"}"
+      IFS=' ' read -r id status _rest <<< "$_t"
+      name="${_rest##* }"
       [[ -z "$name" || "$name" == "-" ]] && name="$(ct_name_from_config "$id")"
       [[ -z "$name" ]] && name="CT-${id}"
       sym="[?]"
@@ -293,10 +326,9 @@ collect_instances() {
     while IFS= read -r line; do
       [[ -z "${line// /}" ]] && continue
       is_data_line "$line" || continue
-      local id status name sym
-      id="$(awk '{print $1}' <<<"$line")"
-      name="$(awk '{print $2}' <<<"$line")"
-      status="$(awk '{print $3}' <<<"$line")"
+      local id name status sym _t _rest
+      _t="${line#"${line%%[![:space:]]*}"}"
+      IFS=' ' read -r id name status _rest <<< "$_t"
       [[ -z "$name" || "$name" == "-" ]] && name="$(vm_name_from_config "$id")"
       [[ -z "$name" ]] && name="VM-${id}"
       sym="[?]"
@@ -308,8 +340,21 @@ collect_instances() {
   fi
 }
 
+# filtered_instances — wraps collect_instances; when FILTER_STATUS is set,
+# emits only rows whose status field matches. Used by print_table and print_json.
+filtered_instances() {
+  if [[ -z "$FILTER_STATUS" ]]; then
+    collect_instances
+    return
+  fi
+  local id ty st sym nm
+  while IFS=$'\t' read -r id ty st sym nm; do
+    [[ "$st" == "$FILTER_STATUS" ]] && printf "%s\t%s\t%s\t%s\t%s\n" "$id" "$ty" "$st" "$sym" "$nm"
+  done < <(collect_instances)
+}
+
 print_json() {
-  mapfile -t rows < <(collect_instances | sort -n -t$'\t' -k1,1)
+  mapfile -t rows < <(filtered_instances | sort -n -t$'\t' -k1,1)
   if ((${#rows[@]} == 0)); then
     printf '[]\n'
     return 0
@@ -396,10 +441,14 @@ print_table() {
     printf "%-6s %-6s " "$id" "$ty"
     _status_color "$st" "$(printf "%-10s" "$st")"
     printf " %-5s %-30s\n" "$sym" "$nm"
-  done < <(collect_instances | sort -n -t$'\t' -k1,1)
+  done < <(filtered_instances | sort -n -t$'\t' -k1,1)
   if ((any == 0)); then
-    printf '%b\n' "${RED}No VMs or containers found.${NC}"
-    printf '%s\n' "Run directly on the Proxmox host as root."
+    if [[ -n "$FILTER_STATUS" ]]; then
+      printf '%b\n' "${RED}No ${FILTER_STATUS} VMs or containers found.${NC}"
+    else
+      printf '%b\n' "${RED}No VMs or containers found.${NC}"
+      printf '%s\n' "Run directly on the Proxmox host as root."
+    fi
     return 1
   fi
   printf '%s\n' "─────────────────────────────────────────────────────────────"
@@ -416,8 +465,13 @@ print_table() {
 # =============================================================================
 
 # confirm PROMPT — ask user for y/N; return 0 on yes, 1 on no/empty.
+# When FORCE_MODE=1, automatically returns 0 and prints a note instead of prompting.
 confirm() {
   local prompt="$1"
+  if ((FORCE_MODE == 1)); then
+    printf '%b\n' "${YELLOW}[--force] Skipping confirmation: ${prompt}${NC}"
+    return 0
+  fi
   local ans
   printf '%b' "${YELLOW}${prompt} [y/N]: ${NC}"
   read_line ans
@@ -440,13 +494,13 @@ main_menu() {
         if ! validate_vmid "$choice"; then
           return 0
         fi
-        local sel_type sel_name found=0
+        local sel_type='' sel_name='' found=0
         while IFS=$'\t' read -r id ty _ _ nm; do
+          _type_cache["$id"]="$ty"   # warm the cache for all listed instances
           if [[ "$id" == "$choice" ]]; then
             sel_type="$ty"
             sel_name="$nm"
             found=1
-            break
           fi
         done < <(collect_instances)
         if ((found == 1)); then
@@ -558,21 +612,41 @@ do_action() {
         return
       fi
       confirm "Stop $ty $id ($name)?" || { note "Aborted."; return; }
-      note "Stopping $ty $id ($name)..."
-      local _pve_out
+      note "Stopping $ty $id ($name) (timeout: ${STOP_TIMEOUT}s)..."
+      local _timeout_out='' _timeout_exit=0 _force_out='' _force_exit=0
       if [[ "$ty" == "CT" ]]; then
-        if _pve_out=$(pct stop "$id" 2>&1); then
+        _timeout_out=$(timeout "${STOP_TIMEOUT}" pct stop "$id" 2>&1) || _timeout_exit=$?
+        if ((_timeout_exit == 0)); then
           ok "$ty $id stopped."
+        elif ((_timeout_exit == 124)); then
+          note "Timeout after ${STOP_TIMEOUT}s. Forcing stop with --overrule-shutdown..."
+          _force_out=$(pct stop "$id" --overrule-shutdown 1 2>&1) || _force_exit=$?
+          if ((_force_exit == 0)); then
+            ok "$ty $id force-stopped."
+          else
+            err "Force stop failed for CT $id."
+            [[ -n "$_force_out" ]] && note "Proxmox: $(printf '%s' "$_force_out" | head -3)"
+          fi
         else
           err "Failed to stop CT $id."
-          [[ -n "$_pve_out" ]] && note "Proxmox: $(printf '%s' "$_pve_out" | head -3)"
+          [[ -n "$_timeout_out" ]] && note "Proxmox: $(printf '%s' "$_timeout_out" | head -3)"
         fi
       else
-        if _pve_out=$(qm stop "$id" 2>&1); then
+        _timeout_out=$(timeout "${STOP_TIMEOUT}" qm stop "$id" 2>&1) || _timeout_exit=$?
+        if ((_timeout_exit == 0)); then
           ok "$ty $id stopped."
+        elif ((_timeout_exit == 124)); then
+          note "Timeout after ${STOP_TIMEOUT}s. Forcing stop with --overrule-shutdown..."
+          _force_out=$(qm stop "$id" --overrule-shutdown 1 2>&1) || _force_exit=$?
+          if ((_force_exit == 0)); then
+            ok "$ty $id force-stopped."
+          else
+            err "Force stop failed for VM $id."
+            [[ -n "$_force_out" ]] && note "Proxmox: $(printf '%s' "$_force_out" | head -3)"
+          fi
         else
           err "Failed to stop VM $id."
-          [[ -n "$_pve_out" ]] && note "Proxmox: $(printf '%s' "$_pve_out" | head -3)"
+          [[ -n "$_timeout_out" ]] && note "Proxmox: $(printf '%s' "$_timeout_out" | head -3)"
         fi
       fi
       ;;
@@ -588,14 +662,14 @@ do_action() {
       note "Restarting $ty $id ($name)..."
       local _pve_out
       if [[ "$ty" == "CT" ]]; then
-        if _pve_out=$(pct stop "$id" 2>&1) && sleep 1 && _pve_out=$(pct start "$id" 2>&1); then
+        if _pve_out=$(pct reboot "$id" 2>&1); then
           ok "$ty $id restarted."
         else
           err "Failed to restart CT $id."
           [[ -n "$_pve_out" ]] && note "Proxmox: $(printf '%s' "$_pve_out" | head -3)"
         fi
       else
-        if _pve_out=$(qm stop "$id" 2>&1) && sleep 1 && _pve_out=$(qm start "$id" 2>&1); then
+        if _pve_out=$(qm reboot "$id" 2>&1); then
           ok "$ty $id restarted."
         else
           err "Failed to restart VM $id."
@@ -848,6 +922,9 @@ spice_enable() {
 
 main() {
   parse_args "$@"
+  if ((FORCE_MODE == 1)); then
+    warn "--force active: all confirmation prompts will be skipped automatically."
+  fi
   require_root
   require_tools
   if [[ ! -t 1 ]]; then

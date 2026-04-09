@@ -1,0 +1,5 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Discussions — Questions & Ideas
+    url: https://github.com/TimInTech/proxmox-manager/discussions
+    about: Ask questions, share ideas, or discuss usage before opening a formal issue.
