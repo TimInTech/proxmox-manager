@@ -1,0 +1,6 @@
+# False positives introduced by copilot-swe-agent[bot] in edc87e8a
+# These are documentation example strings, not real credentials.
+edc87e8a7bad738bbedcfa8525299e240f17a71d:README.md:sidekiq-secret:42
+edc87e8a7bad738bbedcfa8525299e240f17a71d:README.md:aws-access-token:221
+edc87e8a7bad738bbedcfa8525299e240f17a71d:README.md:aws-access-token:223
+edc87e8a7bad738bbedcfa8525299e240f17a71d:README.md:aws-access-token:259
