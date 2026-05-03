@@ -24,6 +24,7 @@ jobs:
       - name: Run gitleaks (workspace scan)
         run: |
           gitleaks detect --redact --source . \
+            --config .gitleaks.toml \
             --report-format=sarif --report-path=results.sarif --exit-code=1
 
       - name: Upload SARIF report
