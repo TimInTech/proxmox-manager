@@ -615,14 +615,25 @@ _sym_for_status() {
 }
 
 print_table() {
+  # Only draw boxes in interactive mode; in --list/--json, output plain table
+  local draw_boxes=0
+  [[ "$MODE" == "interactive" ]] && draw_boxes=1
+
   local W=63
-  _draw_line_top $W
+  if ((draw_boxes)); then
+    _draw_line_top $W
+  fi
   # Header row
-  printf '%b%s%b  %b%-6s %-5s %-10s %-3s %-28s%b  %b%s%b\n' \
-    "${CYAN}" "${LINE_V}" "${NC}" \
-    "${BOLD}${WHITE}" "ID" "TYPE" "STATUS" "" "NAME" "${NC}" \
-    "${CYAN}" "${LINE_V}" "${NC}"
-  _draw_line_mid $W
+  if ((draw_boxes)); then
+    printf '%b%s%b  %b%-6s %-5s %-10s %-3s %-28s%b  %b%s%b\n' \
+      "${CYAN}" "${LINE_V}" "${NC}" \
+      "${BOLD}${WHITE}" "ID" "TYPE" "STATUS" "" "NAME" "${NC}" \
+      "${CYAN}" "${LINE_V}" "${NC}"
+    _draw_line_mid $W
+  else
+    printf '%b%-6s %-5s %-10s %-3s %-28s%b\n' \
+      "${BOLD}${WHITE}" "ID" "TYPE" "STATUS" "" "NAME" "${NC}"
+  fi
 
   local any=0 count_run=0 count_stop=0 count_other=0
   while IFS=$'\t' read -r id ty st sym nm; do
@@ -640,7 +651,9 @@ print_table() {
     *) ty_col="$ty" ;;
     esac
 
-    printf '%b%s%b  ' "${CYAN}" "${LINE_V}" "${NC}"
+    if ((draw_boxes)); then
+      printf '%b%s%b  ' "${CYAN}" "${LINE_V}" "${NC}"
+    fi
     printf '%-6s ' "$id"
     printf '%s ' "$ty_col"
     printf '     ' # pad after colored ty (color codes don't count as width)
@@ -648,50 +661,83 @@ print_table() {
     printf ' '
     _status_sym_color "$st" "$sym"
     printf '  %-28s' "$nm"
-    printf '  %b%s%b\n' "${CYAN}" "${LINE_V}" "${NC}"
+    if ((draw_boxes)); then
+      printf '  %b%s%b\n' "${CYAN}" "${LINE_V}" "${NC}"
+    else
+      printf '\n'
+    fi
   done < <(filtered_instances | sort -n -t$'\t' -k1,1)
 
   if ((any == 0)); then
-    _draw_line_mid $W
-    if [[ -n "$FILTER_STATUS" ]]; then
-      printf '%b%s%b  %b%-*s%b  %b%s%b\n' \
-        "${CYAN}" "${LINE_V}" "${NC}" \
-        "${RED_BRIGHT}" $((W - 6)) "No ${FILTER_STATUS} VMs or containers found." "${NC}" \
-        "${CYAN}" "${LINE_V}" "${NC}"
-    else
-      printf '%b%s%b  %b%-*s%b  %b%s%b\n' \
-        "${CYAN}" "${LINE_V}" "${NC}" \
-        "${RED_BRIGHT}" $((W - 6)) "No VMs or containers found." "${NC}" \
-        "${CYAN}" "${LINE_V}" "${NC}"
-      printf '%b%s%b  %b%-*s%b  %b%s%b\n' \
-        "${CYAN}" "${LINE_V}" "${NC}" \
-        "${DIM}" $((W - 6)) "Run directly on the Proxmox host as root." "${NC}" \
-        "${CYAN}" "${LINE_V}" "${NC}"
+    if ((draw_boxes)); then
+      _draw_line_mid $W
     fi
-    _draw_line_bot $W
+    if [[ -n "$FILTER_STATUS" ]]; then
+      if ((draw_boxes)); then
+        printf '%b%s%b  %b%-*s%b  %b%s%b\n' \
+          "${CYAN}" "${LINE_V}" "${NC}" \
+          "${RED_BRIGHT}" $((W - 6)) "No ${FILTER_STATUS} VMs or containers found." "${NC}" \
+          "${CYAN}" "${LINE_V}" "${NC}"
+      else
+        printf '%b%s%b\n' "${RED_BRIGHT}" "No ${FILTER_STATUS} VMs or containers found." "${NC}"
+      fi
+    else
+      if ((draw_boxes)); then
+        printf '%b%s%b  %b%-*s%b  %b%s%b\n' \
+          "${CYAN}" "${LINE_V}" "${NC}" \
+          "${RED_BRIGHT}" $((W - 6)) "No VMs or containers found." "${NC}" \
+          "${CYAN}" "${LINE_V}" "${NC}"
+        printf '%b%s%b  %b%-*s%b  %b%s%b\n' \
+          "${CYAN}" "${LINE_V}" "${NC}" \
+          "${DIM}" $((W - 6)) "Run directly on the Proxmox host as root." "${NC}" \
+          "${CYAN}" "${LINE_V}" "${NC}"
+      else
+        printf '%b%s%b\n' "${RED_BRIGHT}" "No VMs or containers found." "${NC}"
+        printf '%b%s%b\n' "${DIM}" "Run directly on the Proxmox host as root." "${NC}"
+      fi
+    fi
+    if ((draw_boxes)); then
+      _draw_line_bot $W
+    fi
     return 1
   fi
 
-  _draw_line_mid $W
+  if ((draw_boxes)); then
+    _draw_line_mid $W
+  fi
   # Legend row
-  printf '%b%s%b  ' "${CYAN}" "${LINE_V}" "${NC}"
+  if ((draw_boxes)); then
+    printf '%b%s%b  ' "${CYAN}" "${LINE_V}" "${NC}"
+  fi
   _status_sym_color "running" "$SYM_RUNNING"
   printf ' running   '
   _status_sym_color "stopped" "$SYM_STOPPED"
   printf ' stopped   '
   _status_sym_color "paused" "$SYM_PAUSED"
   printf ' paused   '
-  printf '%b%s%b\n' "${CYAN}" "${LINE_V}" "${NC}"
+  if ((draw_boxes)); then
+    printf '%b%s%b\n' "${CYAN}" "${LINE_V}" "${NC}"
+  else
+    printf '\n'
+  fi
 
   # Count row
-  printf '%b%s%b  ' "${CYAN}" "${LINE_V}" "${NC}"
+  if ((draw_boxes)); then
+    printf '%b%s%b  ' "${CYAN}" "${LINE_V}" "${NC}"
+  fi
   printf '%bCount:%b  %b%s running%b  %b%s stopped%b' \
     "${BOLD}" "${NC}" \
     "${GREEN_BRIGHT}" "$count_run" "${NC}" \
     "${RED_BRIGHT}" "$count_stop" "${NC}"
   if ((count_other > 0)); then printf '  %s other' "$count_other"; fi
-  printf '%b%s%b\n' "${CYAN}" "${LINE_V}" "${NC}" # note: no padding; cosmetic only
-  _draw_line_bot $W
+  if ((draw_boxes)); then
+    printf '%b%s%b\n' "${CYAN}" "${LINE_V}" "${NC}"
+  else
+    printf '\n'
+  fi
+  if ((draw_boxes)); then
+    _draw_line_bot $W
+  fi
   return 0
 }
 

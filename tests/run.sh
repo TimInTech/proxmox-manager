@@ -10,6 +10,8 @@ SCRIPT="$ROOT_DIR/proxmox-manager.sh"
 export PATH="$MOCK_BIN:$PATH"
 export PROXMOX_MANAGER_ALLOW_NONROOT=1
 export NO_COLOR=1
+export LANG=C
+export TERM=dumb
 
 cd "$ROOT_DIR"
 
