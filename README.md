@@ -35,7 +35,7 @@ No daemons. No agents. No dependencies beyond what ships with Proxmox VE.
 
 | Main Menu — VM/CT Table | Action Menu |
 |:---:|:---:|
-| ![Main menu](docs/screenshots/Screenshot.png) | ![Action menu](docs/screenshots/Screenshot.png) |
+| ![Main menu](docs/screenshots/screenshot-tui.png) | ![Action menu](docs/screenshots/screenshot-tui.png) |
 | Live status for all VMs & containers | Per-instance controls: start, stop, console, snapshots |
 
 </div>
