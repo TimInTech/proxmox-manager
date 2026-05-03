@@ -1,22 +1,34 @@
 <!-- markdownlint-disable MD033 MD041 -->
 <div align="center">
 
-<img src="https://img.shields.io/badge/Proxmox-Manager-E57000?style=for-the-badge&logo=proxmox&logoColor=white" alt="Proxmox Manager" height="40"/>
+```
+╔══════════════════════════════════════════════════════════╗
+║  ██████╗ ███╗   ███╗  █████╗  ███╗   ██╗               ║
+║  ██╔══██╗████╗ ███║ ██╔══██╗ ████╗  ██║               ║
+║  ██████╔╝██╔████╔██║ ███████║ ██╔██╗ ██║               ║
+║  ██╔═══╝ ██║╚██╔╝██║ ██╔══██║ ██║╚██╗██║               ║
+║  ██║     ██║ ╚═╝ ██║ ██║  ██║ ██║ ╚████║               ║
+║  ╚═╝     ╚═╝     ╚═╝ ╚═╝  ╚═╝ ╚═╝  ╚═══╝  v2.9.0      ║
+║                                                          ║
+║  Proxmox VM/CT Manager · Single Bash · No Dependencies  ║
+╚══════════════════════════════════════════════════════════╝
+```
 
-### Single-file Bash tool for Proxmox VM &amp; container management
+**Single-file Bash tool for managing Proxmox VMs and containers.**  
+No daemons. No agents. No dependencies beyond what ships with Proxmox VE.
 
 <br/>
 
-[![CI](https://img.shields.io/github/actions/workflow/status/TimInTech/proxmox-manager/ci.yml?branch=main&label=CI&style=flat-square&logo=github)](https://github.com/TimInTech/proxmox-manager/actions)
-[![Gitleaks](https://img.shields.io/github/actions/workflow/status/TimInTech/proxmox-manager/gitleaks.yml?branch=main&label=Secrets&style=flat-square&logo=shield)](https://github.com/TimInTech/proxmox-manager/actions)
+[![CI](https://img.shields.io/github/actions/workflow/status/TimInTech/proxmox-manager/ci.yml?branch=main&style=flat-square&logo=github&label=CI)](https://github.com/TimInTech/proxmox-manager/actions)
+[![Gitleaks](https://img.shields.io/github/actions/workflow/status/TimInTech/proxmox-manager/gitleaks.yml?branch=main&style=flat-square&logo=shield&label=Secrets)](https://github.com/TimInTech/proxmox-manager/actions)
 [![License](https://img.shields.io/github/license/TimInTech/proxmox-manager?style=flat-square&color=blue)](LICENSE)
+[![Release](https://img.shields.io/github/v/release/TimInTech/proxmox-manager?style=flat-square&color=6e40c9)](https://github.com/TimInTech/proxmox-manager/releases)
+
 [![Shell](https://img.shields.io/badge/Bash-4.0%2B-4EAA25?style=flat-square&logo=gnu-bash&logoColor=white)](https://www.gnu.org/software/bash/)
-[![Proxmox VE](https://img.shields.io/badge/Proxmox-7%2F8%2F9-E57000?style=flat-square&logo=proxmox&logoColor=white)](https://www.proxmox.com/)
-[![Version](https://img.shields.io/github/v/release/TimInTech/proxmox-manager?style=flat-square&color=6e40c9)](https://github.com/TimInTech/proxmox-manager/releases)
+[![Proxmox VE](https://img.shields.io/badge/Proxmox-VE%207%2F8%2F9-E57000?style=flat-square&logo=proxmox&logoColor=white)](https://www.proxmox.com/)
+[![Platform](https://img.shields.io/badge/platform-Proxmox%20VE-blue?style=flat-square)](https://www.proxmox.com/)
 
-<br/>
-
-[![Buy Me A Coffee](https://img.shields.io/badge/☕_Buy_me_a_coffee-ffdd00?style=flat-square&logoColor=black)](https://buymeacoffee.com/timintech)
+[![Buy Me A Coffee](https://img.shields.io/badge/☕%20Buy%20me%20a%20coffee-ffdd00?style=flat-square&logoColor=black)](https://buymeacoffee.com/timintech)
 
 <br/>
 
@@ -34,7 +46,7 @@
 
 ## 🎯 What It Does
 
-Proxmox Manager is a **single Bash script** that wraps Proxmox CLI tools (`qm`, `pct`) into an interactive menu or scriptable interface — no daemons, no agents, no dependencies beyond what ships with Proxmox VE.
+Proxmox Manager wraps `qm` and `pct` into an interactive menu or scriptable CLI — no daemons, no agents, no extra packages.
 
 | Feature | Details |
 |---|---|
@@ -55,8 +67,6 @@ git clone https://github.com/TimInTech/proxmox-manager.git
 cd proxmox-manager
 chmod +x proxmox-manager.sh
 ```
-
-No build step. The core script has no required extra packages.
 
 **Optional: install system-wide as `pman`** (requires root):
 
@@ -165,7 +175,7 @@ echo 'autoload -Uz compinit && compinit' >> ~/.zshrc
 
 ```bash
 shellcheck proxmox-manager.sh          # lint
-tests/run.sh                           # 8 tests via mock-bin/ stubs, no real Proxmox needed
+tests/run.sh                           # 8 tests via mock-bin/ stubs
 ```
 
 CI runs on every push and PR via GitHub Actions.
