@@ -1,0 +1,10 @@
+title = "Gitleaks config for proxmox-manager"
+
+[extend]
+useDefault = true
+
+[allowlist]
+description = "Ignore example/placeholder values in documentation"
+paths = [
+  "README.md",
+]
