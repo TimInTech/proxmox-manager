@@ -643,7 +643,7 @@ print_table() {
     [[ "$st" == "stopped" ]] && count_stop=$((count_stop + 1))
     [[ "$st" != "running" && "$st" != "stopped" ]] && count_other=$((count_other + 1))
 
-    # Colored type label
+
     local ty_col
     case "$ty" in
     CT) printf -v ty_col '%b%s%b' "${MAGENTA_BRIGHT}" "$ty" "${NC}" ;;
@@ -730,14 +730,6 @@ print_table() {
     "${GREEN_BRIGHT}" "$count_run" "${NC}" \
     "${RED_BRIGHT}" "$count_stop" "${NC}"
   if ((count_other > 0)); then printf '  %s other' "$count_other"; fi
-  if ((draw_boxes)); then
-    printf '%b%s%b\n' "${CYAN}" "${LINE_V}" "${NC}"
-  else
-    printf '\n'
-  fi
-  if ((draw_boxes)); then
-    _draw_line_bot $W
-  fi
   return 0
 }
 
