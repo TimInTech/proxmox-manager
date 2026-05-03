@@ -129,7 +129,9 @@ Installs a symlink to `/usr/local/bin/pman` so you can call `pman` from anywhere
 | `pman --force` | Skip all confirmation prompts (for unattended scripts) |
 | `pman --timeout 30` | Custom stop timeout in seconds (default: 60) |
 | `pman --no-clear` | Don't clear screen in interactive mode |
+| `pman --once` | Run a single interactive refresh cycle (useful for TTY recording) |
 | `pman --version` | Print version and exit |
+| `pman -h, --help` | Show usage information and exit |
 
 ### Interactive mode
 
