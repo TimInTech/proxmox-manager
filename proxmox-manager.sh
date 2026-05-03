@@ -404,7 +404,7 @@ collect_instances() {
       sym="$SYM_UNKNOWN"
       [[ "$status" == "running" ]] && sym="$SYM_RUNNING"
       [[ "$status" == "stopped" ]] && sym="$SYM_STOPPED"
-      [[ "$status" == "paused"  ]] && sym="$SYM_PAUSED"
+      [[ "$status" == "paused" ]] && sym="$SYM_PAUSED"
       printf "%s\tCT\t%s\t%s\t%s\n" "$id" "$status" "$sym" "$name"
     done < <(pct list 2>/dev/null || true)
   fi
@@ -421,7 +421,7 @@ collect_instances() {
       sym="$SYM_UNKNOWN"
       [[ "$status" == "running" ]] && sym="$SYM_RUNNING"
       [[ "$status" == "stopped" ]] && sym="$SYM_STOPPED"
-      [[ "$status" == "paused"  ]] && sym="$SYM_PAUSED"
+      [[ "$status" == "paused" ]] && sym="$SYM_PAUSED"
       printf "%s\tVM\t%s\t%s\t%s\n" "$id" "$status" "$sym" "$name"
     done < <(qm list 2>/dev/null || true)
   fi
@@ -577,7 +577,7 @@ header() {
   # Node info badges
   if [[ -n "$node_name" ]]; then
     local info_line="  ${BOLD}Node:${NC} ${WHITE}${node_name}${NC}"
-    [[ -n "$pve_ver" ]]    && info_line+="  ${DIM}|${NC}  ${BOLD}PVE:${NC} ${WHITE}${pve_ver}${NC}"
+    [[ -n "$pve_ver" ]] && info_line+="  ${DIM}|${NC}  ${BOLD}PVE:${NC} ${WHITE}${pve_ver}${NC}"
     [[ -n "$uptime_str" ]] && info_line+="  ${DIM}|${NC}  ${BOLD}up${NC} ${WHITE}${uptime_str}${NC}"
     printf '%b%s%b%b%s%b  %b%s%b\n' \
       "${BLUE_BRIGHT}" "${BOX_V}" "${NC}" \
@@ -594,8 +594,8 @@ _status_color() {
   case "$st" in
   running) printf '%b' "${GREEN_BRIGHT}${txt}${NC}" ;;
   stopped) printf '%b' "${RED_BRIGHT}${txt}${NC}" ;;
-  paused)  printf '%b' "${YELLOW_BRIGHT}${txt}${NC}" ;;
-  *)       printf '%b' "${DIM}${txt}${NC}" ;;
+  paused) printf '%b' "${YELLOW_BRIGHT}${txt}${NC}" ;;
+  *) printf '%b' "${DIM}${txt}${NC}" ;;
   esac
 }
 
@@ -605,8 +605,8 @@ _status_sym_color() {
   case "$st" in
   running) printf '%b' "${GREEN_BRIGHT}${sym}${NC}" ;;
   stopped) printf '%b' "${RED_BRIGHT}${sym}${NC}" ;;
-  paused)  printf '%b' "${YELLOW_BRIGHT}${sym}${NC}" ;;
-  *)       printf '%b' "${DIM}${sym}${NC}" ;;
+  paused) printf '%b' "${YELLOW_BRIGHT}${sym}${NC}" ;;
+  *) printf '%b' "${DIM}${sym}${NC}" ;;
   esac
 }
 
@@ -630,18 +630,18 @@ print_table() {
 
     # Colored status text and symbol
     local st_col sym_col ty_col
-    printf -v st_col  '%s' "$st"
+    printf -v st_col '%s' "$st"
     printf -v sym_col '%s' "$sym"
     case "$ty" in
-      CT) printf -v ty_col '%b%s%b' "${MAGENTA_BRIGHT}" "$ty" "${NC}" ;;
-      VM) printf -v ty_col '%b%s%b' "${BLUE_BRIGHT}"    "$ty" "${NC}" ;;
-      *)  ty_col="$ty" ;;
+    CT) printf -v ty_col '%b%s%b' "${MAGENTA_BRIGHT}" "$ty" "${NC}" ;;
+    VM) printf -v ty_col '%b%s%b' "${BLUE_BRIGHT}" "$ty" "${NC}" ;;
+    *) ty_col="$ty" ;;
     esac
 
     printf '%b%s%b  ' "${CYAN}" "${LINE_V}" "${NC}"
     printf '%-6s ' "$id"
     printf '%s ' "$ty_col"
-    printf '     '   # pad after colored ty (color codes don't count as width)
+    printf '     ' # pad after colored ty (color codes don't count as width)
     _status_color "$st" "$(printf '%-10s' "$st")"
     printf ' '
     _status_sym_color "$st" "$sym"
@@ -654,16 +654,16 @@ print_table() {
     if [[ -n "$FILTER_STATUS" ]]; then
       printf '%b%s%b  %b%-*s%b  %b%s%b\n' \
         "${CYAN}" "${LINE_V}" "${NC}" \
-        "${RED_BRIGHT}" $((W-6)) "No ${FILTER_STATUS} VMs or containers found." "${NC}" \
+        "${RED_BRIGHT}" $((W - 6)) "No ${FILTER_STATUS} VMs or containers found." "${NC}" \
         "${CYAN}" "${LINE_V}" "${NC}"
     else
       printf '%b%s%b  %b%-*s%b  %b%s%b\n' \
         "${CYAN}" "${LINE_V}" "${NC}" \
-        "${RED_BRIGHT}" $((W-6)) "No VMs or containers found." "${NC}" \
+        "${RED_BRIGHT}" $((W - 6)) "No VMs or containers found." "${NC}" \
         "${CYAN}" "${LINE_V}" "${NC}"
       printf '%b%s%b  %b%-*s%b  %b%s%b\n' \
         "${CYAN}" "${LINE_V}" "${NC}" \
-        "${DIM}" $((W-6)) "Run directly on the Proxmox host as root." "${NC}" \
+        "${DIM}" $((W - 6)) "Run directly on the Proxmox host as root." "${NC}" \
         "${CYAN}" "${LINE_V}" "${NC}"
     fi
     _draw_line_bot $W
@@ -673,9 +673,12 @@ print_table() {
   _draw_line_mid $W
   # Legend row
   printf '%b%s%b  ' "${CYAN}" "${LINE_V}" "${NC}"
-  _status_sym_color "running" "$SYM_RUNNING"; printf ' running   '
-  _status_sym_color "stopped" "$SYM_STOPPED"; printf ' stopped   '
-  _status_sym_color "paused"  "$SYM_PAUSED";  printf ' paused   '
+  _status_sym_color "running" "$SYM_RUNNING"
+  printf ' running   '
+  _status_sym_color "stopped" "$SYM_STOPPED"
+  printf ' stopped   '
+  _status_sym_color "paused" "$SYM_PAUSED"
+  printf ' paused   '
   printf '%b%s%b\n' "${CYAN}" "${LINE_V}" "${NC}"
 
   # Count row
@@ -683,9 +686,9 @@ print_table() {
   printf '%bCount:%b  %b%s running%b  %b%s stopped%b' \
     "${BOLD}" "${NC}" \
     "${GREEN_BRIGHT}" "$count_run" "${NC}" \
-    "${RED_BRIGHT}"   "$count_stop" "${NC}"
+    "${RED_BRIGHT}" "$count_stop" "${NC}"
   if ((count_other > 0)); then printf '  %s other' "$count_other"; fi
-  printf '%b%s%b\n' "${CYAN}" "${LINE_V}" "${NC}"  # note: no padding; cosmetic only
+  printf '%b%s%b\n' "${CYAN}" "${LINE_V}" "${NC}" # note: no padding; cosmetic only
   _draw_line_bot $W
   return 0
 }
@@ -758,9 +761,9 @@ action_menu() {
   # Title row
   local ty_col
   case "$ty" in
-    CT) printf -v ty_col '%b%s%b' "${MAGENTA_BRIGHT}${BOLD}" "$ty" "${NC}" ;;
-    VM) printf -v ty_col '%b%s%b' "${BLUE_BRIGHT}${BOLD}"    "$ty" "${NC}" ;;
-    *)  ty_col="${BOLD}${ty}${NC}" ;;
+  CT) printf -v ty_col '%b%s%b' "${MAGENTA_BRIGHT}${BOLD}" "$ty" "${NC}" ;;
+  VM) printf -v ty_col '%b%s%b' "${BLUE_BRIGHT}${BOLD}" "$ty" "${NC}" ;;
+  *) ty_col="${BOLD}${ty}${NC}" ;;
   esac
   printf '%b%s%b  %s %s  %b(%s)%b\n' \
     "${CYAN}" "${LINE_V}" "${NC}" \
@@ -781,7 +784,7 @@ action_menu() {
   printf '%b%s%b  %b1%b) Start        %b2%b) Stop         %b3%b) Restart\n' \
     "${CYAN}" "${LINE_V}" "${NC}" \
     "${GREEN_BRIGHT}" "${NC}" \
-    "${RED_BRIGHT}"   "${NC}" \
+    "${RED_BRIGHT}" "${NC}" \
     "${YELLOW_BRIGHT}" "${NC}"
   printf '%b%s%b  %b4%b) Status       %b5%b) Console      %b6%b) Snapshots\n' \
     "${CYAN}" "${LINE_V}" "${NC}" \
@@ -1028,11 +1031,11 @@ snapshots_menu() {
     "${CYAN}" "${LINE_V}" "${NC}" \
     "${BOLD}${CYAN_BRIGHT}" "${NC}" "$ty" "$id" "$name"
   _draw_line_mid $W
-  printf '%b%s%b  %b1%b) List snapshots\n'       "${CYAN}" "${LINE_V}" "${NC}" "${CYAN_BRIGHT}" "${NC}"
-  printf '%b%s%b  %b2%b) Create snapshot\n'      "${CYAN}" "${LINE_V}" "${NC}" "${GREEN_BRIGHT}" "${NC}"
+  printf '%b%s%b  %b1%b) List snapshots\n' "${CYAN}" "${LINE_V}" "${NC}" "${CYAN_BRIGHT}" "${NC}"
+  printf '%b%s%b  %b2%b) Create snapshot\n' "${CYAN}" "${LINE_V}" "${NC}" "${GREEN_BRIGHT}" "${NC}"
   printf '%b%s%b  %b3%b) Rollback to snapshot\n' "${CYAN}" "${LINE_V}" "${NC}" "${YELLOW_BRIGHT}" "${NC}"
-  printf '%b%s%b  %b4%b) Delete snapshot\n'      "${CYAN}" "${LINE_V}" "${NC}" "${RED_BRIGHT}" "${NC}"
-  printf '%b%s%b  %b5%b) Back\n'                 "${CYAN}" "${LINE_V}" "${NC}" "${DIM}" "${NC}"
+  printf '%b%s%b  %b4%b) Delete snapshot\n' "${CYAN}" "${LINE_V}" "${NC}" "${RED_BRIGHT}" "${NC}"
+  printf '%b%s%b  %b5%b) Back\n' "${CYAN}" "${LINE_V}" "${NC}" "${DIM}" "${NC}"
   _draw_line_bot $W
   echo
   printf '  %b→%b Selection [1-5]: ' "${CYAN_BRIGHT}" "${NC}"
