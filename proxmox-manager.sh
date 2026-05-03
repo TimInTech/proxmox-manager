@@ -5,6 +5,7 @@
 # - feat: --timeout SECS flag for stop operations; exit-124 fallback with --overrule-shutdown
 # - feat: --force flag to skip all confirm() prompts
 # - fix: restart uses native pct reboot / qm reboot (atomic, no sleep)
+# - fix: replace indirect SYM_ expansion in action_menu (set -u safe)
 # - perf: type_of_id() uses _type_cache; populated as side-effect of main_menu loop
 # - perf: collect_instances() replaces awk subshells with IFS read + parameter expansion
 # - infra: CHANGELOG.md, GitHub issue templates, PR template, release.yml, FUNDING.yml
@@ -610,6 +611,17 @@ _status_sym_color() {
   esac
 }
 
+# _sym_for_status STATUS — return the correct SYM_* variable value for STATUS.
+_sym_for_status() {
+  local st="$1"
+  case "$st" in
+  running) printf '%s' "$SYM_RUNNING" ;;
+  stopped) printf '%s' "$SYM_STOPPED" ;;
+  paused)  printf '%s' "$SYM_PAUSED"  ;;
+  *)       printf '%s' "$SYM_UNKNOWN" ;;
+  esac
+}
+
 print_table() {
   local W=63
   _draw_line_top $W
@@ -771,9 +783,11 @@ action_menu() {
     "${BOLD}${id}${NC}" \
     "${DIM}" "$name" "${NC}"
 
-  # Status row
+  # Status row — use _sym_for_status to avoid indirect expansion under set -u
+  local st_sym
+  st_sym="$(_sym_for_status "$st")"
   printf '%b%s%b  Status: ' "${CYAN}" "${LINE_V}" "${NC}"
-  _status_sym_color "$st" "$SYM_$(printf '%s' "$st" | tr '[:lower:]' '[:upper:]' | sed 's/[^A-Z]/_/g')" 2>/dev/null || true
+  _status_sym_color "$st" "$st_sym"
   printf ' '
   _status_color "$st" "$st"
   printf '\n'
