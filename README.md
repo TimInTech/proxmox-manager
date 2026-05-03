@@ -25,6 +25,8 @@ No daemons. No agents. No dependencies beyond what ships with Proxmox VE.
 
 ![Tech Stack](https://skillicons.dev/icons?i=linux,bash,debian)
 
+[☕ Buy me a coffee](https://buymeacoffee.com/timintech)
+
 </div>
 
 ---
