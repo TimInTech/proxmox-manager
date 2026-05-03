@@ -36,11 +36,7 @@ declare -A _type_cache=()          # ID→type cache populated by main_menu; use
 if [[ -t 1 && -z "${NO_COLOR:-}" ]]; then
   BOLD=$'\e[1m'
   DIM=$'\e[2m'
-  RED=$'\e[31m'
-  GREEN=$'\e[32m'
   YELLOW=$'\e[33m'
-  BLUE=$'\e[34m'
-  MAGENTA=$'\e[35m'
   CYAN=$'\e[36m'
   WHITE=$'\e[37m'
   RED_BRIGHT=$'\e[91m'
@@ -53,11 +49,7 @@ if [[ -t 1 && -z "${NO_COLOR:-}" ]]; then
 else
   BOLD=''
   DIM=''
-  RED=''
-  GREEN=''
   YELLOW=''
-  BLUE=''
-  MAGENTA=''
   CYAN=''
   WHITE=''
   RED_BRIGHT=''
@@ -628,10 +620,8 @@ print_table() {
     [[ "$st" == "stopped" ]] && count_stop=$((count_stop + 1))
     [[ "$st" != "running" && "$st" != "stopped" ]] && count_other=$((count_other + 1))
 
-    # Colored status text and symbol
-    local st_col sym_col ty_col
-    printf -v st_col  '%s' "$st"
-    printf -v sym_col '%s' "$sym"
+    # Colored type badge
+    local ty_col
     case "$ty" in
       CT) printf -v ty_col '%b%s%b' "${MAGENTA_BRIGHT}" "$ty" "${NC}" ;;
       VM) printf -v ty_col '%b%s%b' "${BLUE_BRIGHT}"    "$ty" "${NC}" ;;
@@ -685,7 +675,7 @@ print_table() {
     "${GREEN_BRIGHT}" "$count_run" "${NC}" \
     "${RED_BRIGHT}"   "$count_stop" "${NC}"
   if ((count_other > 0)); then printf '  %s other' "$count_other"; fi
-  printf '%b%s%b\n' "${CYAN}" "${LINE_V}" "${NC}"  # note: no padding; cosmetic only
+  printf '%b%s%b\n' "${CYAN}" "${LINE_V}" "${NC}"
   _draw_line_bot $W
   return 0
 }
