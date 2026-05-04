@@ -1101,7 +1101,7 @@ _select_snapshot() {
     [[ -z "$line" ]] && continue
     # Strip tree-drawing prefix (` -> ` etc.) then take first word
     sn="${line//['\`>|-']/}"
-    sn="${sn#"${sn%%[![:space:]]*}"}"  # ltrim
+    sn="${sn#"${sn%%[![:space:]]*}"}" # ltrim
     sn="${sn%% *}"
     [[ -z "$sn" ]] && continue
     # Skip pseudo-snapshots and header words
