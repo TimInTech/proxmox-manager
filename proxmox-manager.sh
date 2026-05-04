@@ -1,17 +1,12 @@
 #!/usr/bin/env bash
 # Proxmox VM/CT Management Tool
-# Version 2.9.0 — 2026-04-09
-# - feat: --filter STATUS flag for --list/--json (running|stopped|paused)
-# - feat: --timeout SECS flag for stop operations; exit-124 fallback with --overrule-shutdown
-# - feat: --force flag to skip all confirm() prompts
-# - fix: restart uses native pct reboot / qm reboot (atomic, no sleep)
-# - fix: replace indirect SYM_ expansion in action_menu (set -u safe)
-# - perf: type_of_id() uses _type_cache; populated as side-effect of main_menu loop
-# - perf: collect_instances() replaces awk subshells with IFS read + parameter expansion
-# - infra: CHANGELOG.md, GitHub issue templates, PR template, release.yml, FUNDING.yml
-# - infra: Bash and Zsh completion scripts in completions/
-# - tests: 29 tests (was 8); unit tests for validate_vmid, validate_snapshot_name, --filter
-# - ui:    TUI redesign – ASCII banner, Unicode icons, box-drawing, extended colors
+# Version 2.10.0 — 2026-05-04
+# - fix: #21 full stderr written to LOG_FILE; only first line shown on stdout
+# - feat: #22 load /etc/pmanrc and ~/.pmanrc before CLI flags; validates STOP_TIMEOUT
+# - feat: #23 numbered snapshot selection for rollback and delete
+# - feat: #24 validate_menu_choice() helper; unified error format for menu input
+# - feat: #25 --name PATTERN (ERE) to filter by VM/CT name; combinable with --filter
+# - feat: #26 virt-viewer auto-launch from spice_info(); fallback hint when not installed
 
 set -Eeuo pipefail
 IFS=$'\n\t'
@@ -29,6 +24,7 @@ LOG_FILE="${LOG_FILE:-}"           # Set LOG_FILE=/path/to/file to enable file l
 FILTER_STATUS=""                   # Filter output by status: running|stopped|paused (empty = no filter)
 STOP_TIMEOUT="${STOP_TIMEOUT:-60}" # Timeout in seconds for stop operations; env-overridable
 FORCE_MODE=0                       # Set to 1 via --force to skip all confirm() prompts
+FILTER_NAME=""                     # ERE substring-match against VM/CT name (empty = no filter)
 declare -A _type_cache=()          # ID→type cache populated by main_menu; used by type_of_id()
 
 # =============================================================================
@@ -147,6 +143,19 @@ log() {
   fi
 }
 
+# _log_pve_err OUTPUT [LABEL] — log full Proxmox stderr to LOG_FILE; show only first line on stdout.
+_log_pve_err() {
+  local out="$1" label="${2:-Proxmox}"
+  [[ -z "$out" ]] && return
+  if [[ -n "$LOG_FILE" ]]; then
+    local _line
+    while IFS= read -r _line; do
+      log "PROXMOX" "$_line"
+    done <<<"$out"
+  fi
+  note "${label}: $(printf '%s' "$out" | head -1)"
+}
+
 # read_line NAME — safe single-line read into named variable.
 read_line() {
   local __name="$1" __val=''
@@ -188,6 +197,16 @@ validate_snapshot_name() {
   if [[ ! "$sn" =~ ^[a-zA-Z0-9][a-zA-Z0-9_-]{0,39}$ ]]; then
     err "Invalid snapshot name '$sn'."
     note "Name must start with a letter or digit, contain only [a-zA-Z0-9_-], and be at most 40 characters."
+    return 1
+  fi
+  return 0
+}
+
+# validate_menu_choice VAL MIN MAX CONTEXT — print error and return 1 when VAL is out of range.
+validate_menu_choice() {
+  local val="$1" min="$2" max="$3" context="$4"
+  if [[ ! "$val" =~ ^[0-9]+$ ]] || ((10#$val < min || 10#$val > max)); then
+    err "Invalid selection '$val' for $context. Enter ${min}–${max}."
     return 1
   fi
   return 0
@@ -240,6 +259,7 @@ Options:
   --list            Print a plain-text overview of all VMs/CTs (no TUI)
   --json            Print machine-readable JSON with VM/CT information
   --filter STATUS   Filter --list/--json output (running|stopped|paused)
+  --name PATTERN    Filter by VM/CT name (ERE substring-match; combinable with --filter)
   --no-clear        Do not clear the screen in interactive mode
   --once            Run a single interactive refresh (useful for TTY recording)
   --timeout SECS    Timeout for stop operations in seconds (default: 60)
@@ -292,6 +312,21 @@ parse_args() {
         exit 1
       fi
       shift # consume the SECS value; outer shift consumes --timeout
+      ;;
+    --name)
+      if [[ $# -lt 2 ]]; then
+        err "--name requires an ERE pattern value."
+        exit 1
+      fi
+      FILTER_NAME="$2"
+      # Validate ERE: grep exit code ≥2 means invalid pattern
+      local _grep_rc=0
+      echo '' | grep -E -- "$FILTER_NAME" >/dev/null 2>&1 || _grep_rc=$?
+      if ((_grep_rc >= 2)); then
+        err "--name pattern '$FILTER_NAME' is not a valid ERE."
+        exit 1
+      fi
+      shift
       ;;
     --force)
       FORCE_MODE=1
@@ -420,16 +455,15 @@ collect_instances() {
   fi
 }
 
-# filtered_instances — wraps collect_instances; when FILTER_STATUS is set,
-# emits only rows whose status field matches. Used by print_table and print_json.
+# filtered_instances — wraps collect_instances; applies FILTER_STATUS and FILTER_NAME (AND logic).
 filtered_instances() {
-  if [[ -z "$FILTER_STATUS" ]]; then
-    collect_instances
-    return
-  fi
   local id ty st sym nm
   while IFS=$'\t' read -r id ty st sym nm; do
-    [[ "$st" == "$FILTER_STATUS" ]] && printf "%s\t%s\t%s\t%s\t%s\n" "$id" "$ty" "$st" "$sym" "$nm"
+    [[ -n "$FILTER_STATUS" && "$st" != "$FILTER_STATUS" ]] && continue
+    if [[ -n "$FILTER_NAME" ]]; then
+      [[ "$nm" =~ $FILTER_NAME ]] || continue
+    fi
+    printf "%s\t%s\t%s\t%s\t%s\n" "$id" "$ty" "$st" "$sym" "$nm"
   done < <(collect_instances)
 }
 
@@ -869,7 +903,7 @@ action_menu() {
     fi
     ;;
   9 | '') : ;;
-  *) err "Invalid selection. Enter 1-9." ;;
+  *) validate_menu_choice "$opt" 1 9 "action menu" || true ;;
   esac
   printf '\n  %bPress Enter to continue...%b ' "${DIM}" "${NC}"
   local _dummy
@@ -899,14 +933,14 @@ do_action() {
         ok "$ty $id started successfully."
       else
         err "Failed to start CT $id."
-        [[ -n "$_pve_out" ]] && note "Proxmox: $(printf '%s' "$_pve_out" | head -3)"
+        _log_pve_err "$_pve_out"
       fi
     else
       if _pve_out=$(qm start "$id" 2>&1); then
         ok "$ty $id started successfully."
       else
         err "Failed to start VM $id."
-        [[ -n "$_pve_out" ]] && note "Proxmox: $(printf '%s' "$_pve_out" | head -3)"
+        _log_pve_err "$_pve_out"
       fi
     fi
     ;;
@@ -934,11 +968,11 @@ do_action() {
           ok "$ty $id force-stopped."
         else
           err "Force stop failed for CT $id."
-          [[ -n "$_force_out" ]] && note "Proxmox: $(printf '%s' "$_force_out" | head -3)"
+          _log_pve_err "$_force_out"
         fi
       else
         err "Failed to stop CT $id."
-        [[ -n "$_timeout_out" ]] && note "Proxmox: $(printf '%s' "$_timeout_out" | head -3)"
+        _log_pve_err "$_timeout_out"
       fi
     else
       _timeout_out=$(timeout "${STOP_TIMEOUT}" qm stop "$id" 2>&1) || _timeout_exit=$?
@@ -951,11 +985,11 @@ do_action() {
           ok "$ty $id force-stopped."
         else
           err "Force stop failed for VM $id."
-          [[ -n "$_force_out" ]] && note "Proxmox: $(printf '%s' "$_force_out" | head -3)"
+          _log_pve_err "$_force_out"
         fi
       else
         err "Failed to stop VM $id."
-        [[ -n "$_timeout_out" ]] && note "Proxmox: $(printf '%s' "$_timeout_out" | head -3)"
+        _log_pve_err "$_timeout_out"
       fi
     fi
     ;;
@@ -978,14 +1012,14 @@ do_action() {
         ok "$ty $id restarted."
       else
         err "Failed to restart CT $id."
-        [[ -n "$_pve_out" ]] && note "Proxmox: $(printf '%s' "$_pve_out" | head -3)"
+        _log_pve_err "$_pve_out"
       fi
     else
       if _pve_out=$(qm reboot "$id" 2>&1); then
         ok "$ty $id restarted."
       else
         err "Failed to restart VM $id."
-        [[ -n "$_pve_out" ]] && note "Proxmox: $(printf '%s' "$_pve_out" | head -3)"
+        _log_pve_err "$_pve_out"
       fi
     fi
     ;;
@@ -1045,6 +1079,61 @@ open_console() {
 # SNAPSHOTS
 # =============================================================================
 
+# _SELECTED_SNAPSHOT — output variable set by _select_snapshot().
+_SELECTED_SNAPSHOT=''
+
+# _select_snapshot ID TYPE — display a numbered list of snapshots; set _SELECTED_SNAPSHOT.
+# Falls back to free-text entry when no parseable snapshots are found.
+# Returns 1 on invalid numeric selection; caller must validate name with validate_snapshot_name.
+_select_snapshot() {
+  local id="$1" ty="$2"
+  _SELECTED_SNAPSHOT=''
+  local out
+  if [[ "$ty" == "CT" ]]; then
+    out="$(pct listsnapshot "$id" 2>/dev/null || true)"
+  else
+    out="$(qm listsnapshot "$id" 2>/dev/null || true)"
+  fi
+
+  local -a snap_names=()
+  local line sn
+  while IFS= read -r line; do
+    [[ -z "$line" ]] && continue
+    # Strip tree-drawing prefix (` -> ` etc.) then take first word
+    sn="${line//['\`>|-']/}"
+    sn="${sn#"${sn%%[![:space:]]*}"}"  # ltrim
+    sn="${sn%% *}"
+    [[ -z "$sn" ]] && continue
+    # Skip pseudo-snapshots and header words
+    [[ "$sn" == "current" || "$sn" == "Name" || "$sn" == "YOU" ]] && continue
+    [[ "$sn" =~ ^[a-zA-Z0-9] ]] || continue
+    snap_names+=("$sn")
+  done <<<"$out"
+
+  if ((${#snap_names[@]} == 0)); then
+    note "No snapshots found. Enter name manually."
+    printf '  %bSnapshot name:%b ' "${BOLD}" "${NC}"
+    local raw
+    read_line raw
+    _SELECTED_SNAPSHOT="$(trim "$raw")"
+    return 0
+  fi
+
+  local i
+  for ((i = 0; i < ${#snap_names[@]}; i++)); do
+    printf '  %b%d%b) %s\n' "${CYAN_BRIGHT}" "$((i + 1))" "${NC}" "${snap_names[$i]}"
+  done
+  printf '  %b→%b Select [1-%d]: ' "${CYAN_BRIGHT}" "${NC}" "${#snap_names[@]}"
+  local sel
+  read_line sel
+
+  if [[ ! "$sel" =~ ^[0-9]+$ ]] || ((10#$sel < 1 || 10#$sel > ${#snap_names[@]})); then
+    err "Invalid selection '$sel'. Enter 1–${#snap_names[@]}."
+    return 1
+  fi
+  _SELECTED_SNAPSHOT="${snap_names[$((10#$sel - 1))]}"
+}
+
 # _list_snapshots ID TYPE — print snapshot list; returns 1 if none found.
 _list_snapshots() {
   local id="$1" ty="$2"
@@ -1102,13 +1191,13 @@ snapshots_menu() {
     if [[ "$ty" == "CT" ]]; then
       if ! _snap_out=$(pct snapshot "$id" "$sn" 2>&1); then
         err "Snapshot creation failed."
-        [[ -n "$_snap_out" ]] && note "Proxmox: $(printf '%s' "$_snap_out" | head -3)"
+        _log_pve_err "$_snap_out"
         return
       fi
     else
       if ! _snap_out=$(qm snapshot "$id" "$sn" 2>&1); then
         err "Snapshot creation failed."
-        [[ -n "$_snap_out" ]] && note "Proxmox: $(printf '%s' "$_snap_out" | head -3)"
+        _log_pve_err "$_snap_out"
         return
       fi
     fi
@@ -1116,11 +1205,9 @@ snapshots_menu() {
     ;;
 
   3)
-    _list_snapshots "$id" "$ty" || true
-    echo
-    printf '  %bRoll back to snapshot name:%b ' "${BOLD}" "${NC}"
-    local sn
-    read_line sn
+    printf '  %bSelect snapshot to roll back to:%b\n' "${BOLD}" "${NC}"
+    _select_snapshot "$id" "$ty" || return
+    local sn="$_SELECTED_SNAPSHOT"
     sn="$(trim "$sn")"
     if [[ -z "$sn" ]]; then
       note "Aborted — no name given."
@@ -1136,13 +1223,13 @@ snapshots_menu() {
     if [[ "$ty" == "CT" ]]; then
       if ! _rb_out=$(pct rollback "$id" "$sn" 2>&1); then
         err "Rollback failed."
-        [[ -n "$_rb_out" ]] && note "Proxmox: $(printf '%s' "$_rb_out" | head -3)"
+        _log_pve_err "$_rb_out"
         return
       fi
     else
       if ! _rb_out=$(qm rollback "$id" "$sn" 2>&1); then
         err "Rollback failed."
-        [[ -n "$_rb_out" ]] && note "Proxmox: $(printf '%s' "$_rb_out" | head -3)"
+        _log_pve_err "$_rb_out"
         return
       fi
     fi
@@ -1150,11 +1237,9 @@ snapshots_menu() {
     ;;
 
   4)
-    _list_snapshots "$id" "$ty" || true
-    echo
-    printf '  %bSnapshot to delete:%b ' "${BOLD}" "${NC}"
-    local sn
-    read_line sn
+    printf '  %bSelect snapshot to delete:%b\n' "${BOLD}" "${NC}"
+    _select_snapshot "$id" "$ty" || return
+    local sn="$_SELECTED_SNAPSHOT"
     sn="$(trim "$sn")"
     if [[ -z "$sn" ]]; then
       note "Aborted — no name given."
@@ -1170,13 +1255,13 @@ snapshots_menu() {
     if [[ "$ty" == "CT" ]]; then
       if ! _del_out=$(pct delsnapshot "$id" "$sn" 2>&1); then
         err "Snapshot deletion failed."
-        [[ -n "$_del_out" ]] && note "Proxmox: $(printf '%s' "$_del_out" | head -3)"
+        _log_pve_err "$_del_out"
         return
       fi
     else
       if ! _del_out=$(qm delsnapshot "$id" "$sn" 2>&1); then
         err "Snapshot deletion failed."
-        [[ -n "$_del_out" ]] && note "Proxmox: $(printf '%s' "$_del_out" | head -3)"
+        _log_pve_err "$_del_out"
         return
       fi
     fi
@@ -1184,7 +1269,7 @@ snapshots_menu() {
     ;;
 
   5) : ;;
-  *) err "Invalid selection. Enter 1-5." ;;
+  *) validate_menu_choice "$s" 1 5 "snapshot menu" || true ;;
   esac
 }
 
@@ -1221,7 +1306,13 @@ title=VM ${id} (${name})
 delete-this-file=1
 fullscreen=0
 EOF
-  ok "SPICE connection file: ${vv}"
+  if have virt-viewer; then
+    virt-viewer "$vv" &
+    ok "Launching virt-viewer for VM ${id}..."
+  else
+    ok "SPICE connection file: ${vv}"
+    note "Install virt-viewer with: apt install virt-viewer"
+  fi
 }
 
 spice_enable() {
@@ -1244,6 +1335,16 @@ spice_enable() {
 # =============================================================================
 
 main() {
+  # Load config files — CLI flags set by parse_args below will override these values.
+  # shellcheck source=/dev/null
+  [[ -f /etc/pmanrc ]] && source /etc/pmanrc
+  # shellcheck source=/dev/null
+  [[ -f "${HOME}/.pmanrc" ]] && source "${HOME}/.pmanrc"
+  # Validate STOP_TIMEOUT after sourcing config (may have been set there).
+  if [[ ! "$STOP_TIMEOUT" =~ ^[0-9]+$ ]] || ((STOP_TIMEOUT < 1)); then
+    err "STOP_TIMEOUT must be a positive integer (got '$STOP_TIMEOUT'). Check /etc/pmanrc or ~/.pmanrc."
+    exit 1
+  fi
   parse_args "$@"
   if ((FORCE_MODE == 1)); then
     warn "--force active: all confirmation prompts will be skipped automatically."

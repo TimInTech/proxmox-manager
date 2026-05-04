@@ -128,6 +128,7 @@ Installs a symlink to `/usr/local/bin/pman` so you can call `pman` from anywhere
 | `pman --list` | Plain-text table output — useful for logging or quick checks |
 | `pman --json` | Machine-readable JSON array for automation & `jq` |
 | `pman --filter running` | Filter output by status: `running` \| `stopped` \| `paused` |
+| `pman --name web` | Filter by VM/CT name (ERE substring-match; combinable with `--filter`) |
 | `pman --force` | Skip all confirmation prompts (for unattended scripts) |
 | `pman --timeout 30` | Custom stop timeout in seconds (default: 60) |
 | `pman --no-clear` | Don't clear screen in interactive mode |
@@ -162,6 +163,16 @@ pman --json | jq '.[] | select(.status == "running")'
 ]
 ```
 
+### Configuration file
+
+`proxmox-manager` loads `/etc/pmanrc` (system-wide) and `~/.pmanrc` (per-user) before processing CLI flags, so any flag can be set as a persistent default. CLI flags always win.
+
+```bash
+# ~/.pmanrc — example
+STOP_TIMEOUT=120          # default stop timeout in seconds
+LOG_FILE=/var/log/pman.log
+```
+
 ### Shell Completions
 
 ```bash
@@ -186,7 +197,11 @@ cp completions/pman.zsh ~/.zsh/completions/_pman
 
 ## 📋 Changelog
 
-### 🆕 [v2.9.0](CHANGELOG.md) — 2026-04-09
+### 🆕 [v2.10.0](CHANGELOG.md) — 2026-05-04
+
+> `--name PATTERN` filter · pmanrc config file · numbered snapshot selection · full stderr logging · virt-viewer auto-launch
+
+### [v2.9.0](CHANGELOG.md) — 2026-04-09
 
 > `--filter STATUS` · `--timeout SECS` with force-stop fallback · `--force` mode · 29 unit tests · Bash & Zsh shell completions
 
