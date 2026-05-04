@@ -609,8 +609,8 @@ _sym_for_status() {
   case "$st" in
   running) printf '%s' "$SYM_RUNNING" ;;
   stopped) printf '%s' "$SYM_STOPPED" ;;
-  paused)  printf '%s' "$SYM_PAUSED"  ;;
-  *)       printf '%s' "$SYM_UNKNOWN" ;;
+  paused) printf '%s' "$SYM_PAUSED" ;;
+  *) printf '%s' "$SYM_UNKNOWN" ;;
   esac
 }
 
@@ -642,7 +642,6 @@ print_table() {
     [[ "$st" == "running" ]] && count_run=$((count_run + 1))
     [[ "$st" == "stopped" ]] && count_stop=$((count_stop + 1))
     [[ "$st" != "running" && "$st" != "stopped" ]] && count_other=$((count_other + 1))
-
 
     local ty_col
     case "$ty" in
