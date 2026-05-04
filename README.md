@@ -8,7 +8,7 @@
 ║  ██████╔╝██╔████╔██║ ███████║ ██╔██╗ ██║               ║
 ║  ██╔═══╝ ██║╚██╔╝██║ ██╔══██║ ██║╚██╗██║               ║
 ║  ██║     ██║ ╚═╝ ██║ ██║  ██║ ██║ ╚████║               ║
-║  ╚═╝     ╚═╝     ╚═╝ ╚═╝  ╚═╝ ╚═╝  ╚═══╝  v2.9.0      ║
+║  ╚═╝     ╚═╝     ╚═╝ ╚═╝  ╚═╝ ╚═╝  ╚═══╝  v2.10.0     ║
 ║                                                          ║
 ║  Proxmox VM/CT Manager · Single Bash · No Dependencies  ║
 ╚══════════════════════════════════════════════════════════╝
@@ -52,8 +52,9 @@ No daemons. No agents. No dependencies beyond what ships with Proxmox VE.
 | ⚡ | **Start / Stop / Restart** | Confirmation prompt for destructive actions. Proxmox error details on failure. Configurable timeout with force-stop fallback |
 | 🖥️ | **Console Access** | LXC shell via `pct enter` or QEMU terminal via `qm terminal`. Verifies running state before entering |
 | 📦 | **Snapshot Management** | List, create, rollback, delete — with name validation and snapshot preview before destructive actions |
-| 🖱️ | **SPICE Integration** | Enable SPICE for VMs and retrieve `.vv` connection files for remote desktop clients |
-| 🤖 | **Automation-Ready** | `--json` output, `--filter` by status, `--force` mode, structured logging via `LOG_FILE` |
+| 🖱️ | **SPICE Integration** | Enable SPICE for VMs and retrieve `.vv` connection files. Auto-launches `virt-viewer` when installed |
+| 🤖 | **Automation-Ready** | `--json` output, `--filter` by status, `--name` ERE filter, `--force` mode, structured logging via `LOG_FILE` |
+| ⚙️ | **Config File** | Persistent defaults via `/etc/pmanrc` or `~/.pmanrc` — CLI flags always win |
 
 ---
 
@@ -163,14 +164,33 @@ pman --json | jq '.[] | select(.status == "running")'
 ]
 ```
 
-### Configuration file
+### SPICE remote desktop
 
-`proxmox-manager` loads `/etc/pmanrc` (system-wide) and `~/.pmanrc` (per-user) before processing CLI flags, so any flag can be set as a persistent default. CLI flags always win.
+The SPICE integration generates a `.vv` connection file for any VM. If [`virt-viewer`](https://virt-manager.org/) is installed, it is launched automatically:
+
+```bash
+# Install virt-viewer (Debian / Proxmox host)
+apt install virt-viewer
+```
+
+When `virt-viewer` is **not** installed, the path to the generated `.vv` file is printed together with the install hint. The SPICE bind address defaults to `127.0.0.1` and can be overridden via `PROXMOX_MANAGER_SPICE_ADDR` (env var or `~/.pmanrc`).
+
+### Configuration
+
+`proxmox-manager` checks the following files at startup (in this order):
+
+| File | Scope |
+|---|---|
+| `/etc/pmanrc` | System-wide (all users) |
+| `~/.pmanrc` | Per-user (overrides system-wide) |
+
+CLI flags are applied last and always win over config file values.
 
 ```bash
 # ~/.pmanrc — example
-STOP_TIMEOUT=120          # default stop timeout in seconds
-LOG_FILE=/var/log/pman.log
+STOP_TIMEOUT=120                          # stop timeout in seconds (default: 60)
+LOG_FILE="/var/log/proxmox-manager.log"   # structured log file (empty = disabled)
+PROXMOX_MANAGER_SPICE_ADDR="192.168.1.10" # SPICE bind address (default: 127.0.0.1)
 ```
 
 ### Shell Completions
@@ -199,7 +219,14 @@ cp completions/pman.zsh ~/.zsh/completions/_pman
 
 ### 🆕 [v2.10.0](CHANGELOG.md) — 2026-05-04
 
-> `--name PATTERN` filter · pmanrc config file · numbered snapshot selection · full stderr logging · virt-viewer auto-launch
+| Issue | Change |
+|---|---|
+| [#21](https://github.com/TimInTech/proxmox-manager/issues/21) | Full Proxmox stderr written to `LOG_FILE`; only first line shown on stdout |
+| [#22](https://github.com/TimInTech/proxmox-manager/issues/22) | Config file support: `/etc/pmanrc` and `~/.pmanrc` loaded before CLI flags |
+| [#23](https://github.com/TimInTech/proxmox-manager/issues/23) | Numbered snapshot selection for rollback and delete (free-text fallback) |
+| [#24](https://github.com/TimInTech/proxmox-manager/issues/24) | `validate_menu_choice()` helper — unified error format for all menu inputs |
+| [#25](https://github.com/TimInTech/proxmox-manager/issues/25) | `--name PATTERN` flag — ERE substring filter on VM/CT name, combinable with `--filter` |
+| [#26](https://github.com/TimInTech/proxmox-manager/issues/26) | `virt-viewer` auto-launched from SPICE info; fallback hint when not installed |
 
 ### [v2.9.0](CHANGELOG.md) — 2026-04-09
 
