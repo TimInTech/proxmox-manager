@@ -25,7 +25,9 @@ No daemons. No agents. No dependencies beyond what ships with Proxmox VE.
 
 ![Tech Stack](https://skillicons.dev/icons?i=linux,bash,debian)
 
-<a href="https://buymeacoffee.com/timintech" target="_blank" rel="noopener noreferrer"><img src="https://cdn.buymeacoffee.com/buttons/v2/default-yellow.png" alt="Buy Me A Coffee" height="50" width="181"></a>
+<a href="https://buymeacoffee.com/timintech" target="_blank" rel="noopener noreferrer">
+  <img src="https://cdn.buymeacoffee.com/buttons/v2/default-yellow.png" alt="Buy Me A Coffee" height="60" width="217">
+</a>
 
 </div>
 
