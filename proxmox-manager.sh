@@ -252,72 +252,72 @@ EOF
 parse_args() {
   while [[ $# -gt 0 ]]; do
     case "$1" in
-      --list)
-        MODE="list"
-        LIST_FLAG=1
-        ;;
-      --json)
-        MODE="json"
-        JSON_FLAG=1
-        ;;
-      --no-clear)
-        CLEAR_SCREEN=0
-        ;;
-      --once)
-        RUN_ONCE=1
-        ;;
-      --filter)
-        if [[ $# -lt 2 ]]; then
-          err "--filter requires a value: running, stopped, or paused."
-          exit 1
-        fi
-        FILTER_STATUS="$2"
-        case "$FILTER_STATUS" in
-          running | stopped | paused) ;;
-          *)
-            err "Invalid --filter value '$FILTER_STATUS'. Valid: running, stopped, paused."
-            exit 1
-            ;;
-        esac
-        shift # consume the STATUS value; outer shift consumes --filter
-        ;;
-      --timeout)
-        if [[ $# -lt 2 ]]; then
-          err "--timeout requires a value in seconds (e.g., --timeout 30)."
-          exit 1
-        fi
-        STOP_TIMEOUT="$2"
-        if [[ ! "$STOP_TIMEOUT" =~ ^[0-9]+$ ]] || ((STOP_TIMEOUT < 1)); then
-          err "--timeout requires a positive integer (seconds), got '$STOP_TIMEOUT'."
-          exit 1
-        fi
-        shift # consume the SECS value; outer shift consumes --timeout
-        ;;
-      --force)
-        FORCE_MODE=1
-        ;;
-      --version)
-        printf 'proxmox-manager.sh %s\n' "$(_script_version)"
-        exit 0
-        ;;
-      -h | --help)
-        usage
-        exit 0
-        ;;
-      --)
-        shift
-        break
-        ;;
-      -*)
-        err "Unknown option: $1"
-        usage
+    --list)
+      MODE="list"
+      LIST_FLAG=1
+      ;;
+    --json)
+      MODE="json"
+      JSON_FLAG=1
+      ;;
+    --no-clear)
+      CLEAR_SCREEN=0
+      ;;
+    --once)
+      RUN_ONCE=1
+      ;;
+    --filter)
+      if [[ $# -lt 2 ]]; then
+        err "--filter requires a value: running, stopped, or paused."
         exit 1
-        ;;
+      fi
+      FILTER_STATUS="$2"
+      case "$FILTER_STATUS" in
+      running | stopped | paused) ;;
       *)
-        err "Unexpected argument: $1"
-        usage
+        err "Invalid --filter value '$FILTER_STATUS'. Valid: running, stopped, paused."
         exit 1
         ;;
+      esac
+      shift # consume the STATUS value; outer shift consumes --filter
+      ;;
+    --timeout)
+      if [[ $# -lt 2 ]]; then
+        err "--timeout requires a value in seconds (e.g., --timeout 30)."
+        exit 1
+      fi
+      STOP_TIMEOUT="$2"
+      if [[ ! "$STOP_TIMEOUT" =~ ^[0-9]+$ ]] || ((STOP_TIMEOUT < 1)); then
+        err "--timeout requires a positive integer (seconds), got '$STOP_TIMEOUT'."
+        exit 1
+      fi
+      shift # consume the SECS value; outer shift consumes --timeout
+      ;;
+    --force)
+      FORCE_MODE=1
+      ;;
+    --version)
+      printf 'proxmox-manager.sh %s\n' "$(_script_version)"
+      exit 0
+      ;;
+    -h | --help)
+      usage
+      exit 0
+      ;;
+    --)
+      shift
+      break
+      ;;
+    -*)
+      err "Unknown option: $1"
+      usage
+      exit 1
+      ;;
+    *)
+      err "Unexpected argument: $1"
+      usage
+      exit 1
+      ;;
     esac
     shift
   done
@@ -373,9 +373,9 @@ status_of() {
   local id="$1" t="${2:-}"
   [[ -z "$t" ]] && t="$(type_of_id "$id")"
   case "$t" in
-    CT) pct status "$id" 2>/dev/null | awk '{print tolower($NF)}' || printf 'unknown' ;;
-    VM) qm status "$id" 2>/dev/null | awk '{print tolower($NF)}' || printf 'unknown' ;;
-    *) printf 'unknown' ;;
+  CT) pct status "$id" 2>/dev/null | awk '{print tolower($NF)}' || printf 'unknown' ;;
+  VM) qm status "$id" 2>/dev/null | awk '{print tolower($NF)}' || printf 'unknown' ;;
+  *) printf 'unknown' ;;
   esac
 }
 
@@ -585,10 +585,10 @@ header() {
 _status_color() {
   local st="$1" txt="$2"
   case "$st" in
-    running) printf '%b' "${GREEN_BRIGHT}${txt}${NC}" ;;
-    stopped) printf '%b' "${RED_BRIGHT}${txt}${NC}" ;;
-    paused) printf '%b' "${YELLOW_BRIGHT}${txt}${NC}" ;;
-    *) printf '%b' "${DIM}${txt}${NC}" ;;
+  running) printf '%b' "${GREEN_BRIGHT}${txt}${NC}" ;;
+  stopped) printf '%b' "${RED_BRIGHT}${txt}${NC}" ;;
+  paused) printf '%b' "${YELLOW_BRIGHT}${txt}${NC}" ;;
+  *) printf '%b' "${DIM}${txt}${NC}" ;;
   esac
 }
 
@@ -596,10 +596,10 @@ _status_color() {
 _status_sym_color() {
   local st="$1" sym="$2"
   case "$st" in
-    running) printf '%b' "${GREEN_BRIGHT}${sym}${NC}" ;;
-    stopped) printf '%b' "${RED_BRIGHT}${sym}${NC}" ;;
-    paused) printf '%b' "${YELLOW_BRIGHT}${sym}${NC}" ;;
-    *) printf '%b' "${DIM}${sym}${NC}" ;;
+  running) printf '%b' "${GREEN_BRIGHT}${sym}${NC}" ;;
+  stopped) printf '%b' "${RED_BRIGHT}${sym}${NC}" ;;
+  paused) printf '%b' "${YELLOW_BRIGHT}${sym}${NC}" ;;
+  *) printf '%b' "${DIM}${sym}${NC}" ;;
   esac
 }
 
@@ -607,10 +607,10 @@ _status_sym_color() {
 _sym_for_status() {
   local st="$1"
   case "$st" in
-    running) printf '%s' "$SYM_RUNNING" ;;
-    stopped) printf '%s' "$SYM_STOPPED" ;;
-    paused) printf '%s' "$SYM_PAUSED" ;;
-    *) printf '%s' "$SYM_UNKNOWN" ;;
+  running) printf '%s' "$SYM_RUNNING" ;;
+  stopped) printf '%s' "$SYM_STOPPED" ;;
+  paused) printf '%s' "$SYM_PAUSED" ;;
+  *) printf '%s' "$SYM_UNKNOWN" ;;
   esac
 }
 
@@ -645,9 +645,9 @@ print_table() {
 
     local ty_col
     case "$ty" in
-      CT) printf -v ty_col '%b%s%b' "${MAGENTA_BRIGHT}" "$ty" "${NC}" ;;
-      VM) printf -v ty_col '%b%s%b' "${BLUE_BRIGHT}" "$ty" "${NC}" ;;
-      *) ty_col="$ty" ;;
+    CT) printf -v ty_col '%b%s%b' "${MAGENTA_BRIGHT}" "$ty" "${NC}" ;;
+    VM) printf -v ty_col '%b%s%b' "${BLUE_BRIGHT}" "$ty" "${NC}" ;;
+    *) ty_col="$ty" ;;
     esac
 
     if ((draw_boxes)); then
@@ -760,31 +760,31 @@ main_menu() {
   local choice
   read_line choice
   case "$choice" in
-    q | Q) exit 0 ;;
-    r | R | '') return 0 ;;
-    *)
-      if [[ "$choice" =~ ^[0-9]+$ ]]; then
-        if ! validate_vmid "$choice"; then
-          return 0
-        fi
-        local sel_type='' sel_name='' found=0
-        while IFS=$'\t' read -r id ty _ _ nm; do
-          _type_cache["$id"]="$ty" # warm the cache for all listed instances
-          if [[ "$id" == "$choice" ]]; then
-            sel_type="$ty"
-            sel_name="$nm"
-            found=1
-          fi
-        done < <(collect_instances)
-        if ((found == 1)); then
-          action_menu "$choice" "$sel_type" "$sel_name"
-        else
-          err "VMID $choice not found. Press 'r' to refresh the list."
-        fi
-      else
-        err "Invalid input: '$choice'. Enter a numeric VMID, 'r', or 'q'."
+  q | Q) exit 0 ;;
+  r | R | '') return 0 ;;
+  *)
+    if [[ "$choice" =~ ^[0-9]+$ ]]; then
+      if ! validate_vmid "$choice"; then
+        return 0
       fi
-      ;;
+      local sel_type='' sel_name='' found=0
+      while IFS=$'\t' read -r id ty _ _ nm; do
+        _type_cache["$id"]="$ty" # warm the cache for all listed instances
+        if [[ "$id" == "$choice" ]]; then
+          sel_type="$ty"
+          sel_name="$nm"
+          found=1
+        fi
+      done < <(collect_instances)
+      if ((found == 1)); then
+        action_menu "$choice" "$sel_type" "$sel_name"
+      else
+        err "VMID $choice not found. Press 'r' to refresh the list."
+      fi
+    else
+      err "Invalid input: '$choice'. Enter a numeric VMID, 'r', or 'q'."
+    fi
+    ;;
   esac
 }
 
@@ -800,9 +800,9 @@ action_menu() {
   # Title row
   local ty_col
   case "$ty" in
-    CT) printf -v ty_col '%b%s%b' "${MAGENTA_BRIGHT}${BOLD}" "$ty" "${NC}" ;;
-    VM) printf -v ty_col '%b%s%b' "${BLUE_BRIGHT}${BOLD}" "$ty" "${NC}" ;;
-    *) ty_col="${BOLD}${ty}${NC}" ;;
+  CT) printf -v ty_col '%b%s%b' "${MAGENTA_BRIGHT}${BOLD}" "$ty" "${NC}" ;;
+  VM) printf -v ty_col '%b%s%b' "${BLUE_BRIGHT}${BOLD}" "$ty" "${NC}" ;;
+  *) ty_col="${BOLD}${ty}${NC}" ;;
   esac
   printf '%b%s%b  %s %s  %b(%s)%b\n' \
     "${CYAN}" "${LINE_V}" "${NC}" \
@@ -848,28 +848,28 @@ action_menu() {
   local opt
   read_line opt
   case "$opt" in
-    1) do_action "$id" "$ty" start "$name" ;;
-    2) do_action "$id" "$ty" stop "$name" ;;
-    3) do_action "$id" "$ty" restart "$name" ;;
-    4) do_action "$id" "$ty" status "$name" ;;
-    5) open_console "$id" "$ty" "$name" ;;
-    6) snapshots_menu "$id" "$ty" "$name" ;;
-    7)
-      if [[ "$ty" == "VM" ]]; then
-        spice_info "$id" "$name"
-      else
-        err "SPICE is only available for VMs."
-      fi
-      ;;
-    8)
-      if [[ "$ty" == "VM" ]]; then
-        spice_enable "$id"
-      else
-        err "SPICE is only available for VMs."
-      fi
-      ;;
-    9 | '') : ;;
-    *) err "Invalid selection. Enter 1-9." ;;
+  1) do_action "$id" "$ty" start "$name" ;;
+  2) do_action "$id" "$ty" stop "$name" ;;
+  3) do_action "$id" "$ty" restart "$name" ;;
+  4) do_action "$id" "$ty" status "$name" ;;
+  5) open_console "$id" "$ty" "$name" ;;
+  6) snapshots_menu "$id" "$ty" "$name" ;;
+  7)
+    if [[ "$ty" == "VM" ]]; then
+      spice_info "$id" "$name"
+    else
+      err "SPICE is only available for VMs."
+    fi
+    ;;
+  8)
+    if [[ "$ty" == "VM" ]]; then
+      spice_enable "$id"
+    else
+      err "SPICE is only available for VMs."
+    fi
+    ;;
+  9 | '') : ;;
+  *) err "Invalid selection. Enter 1-9." ;;
   esac
   printf '\n  %bPress Enter to continue...%b ' "${DIM}" "${NC}"
   local _dummy
@@ -886,125 +886,125 @@ do_action() {
   st="$(status_of "$id" "$ty")"
 
   case "$act" in
-    # ------------------------------------------------------------------
-    start)
-      if [[ "$st" == "running" ]]; then
-        ok "$ty $id ($name) is already running."
-        return
+  # ------------------------------------------------------------------
+  start)
+    if [[ "$st" == "running" ]]; then
+      ok "$ty $id ($name) is already running."
+      return
+    fi
+    note "Starting $ty $id ($name)..."
+    local _pve_out
+    if [[ "$ty" == "CT" ]]; then
+      if _pve_out=$(pct start "$id" 2>&1); then
+        ok "$ty $id started successfully."
+      else
+        err "Failed to start CT $id."
+        [[ -n "$_pve_out" ]] && note "Proxmox: $(printf '%s' "$_pve_out" | head -3)"
       fi
-      note "Starting $ty $id ($name)..."
-      local _pve_out
-      if [[ "$ty" == "CT" ]]; then
-        if _pve_out=$(pct start "$id" 2>&1); then
-          ok "$ty $id started successfully."
+    else
+      if _pve_out=$(qm start "$id" 2>&1); then
+        ok "$ty $id started successfully."
+      else
+        err "Failed to start VM $id."
+        [[ -n "$_pve_out" ]] && note "Proxmox: $(printf '%s' "$_pve_out" | head -3)"
+      fi
+    fi
+    ;;
+
+  # ------------------------------------------------------------------
+  stop)
+    if [[ "$st" != "running" ]]; then
+      ok "$ty $id ($name) is not running (status: $st)."
+      return
+    fi
+    confirm "Stop $ty $id ($name)?" || {
+      note "Aborted."
+      return
+    }
+    note "Stopping $ty $id ($name) (timeout: ${STOP_TIMEOUT}s)..."
+    local _timeout_out='' _timeout_exit=0 _force_out='' _force_exit=0
+    if [[ "$ty" == "CT" ]]; then
+      _timeout_out=$(timeout "${STOP_TIMEOUT}" pct stop "$id" 2>&1) || _timeout_exit=$?
+      if ((_timeout_exit == 0)); then
+        ok "$ty $id stopped."
+      elif ((_timeout_exit == 124)); then
+        note "Timeout after ${STOP_TIMEOUT}s. Forcing stop with --overrule-shutdown..."
+        _force_out=$(pct stop "$id" --overrule-shutdown 1 2>&1) || _force_exit=$?
+        if ((_force_exit == 0)); then
+          ok "$ty $id force-stopped."
         else
-          err "Failed to start CT $id."
-          [[ -n "$_pve_out" ]] && note "Proxmox: $(printf '%s' "$_pve_out" | head -3)"
+          err "Force stop failed for CT $id."
+          [[ -n "$_force_out" ]] && note "Proxmox: $(printf '%s' "$_force_out" | head -3)"
         fi
       else
-        if _pve_out=$(qm start "$id" 2>&1); then
-          ok "$ty $id started successfully."
-        else
-          err "Failed to start VM $id."
-          [[ -n "$_pve_out" ]] && note "Proxmox: $(printf '%s' "$_pve_out" | head -3)"
-        fi
+        err "Failed to stop CT $id."
+        [[ -n "$_timeout_out" ]] && note "Proxmox: $(printf '%s' "$_timeout_out" | head -3)"
       fi
-      ;;
-
-    # ------------------------------------------------------------------
-    stop)
-      if [[ "$st" != "running" ]]; then
-        ok "$ty $id ($name) is not running (status: $st)."
-        return
-      fi
-      confirm "Stop $ty $id ($name)?" || {
-        note "Aborted."
-        return
-      }
-      note "Stopping $ty $id ($name) (timeout: ${STOP_TIMEOUT}s)..."
-      local _timeout_out='' _timeout_exit=0 _force_out='' _force_exit=0
-      if [[ "$ty" == "CT" ]]; then
-        _timeout_out=$(timeout "${STOP_TIMEOUT}" pct stop "$id" 2>&1) || _timeout_exit=$?
-        if ((_timeout_exit == 0)); then
-          ok "$ty $id stopped."
-        elif ((_timeout_exit == 124)); then
-          note "Timeout after ${STOP_TIMEOUT}s. Forcing stop with --overrule-shutdown..."
-          _force_out=$(pct stop "$id" --overrule-shutdown 1 2>&1) || _force_exit=$?
-          if ((_force_exit == 0)); then
-            ok "$ty $id force-stopped."
-          else
-            err "Force stop failed for CT $id."
-            [[ -n "$_force_out" ]] && note "Proxmox: $(printf '%s' "$_force_out" | head -3)"
-          fi
+    else
+      _timeout_out=$(timeout "${STOP_TIMEOUT}" qm stop "$id" 2>&1) || _timeout_exit=$?
+      if ((_timeout_exit == 0)); then
+        ok "$ty $id stopped."
+      elif ((_timeout_exit == 124)); then
+        note "Timeout after ${STOP_TIMEOUT}s. Forcing stop with --overrule-shutdown..."
+        _force_out=$(qm stop "$id" --overrule-shutdown 1 2>&1) || _force_exit=$?
+        if ((_force_exit == 0)); then
+          ok "$ty $id force-stopped."
         else
-          err "Failed to stop CT $id."
-          [[ -n "$_timeout_out" ]] && note "Proxmox: $(printf '%s' "$_timeout_out" | head -3)"
+          err "Force stop failed for VM $id."
+          [[ -n "$_force_out" ]] && note "Proxmox: $(printf '%s' "$_force_out" | head -3)"
         fi
       else
-        _timeout_out=$(timeout "${STOP_TIMEOUT}" qm stop "$id" 2>&1) || _timeout_exit=$?
-        if ((_timeout_exit == 0)); then
-          ok "$ty $id stopped."
-        elif ((_timeout_exit == 124)); then
-          note "Timeout after ${STOP_TIMEOUT}s. Forcing stop with --overrule-shutdown..."
-          _force_out=$(qm stop "$id" --overrule-shutdown 1 2>&1) || _force_exit=$?
-          if ((_force_exit == 0)); then
-            ok "$ty $id force-stopped."
-          else
-            err "Force stop failed for VM $id."
-            [[ -n "$_force_out" ]] && note "Proxmox: $(printf '%s' "$_force_out" | head -3)"
-          fi
-        else
-          err "Failed to stop VM $id."
-          [[ -n "$_timeout_out" ]] && note "Proxmox: $(printf '%s' "$_timeout_out" | head -3)"
-        fi
+        err "Failed to stop VM $id."
+        [[ -n "$_timeout_out" ]] && note "Proxmox: $(printf '%s' "$_timeout_out" | head -3)"
       fi
-      ;;
+    fi
+    ;;
 
-    # ------------------------------------------------------------------
-    restart)
-      if [[ "$st" != "running" ]]; then
-        note "$ty $id ($name) is not running. Starting instead of restarting."
-        do_action "$id" "$ty" start "$name"
-        return
-      fi
-      confirm "Restart $ty $id ($name)?" || {
-        note "Aborted."
-        return
-      }
-      note "Restarting $ty $id ($name)..."
-      local _pve_out
-      if [[ "$ty" == "CT" ]]; then
-        if _pve_out=$(pct reboot "$id" 2>&1); then
-          ok "$ty $id restarted."
-        else
-          err "Failed to restart CT $id."
-          [[ -n "$_pve_out" ]] && note "Proxmox: $(printf '%s' "$_pve_out" | head -3)"
-        fi
+  # ------------------------------------------------------------------
+  restart)
+    if [[ "$st" != "running" ]]; then
+      note "$ty $id ($name) is not running. Starting instead of restarting."
+      do_action "$id" "$ty" start "$name"
+      return
+    fi
+    confirm "Restart $ty $id ($name)?" || {
+      note "Aborted."
+      return
+    }
+    note "Restarting $ty $id ($name)..."
+    local _pve_out
+    if [[ "$ty" == "CT" ]]; then
+      if _pve_out=$(pct reboot "$id" 2>&1); then
+        ok "$ty $id restarted."
       else
-        if _pve_out=$(qm reboot "$id" 2>&1); then
-          ok "$ty $id restarted."
-        else
-          err "Failed to restart VM $id."
-          [[ -n "$_pve_out" ]] && note "Proxmox: $(printf '%s' "$_pve_out" | head -3)"
-        fi
+        err "Failed to restart CT $id."
+        [[ -n "$_pve_out" ]] && note "Proxmox: $(printf '%s' "$_pve_out" | head -3)"
       fi
-      ;;
-
-    # ------------------------------------------------------------------
-    status)
-      note "Status for $ty $id ($name):"
-      if [[ "$ty" == "CT" ]]; then
-        if ! pct status "$id" 2>/dev/null; then
-          err "Could not retrieve status for CT $id."
-        fi
+    else
+      if _pve_out=$(qm reboot "$id" 2>&1); then
+        ok "$ty $id restarted."
       else
-        if ! qm status "$id" 2>/dev/null; then
-          err "Could not retrieve status for VM $id."
-        fi
+        err "Failed to restart VM $id."
+        [[ -n "$_pve_out" ]] && note "Proxmox: $(printf '%s' "$_pve_out" | head -3)"
       fi
-      ;;
+    fi
+    ;;
 
-    *) err "Unknown action: $act" ;;
+  # ------------------------------------------------------------------
+  status)
+    note "Status for $ty $id ($name):"
+    if [[ "$ty" == "CT" ]]; then
+      if ! pct status "$id" 2>/dev/null; then
+        err "Could not retrieve status for CT $id."
+      fi
+    else
+      if ! qm status "$id" 2>/dev/null; then
+        err "Could not retrieve status for VM $id."
+      fi
+    fi
+    ;;
+
+  *) err "Unknown action: $act" ;;
   esac
 }
 
@@ -1083,108 +1083,108 @@ snapshots_menu() {
   local s
   read_line s
   case "$s" in
-    1)
-      _list_snapshots "$id" "$ty" || true
-      ;;
+  1)
+    _list_snapshots "$id" "$ty" || true
+    ;;
 
-    2)
-      printf '  %bSnapshot name:%b ' "${BOLD}" "${NC}"
-      local sn
-      read_line sn
-      sn="$(trim "$sn")"
-      if [[ -z "$sn" ]]; then
-        note "Aborted — no name given."
+  2)
+    printf '  %bSnapshot name:%b ' "${BOLD}" "${NC}"
+    local sn
+    read_line sn
+    sn="$(trim "$sn")"
+    if [[ -z "$sn" ]]; then
+      note "Aborted — no name given."
+      return
+    fi
+    validate_snapshot_name "$sn" || return
+    note "Creating snapshot '$sn' for $ty $id..."
+    local _snap_out
+    if [[ "$ty" == "CT" ]]; then
+      if ! _snap_out=$(pct snapshot "$id" "$sn" 2>&1); then
+        err "Snapshot creation failed."
+        [[ -n "$_snap_out" ]] && note "Proxmox: $(printf '%s' "$_snap_out" | head -3)"
         return
       fi
-      validate_snapshot_name "$sn" || return
-      note "Creating snapshot '$sn' for $ty $id..."
-      local _snap_out
-      if [[ "$ty" == "CT" ]]; then
-        if ! _snap_out=$(pct snapshot "$id" "$sn" 2>&1); then
-          err "Snapshot creation failed."
-          [[ -n "$_snap_out" ]] && note "Proxmox: $(printf '%s' "$_snap_out" | head -3)"
-          return
-        fi
-      else
-        if ! _snap_out=$(qm snapshot "$id" "$sn" 2>&1); then
-          err "Snapshot creation failed."
-          [[ -n "$_snap_out" ]] && note "Proxmox: $(printf '%s' "$_snap_out" | head -3)"
-          return
-        fi
+    else
+      if ! _snap_out=$(qm snapshot "$id" "$sn" 2>&1); then
+        err "Snapshot creation failed."
+        [[ -n "$_snap_out" ]] && note "Proxmox: $(printf '%s' "$_snap_out" | head -3)"
+        return
       fi
-      ok "Snapshot '$sn' created."
-      ;;
+    fi
+    ok "Snapshot '$sn' created."
+    ;;
 
-    3)
-      _list_snapshots "$id" "$ty" || true
-      echo
-      printf '  %bRoll back to snapshot name:%b ' "${BOLD}" "${NC}"
-      local sn
-      read_line sn
-      sn="$(trim "$sn")"
-      if [[ -z "$sn" ]]; then
-        note "Aborted — no name given."
+  3)
+    _list_snapshots "$id" "$ty" || true
+    echo
+    printf '  %bRoll back to snapshot name:%b ' "${BOLD}" "${NC}"
+    local sn
+    read_line sn
+    sn="$(trim "$sn")"
+    if [[ -z "$sn" ]]; then
+      note "Aborted — no name given."
+      return
+    fi
+    validate_snapshot_name "$sn" || return
+    confirm "Roll back $ty $id to snapshot '$sn'? This cannot be undone." || {
+      note "Aborted."
+      return
+    }
+    note "Rolling back $ty $id to '$sn'..."
+    local _rb_out
+    if [[ "$ty" == "CT" ]]; then
+      if ! _rb_out=$(pct rollback "$id" "$sn" 2>&1); then
+        err "Rollback failed."
+        [[ -n "$_rb_out" ]] && note "Proxmox: $(printf '%s' "$_rb_out" | head -3)"
         return
       fi
-      validate_snapshot_name "$sn" || return
-      confirm "Roll back $ty $id to snapshot '$sn'? This cannot be undone." || {
-        note "Aborted."
+    else
+      if ! _rb_out=$(qm rollback "$id" "$sn" 2>&1); then
+        err "Rollback failed."
+        [[ -n "$_rb_out" ]] && note "Proxmox: $(printf '%s' "$_rb_out" | head -3)"
         return
-      }
-      note "Rolling back $ty $id to '$sn'..."
-      local _rb_out
-      if [[ "$ty" == "CT" ]]; then
-        if ! _rb_out=$(pct rollback "$id" "$sn" 2>&1); then
-          err "Rollback failed."
-          [[ -n "$_rb_out" ]] && note "Proxmox: $(printf '%s' "$_rb_out" | head -3)"
-          return
-        fi
-      else
-        if ! _rb_out=$(qm rollback "$id" "$sn" 2>&1); then
-          err "Rollback failed."
-          [[ -n "$_rb_out" ]] && note "Proxmox: $(printf '%s' "$_rb_out" | head -3)"
-          return
-        fi
       fi
-      ok "Rollback to '$sn' completed."
-      ;;
+    fi
+    ok "Rollback to '$sn' completed."
+    ;;
 
-    4)
-      _list_snapshots "$id" "$ty" || true
-      echo
-      printf '  %bSnapshot to delete:%b ' "${BOLD}" "${NC}"
-      local sn
-      read_line sn
-      sn="$(trim "$sn")"
-      if [[ -z "$sn" ]]; then
-        note "Aborted — no name given."
+  4)
+    _list_snapshots "$id" "$ty" || true
+    echo
+    printf '  %bSnapshot to delete:%b ' "${BOLD}" "${NC}"
+    local sn
+    read_line sn
+    sn="$(trim "$sn")"
+    if [[ -z "$sn" ]]; then
+      note "Aborted — no name given."
+      return
+    fi
+    validate_snapshot_name "$sn" || return
+    confirm "Delete snapshot '$sn' from $ty $id?" || {
+      note "Aborted."
+      return
+    }
+    note "Deleting snapshot '$sn'..."
+    local _del_out
+    if [[ "$ty" == "CT" ]]; then
+      if ! _del_out=$(pct delsnapshot "$id" "$sn" 2>&1); then
+        err "Snapshot deletion failed."
+        [[ -n "$_del_out" ]] && note "Proxmox: $(printf '%s' "$_del_out" | head -3)"
         return
       fi
-      validate_snapshot_name "$sn" || return
-      confirm "Delete snapshot '$sn' from $ty $id?" || {
-        note "Aborted."
+    else
+      if ! _del_out=$(qm delsnapshot "$id" "$sn" 2>&1); then
+        err "Snapshot deletion failed."
+        [[ -n "$_del_out" ]] && note "Proxmox: $(printf '%s' "$_del_out" | head -3)"
         return
-      }
-      note "Deleting snapshot '$sn'..."
-      local _del_out
-      if [[ "$ty" == "CT" ]]; then
-        if ! _del_out=$(pct delsnapshot "$id" "$sn" 2>&1); then
-          err "Snapshot deletion failed."
-          [[ -n "$_del_out" ]] && note "Proxmox: $(printf '%s' "$_del_out" | head -3)"
-          return
-        fi
-      else
-        if ! _del_out=$(qm delsnapshot "$id" "$sn" 2>&1); then
-          err "Snapshot deletion failed."
-          [[ -n "$_del_out" ]] && note "Proxmox: $(printf '%s' "$_del_out" | head -3)"
-          return
-        fi
       fi
-      ok "Snapshot '$sn' deleted."
-      ;;
+    fi
+    ok "Snapshot '$sn' deleted."
+    ;;
 
-    5) : ;;
-    *) err "Invalid selection. Enter 1-5." ;;
+  5) : ;;
+  *) err "Invalid selection. Enter 1-5." ;;
   esac
 }
 
@@ -1255,27 +1255,27 @@ main() {
   fi
   log "INFO" "Starting proxmox-manager (mode=$MODE)"
   case "$MODE" in
-    list)
-      if print_table; then
-        exit 0
-      else
-        exit 1
-      fi
-      ;;
-    json)
-      print_json
+  list)
+    if print_table; then
       exit 0
-      ;;
-    interactive)
-      while true; do
-        main_menu || true
-        ((RUN_ONCE == 1)) && break
-      done
-      ;;
-    *)
-      err "Unknown mode: $MODE"
+    else
       exit 1
-      ;;
+    fi
+    ;;
+  json)
+    print_json
+    exit 0
+    ;;
+  interactive)
+    while true; do
+      main_menu || true
+      ((RUN_ONCE == 1)) && break
+    done
+    ;;
+  *)
+    err "Unknown mode: $MODE"
+    exit 1
+    ;;
   esac
 }
 
