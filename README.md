@@ -30,6 +30,11 @@ No daemons. No agents. No dependencies beyond what ships with Proxmox VE.
 </div>
 
 ---
+## 📖 Community & Tutorials
+
+Check out how others are using `proxmox-manager`:
+
+* 🇵🇱 **[Proxmox Manager – Co to jest, jak działa, instalacja i obsługa](https://blog.askomputer.pl/proxmox-manager-timintech-co-to-jest-jak-dziala-instalacja-i-obsluga/)** *A detailed walkthrough and review by askomputer.pl featuring usage examples and screenshots (in Polish).*
 
 ## 📸 Screenshots
 
