@@ -8,7 +8,7 @@
 ║  ██████╔╝██╔████╔██║ ███████║ ██╔██╗ ██║               ║
 ║  ██╔═══╝ ██║╚██╔╝██║ ██╔══██║ ██║╚██╗██║               ║
 ║  ██║     ██║ ╚═╝ ██║ ██║  ██║ ██║ ╚████║               ║
-║  ╚═╝     ╚═╝     ╚═╝ ╚═╝  ╚═╝ ╚═╝  ╚═══╝  v2.10.0     ║
+║  ╚═╝     ╚═╝     ╚═╝ ╚═╝  ╚═╝ ╚═╝  ╚═══╝  v2.11.0     ║
 ║                                                          ║
 ║  Proxmox VM/CT Manager · Single Bash · No Dependencies  ║
 ╚══════════════════════════════════════════════════════════╝
@@ -56,6 +56,7 @@ Check out how others are using `proxmox-manager`:
 | 📋 | **List & Status** | All VMs and containers with live status — `[+]` running · `[-]` stopped · `[~]` paused · `[?]` unknown |
 | ⚡ | **Start / Stop / Restart** | Confirmation prompt for destructive actions. Proxmox error details on failure. Configurable timeout with force-stop fallback |
 | 🖥️ | **Console Access** | LXC shell via `pct enter` or QEMU terminal via `qm terminal`. Verifies running state before entering |
+| 🌐 | **IP Address Lookup** | Shows current IPv4 addresses for running VMs and CTs — VM via QEMU Guest Agent, CT via `pct exec` |
 | 📦 | **Snapshot Management** | List, create, rollback, delete — with name validation and snapshot preview before destructive actions |
 | 🖱️ | **SPICE Integration** | Enable SPICE for VMs and retrieve `.vv` connection files. Auto-launches `virt-viewer` when installed |
 | 🤖 | **Automation-Ready** | `--json` output, `--filter` by status, `--name` ERE filter, `--force` mode, structured logging via `LOG_FILE` |
@@ -222,7 +223,7 @@ cp completions/pman.zsh ~/.zsh/completions/_pman
 
 ## 📋 Changelog
 
-### 🆕 [v2.10.0](CHANGELOG.md) — 2026-05-04
+### 🆕 [v2.11.0](CHANGELOG.md) — 2026-05-04
 
 | Issue | Change |
 |---|---|
@@ -232,6 +233,7 @@ cp completions/pman.zsh ~/.zsh/completions/_pman
 | [#24](https://github.com/TimInTech/proxmox-manager/issues/24) | `validate_menu_choice()` helper — unified error format for all menu inputs |
 | [#25](https://github.com/TimInTech/proxmox-manager/issues/25) | `--name PATTERN` flag — ERE substring filter on VM/CT name, combinable with `--filter` |
 | [#26](https://github.com/TimInTech/proxmox-manager/issues/26) | `virt-viewer` auto-launched from SPICE info; fallback hint when not installed |
+| [#28](https://github.com/TimInTech/proxmox-manager/issues/28) | New **IP info** menu item to show current IPv4 addresses for running VMs and CTs |
 
 ### [v2.9.0](CHANGELOG.md) — 2026-04-09
 
@@ -251,7 +253,7 @@ shellcheck proxmox-manager.sh
 tests/run.sh
 ```
 
-29 tests covering `validate_vmid`, `validate_snapshot_name`, `--filter`, and CLI flags.
+31 tests covering `validate_vmid`, `validate_snapshot_name`, `ip_info`, `--filter`, and CLI flags.
 
 ---
 

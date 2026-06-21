@@ -17,6 +17,9 @@ Versions follow [Semantic Versioning](https://semver.org/).
   logs each bypassed prompt in yellow so the action is always visible.
 - `filtered_instances()` wrapper around `collect_instances()`; used by `print_table` and
   `print_json` so filter logic is in one place.
+- New **IP info** menu item: shows current IPv4 addresses for running VMs and CTs. VMs use the
+  QEMU Guest Agent, CTs use `pct exec ... ip -j addr show`, with clear fallback messages when
+  no address is available.
 - Bash completion script: `completions/pman.bash` — tab-completes all flags; suggests
   `running|stopped|paused` after `--filter` and common timeout values after `--timeout`.
 - Zsh completion script: `completions/pman.zsh` — `_arguments`-based with value specs for
