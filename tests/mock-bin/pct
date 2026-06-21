@@ -12,6 +12,13 @@ VMID       Status     Name
 101 stopped -
 EOL
     ;;
+  exec)
+    if [[ "${2:-}" == "--" && "${3:-}" == "ip" && "${4:-}" == "-j" ]]; then
+      cat <<'EOL'
+[{"ifname":"lo","addr_info":[{"family":"inet","local":"127.0.0.1"}]},{"ifname":"eth0","addr_info":[{"family":"inet","local":"192.168.178.102"},{"family":"inet6","local":"fe80::1"}]},{"ifname":"eth1","addr_info":[{"family":"inet","local":"10.0.0.8"}]}]
+EOL
+    fi
+    ;;
   config)
     case "${1:-}" in
       101) echo "hostname: ct-fallback" ;;

@@ -160,6 +160,25 @@ _snap_test "snap!"     1 "contains special character"
 _snap_test "$(printf 'a%.0s' {1..41})" 1 "41 chars (too long)"
 
 # ---------------------------------------------------------------------------
+# Unit tests: ip_info()
+# ---------------------------------------------------------------------------
+_vm_ip_exit=0
+_vm_ip_out="$(ip_info 200 VM vm-one 2>&1)" || _vm_ip_exit=$?
+if [[ "$_vm_ip_exit" == "0" ]] && printf '%s\n' "$_vm_ip_out" | grep -q '192.168.178.20'; then
+  _pass "ip_info: VM returns IPv4 addresses"
+else
+  _fail "ip_info: VM did not return expected IPv4 address"
+fi
+
+_ct_ip_exit=0
+_ct_ip_out="$(ip_info 100 CT ct-one 2>&1)" || _ct_ip_exit=$?
+if [[ "$_ct_ip_exit" == "0" ]] && printf '%s\n' "$_ct_ip_out" | grep -q '192.168.178.102'; then
+  _pass "ip_info: CT returns IPv4 addresses"
+else
+  _fail "ip_info: CT did not return expected IPv4 address"
+fi
+
+# ---------------------------------------------------------------------------
 # Tests: --filter flag
 # ---------------------------------------------------------------------------
 filter_run_out="$("$SCRIPT" --list --filter running)"

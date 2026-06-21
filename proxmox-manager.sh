@@ -1,12 +1,13 @@
 #!/usr/bin/env bash
 # Proxmox VM/CT Management Tool
-# Version 2.10.0 — 2026-05-04
+# Version 2.11.0 — 2026-05-04
 # - fix: #21 full stderr written to LOG_FILE; only first line shown on stdout
 # - feat: #22 load /etc/pmanrc and ~/.pmanrc before CLI flags; validates STOP_TIMEOUT
 # - feat: #23 numbered snapshot selection for rollback and delete
 # - feat: #24 validate_menu_choice() helper; unified error format for menu input
 # - feat: #25 --name PATTERN (ERE) to filter by VM/CT name; combinable with --filter
 # - feat: #26 virt-viewer auto-launch from spice_info(); fallback hint when not installed
+# - feat: #28 show current IP addresses for running VMs/CTs
 
 set -Eeuo pipefail
 IFS=$'\n\t'
@@ -827,7 +828,7 @@ action_menu() {
   local st
   st="$(status_of "$id" "$ty")"
 
-  local W=45
+  local W=52
   echo
   _draw_line_top $W
 
@@ -866,19 +867,30 @@ action_menu() {
     "${CYAN_BRIGHT}" "${NC}" \
     "${CYAN_BRIGHT}" "${NC}" \
     "${CYAN_BRIGHT}" "${NC}"
+  printf '%b%s%b  %b7%b) IP info\n' \
+    "${CYAN}" "${LINE_V}" "${NC}" \
+    "${CYAN_BRIGHT}" "${NC}"
   if [[ "$ty" == "VM" ]]; then
-    printf '%b%s%b  %b7%b) SPICE info   %b8%b) Enable SPICE\n' \
+    printf '%b%s%b  %b8%b) SPICE info   %b9%b) Enable SPICE\n' \
       "${CYAN}" "${LINE_V}" "${NC}" \
       "${CYAN_BRIGHT}" "${NC}" \
       "${CYAN_BRIGHT}" "${NC}"
+    printf '%b%s%b  %b10%b) Back\n' \
+      "${CYAN}" "${LINE_V}" "${NC}" \
+      "${DIM}" "${NC}"
+  else
+    printf '%b%s%b  %b8%b) Back\n' \
+      "${CYAN}" "${LINE_V}" "${NC}" \
+      "${DIM}" "${NC}"
   fi
-  printf '%b%s%b  %b9%b) Back\n' \
-    "${CYAN}" "${LINE_V}" "${NC}" \
-    "${DIM}" "${NC}"
 
   _draw_line_bot $W
   echo
-  printf '  %b→%b Selection [1-9]: ' "${CYAN_BRIGHT}" "${NC}"
+  if [[ "$ty" == "VM" ]]; then
+    printf '  %b→%b Selection [1-10]: ' "${CYAN_BRIGHT}" "${NC}"
+  else
+    printf '  %b→%b Selection [1-8]: ' "${CYAN_BRIGHT}" "${NC}"
+  fi
   local opt
   read_line opt
   case "$opt" in
@@ -888,22 +900,25 @@ action_menu() {
   4) do_action "$id" "$ty" status "$name" ;;
   5) open_console "$id" "$ty" "$name" ;;
   6) snapshots_menu "$id" "$ty" "$name" ;;
-  7)
-    if [[ "$ty" == "VM" ]]; then
-      spice_info "$id" "$name"
-    else
-      err "SPICE is only available for VMs."
-    fi
-    ;;
+  7) ip_info "$id" "$ty" "$name" ;;
   8)
     if [[ "$ty" == "VM" ]]; then
-      spice_enable "$id"
-    else
-      err "SPICE is only available for VMs."
+      spice_info "$id" "$name"
     fi
     ;;
-  9 | '') : ;;
-  *) validate_menu_choice "$opt" 1 9 "action menu" || true ;;
+  9)
+    if [[ "$ty" == "VM" ]]; then
+      spice_enable "$id"
+    fi
+    ;;
+  10) : ;;
+  *)
+    if [[ "$ty" == "VM" ]]; then
+      validate_menu_choice "$opt" 1 10 "action menu" || true
+    else
+      validate_menu_choice "$opt" 1 8 "action menu" || true
+    fi
+    ;;
   esac
   printf '\n  %bPress Enter to continue...%b ' "${DIM}" "${NC}"
   local _dummy
@@ -1328,6 +1343,144 @@ spice_enable() {
   else
     err "Could not enable SPICE for VM ${id}."
   fi
+}
+
+# =============================================================================
+# NETWORK / IP ADDRESS LOOKUP
+# =============================================================================
+
+# _extract_ipv4_rows JSON KIND — print TAB-separated "iface<TAB>ip" rows.
+# KIND is either "VM" (QEMU guest agent) or "CT" (ip -j addr show).
+_extract_ipv4_rows() {
+  local json="$1" kind="$2"
+  if ! have python3; then
+    return 1
+  fi
+
+  python3 - "$kind" "$json" <<'PY'
+import ipaddress
+import json
+import sys
+
+kind = sys.argv[1]
+raw = sys.argv[2]
+
+try:
+    data = json.loads(raw)
+except Exception:
+    sys.exit(1)
+
+rows = []
+
+def add(iface, ip):
+    try:
+        addr = ipaddress.ip_address(ip)
+    except ValueError:
+        return
+    if addr.version != 4:
+        return
+    if addr.is_loopback or addr.is_link_local:
+        return
+    rows.append((iface or 'unknown', str(addr)))
+
+if kind == 'VM':
+    interfaces = data.get('result', data)
+    if not isinstance(interfaces, list):
+        interfaces = []
+    for iface in interfaces:
+        if not isinstance(iface, dict):
+            continue
+        name = iface.get('name') or iface.get('hardware-address') or 'unknown'
+        ips = iface.get('ip-addresses') or []
+        if not isinstance(ips, list):
+            continue
+        for entry in ips:
+            if not isinstance(entry, dict):
+                continue
+            if entry.get('ip-address-type') != 'ipv4':
+                continue
+            ip = entry.get('ip-address')
+            if isinstance(ip, str):
+                add(name, ip)
+elif kind == 'CT':
+    if not isinstance(data, list):
+        data = []
+    for iface in data:
+        if not isinstance(iface, dict):
+            continue
+        name = iface.get('ifname') or 'unknown'
+        infos = iface.get('addr_info') or []
+        if not isinstance(infos, list):
+            continue
+        for entry in infos:
+            if not isinstance(entry, dict):
+                continue
+            if entry.get('family') != 'inet':
+                continue
+            ip = entry.get('local')
+            if isinstance(ip, str):
+                add(name, ip)
+else:
+    sys.exit(1)
+
+seen = set()
+for iface, ip in rows:
+    key = (iface, ip)
+    if key in seen:
+        continue
+    seen.add(key)
+    print(f"{iface}\t{ip}")
+PY
+}
+
+# ip_info ID TYPE NAME — show current IPv4 addresses for running guests.
+ip_info() {
+  local id="$1" ty="$2" name="$3"
+  local st raw rows
+  st="$(status_of "$id" "$ty")"
+  if [[ "$st" != "running" ]]; then
+    err "$ty $id ($name) is not running (status: $st)."
+    return 1
+  fi
+
+  note "Fetching IPv4 address(es) for $ty $id ($name)..."
+  case "$ty" in
+  CT)
+    if ! raw=$(pct exec "$id" -- ip -j addr show 2>&1); then
+      err "Could not query IP addresses for CT $id."
+      _log_pve_err "$raw"
+      return 1
+    fi
+    ;;
+  VM)
+    if ! raw=$(qm agent "$id" network-get-interfaces 2>&1); then
+      err "Could not query IP addresses for VM $id."
+      _log_pve_err "$raw"
+      note "Tip: ensure the QEMU Guest Agent is installed and enabled inside the VM."
+      return 1
+    fi
+    ;;
+  *)
+    err "Unknown guest type '$ty'."
+    return 1
+    ;;
+  esac
+
+  if ! rows="$(_extract_ipv4_rows "$raw" "$ty")"; then
+    err "Failed to parse IP address output for $ty $id."
+    return 1
+  fi
+
+  if [[ -z "$rows" ]]; then
+    note "No IPv4 address found for $ty $id ($name)."
+    return 1
+  fi
+
+  printf '  %bIPv4 address(es) for %s %s (%s):%b\n' "${BOLD}${CYAN_BRIGHT}" "$ty" "$id" "$name" "${NC}"
+  while IFS=$'\t' read -r iface ip; do
+    [[ -z "$iface" || -z "$ip" ]] && continue
+    printf '  %b%s%b: %s\n' "${CYAN_BRIGHT}" "$iface" "${NC}" "$ip"
+  done <<<"$rows"
 }
 
 # =============================================================================
