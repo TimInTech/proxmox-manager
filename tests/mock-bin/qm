@@ -15,7 +15,7 @@ EOL
   agent)
     if [[ "${2:-}" == "network-get-interfaces" ]]; then
       cat <<'EOL'
-{"result":[{"name":"eth0","hardware-address":"52:54:00:aa:bb:cc","ip-addresses":[{"ip-address-type":"ipv4","ip-address":"192.168.178.20"},{"ip-address-type":"ipv6","ip-address":"fe80::1"}]},{"name":"eth1","ip-addresses":[{"ip-address-type":"ipv4","ip-address":"10.10.10.5"}]}]}
+[{"name":"lo","ip-addresses":[{"ip-address-type":"ipv4","ip-address":"127.0.0.1"}]},{"name":"eth0","ip-addresses":[{"ip-address-type":"ipv4","ip-address":"192.168.178.20"},{"ip-address-type":"ipv6","ip-address":"fe80::1"}]},{"name":"eth1","ip-addresses":[{"ip-address-type":"ipv4","ip-address":"10.10.10.5"}]}]
 EOL
     fi
     ;;

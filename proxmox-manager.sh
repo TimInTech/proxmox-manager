@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Proxmox VM/CT Management Tool
-# Version 2.11.0 — 2026-05-04
+# Version 2.11.1 — 2026-05-04
 # - fix: #21 full stderr written to LOG_FILE; only first line shown on stdout
 # - feat: #22 load /etc/pmanrc and ~/.pmanrc before CLI flags; validates STOP_TIMEOUT
 # - feat: #23 numbered snapshot selection for rollback and delete
@@ -1384,7 +1384,9 @@ def add(iface, ip):
     rows.append((iface or 'unknown', str(addr)))
 
 if kind == 'VM':
-    interfaces = data.get('result', data)
+    interfaces = data
+    if isinstance(data, dict):
+        interfaces = data.get('result', data)
     if not isinstance(interfaces, list):
         interfaces = []
     for iface in interfaces:

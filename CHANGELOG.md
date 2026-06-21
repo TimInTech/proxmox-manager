@@ -9,6 +9,8 @@ Versions follow [Semantic Versioning](https://semver.org/).
 ## [Unreleased]
 
 ### Added
+- VM IP lookup now accepts the native QEMU Guest Agent list payload from `qm agent ... network-get-interfaces`
+  as well as the earlier wrapped shape, preventing parser errors on hosts that return a bare JSON array.
 - `--filter STATUS` flag: filter `--list` / `--json` output to `running`, `stopped`, or `paused`
   instances; invalid values exit 1 with a clear error message.
 - `--timeout SECS` flag: set a timeout (default 60 s) for stop operations; on exit code 124
