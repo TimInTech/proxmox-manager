@@ -8,9 +8,19 @@ Versions follow [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
-### Added
+### Fixed
 - VM IP lookup now accepts the native QEMU Guest Agent list payload from `qm agent ... network-get-interfaces`
   as well as the earlier wrapped shape, preventing parser errors on hosts that return a bare JSON array.
+- Snapshot name validation now matches Proxmox `pve-configid` rules before calling `pct` / `qm`;
+  numeric-only and single-letter names are rejected locally with a clearer message.
+- SPICE `.vv` files now prefer the actual SPICE bind address/port from Proxmox instead of always
+  using the host LAN IP, preventing mismatched connection targets on loopback-bound SPICE setups.
+- `spice_info()` no longer claims success launching `virt-viewer` from a non-graphical shell; it
+  falls back to the `.vv` file with a clear desktop-session hint.
+- VM console guidance now tells the user to follow the escape hint printed by Proxmox instead of
+  hardcoding a potentially wrong key sequence.
+
+### Added
 - `--filter STATUS` flag: filter `--list` / `--json` output to `running`, `stopped`, or `paused`
   instances; invalid values exit 1 with a clear error message.
 - `--timeout SECS` flag: set a timeout (default 60 s) for stop operations; on exit code 124

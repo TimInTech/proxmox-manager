@@ -192,12 +192,13 @@ validate_vmid() {
 }
 
 # validate_snapshot_name NAME — reject names Proxmox would refuse.
-# Valid: starts with alphanumeric, only [a-zA-Z0-9_-], max 40 chars.
+# Proxmox uses the pve-configid format for snapshot names:
+# start with a letter, then one or more of [a-zA-Z0-9_-], max 40 chars.
 validate_snapshot_name() {
   local sn="$1"
-  if [[ ! "$sn" =~ ^[a-zA-Z0-9][a-zA-Z0-9_-]{0,39}$ ]]; then
+  if [[ ! "$sn" =~ ^[a-zA-Z][a-zA-Z0-9_-]{1,39}$ ]]; then
     err "Invalid snapshot name '$sn'."
-    note "Name must start with a letter or digit, contain only [a-zA-Z0-9_-], and be at most 40 characters."
+    note "Name must start with a letter, contain only [a-zA-Z0-9_-], and be at most 40 characters."
     return 1
   fi
   return 0
@@ -1080,7 +1081,7 @@ open_console() {
       err "VM $id is not running. Start it first."
       return
     fi
-    note "Press Ctrl+] to exit the VM terminal."
+    note "If the terminal opens, use the escape hint shown by Proxmox to exit."
     if qm terminal "$id" 2>/dev/null; then
       :
     else
@@ -1292,17 +1293,45 @@ snapshots_menu() {
 # SPICE
 # =============================================================================
 
-spice_info() {
-  local id="$1" name="$2"
-  local host port
-  host="$(hostname -I 2>/dev/null | awk '{print $1}')"
-  port="$(qm monitor "$id" <<<"info spice" 2>/dev/null |
-    awk '/port/ {for(i=1;i<=NF;i++) if($i ~ /^[0-9]+$/){print $i; exit}}')"
-  [[ -z "$port" ]] && port="$(grep -E "(spice).*port" "/var/log/qemu-server/${id}.log" 2>/dev/null |
-    tail -1 | sed -n 's/.*port=\([0-9]\+\).*/\1/p' || true)"
-  local id_int
+_spice_has_gui_session() {
+  [[ -n "${DISPLAY:-}" ]] || [[ -n "${WAYLAND_DISPLAY:-}" && -n "${XDG_RUNTIME_DIR:-}" ]]
+}
+
+_spice_endpoint() {
+  local id="$1"
+  local monitor endpoint host='' port='' cfg_spice cfg_addr id_int
+
+  monitor="$(qm monitor "$id" <<<'info spice' 2>/dev/null || true)"
+  endpoint="$(sed -n 's/^[[:space:]]*address:[[:space:]]*\([^[:space:]]*\).*/\1/p' <<<"$monitor" | head -1)"
+  if [[ -n "$endpoint" ]]; then
+    if [[ "$endpoint" == \[*\]:* ]]; then
+      host="${endpoint%%]:*}"
+      host="${host#[}"
+      port="${endpoint##*:}"
+    elif [[ "$endpoint" == *:* ]]; then
+      host="${endpoint%:*}"
+      port="${endpoint##*:}"
+    fi
+  fi
+
+  cfg_spice="$(qm config "$id" 2>/dev/null | sed -n 's/^spice: .*port=\([0-9]\+\).*/\1/p' | head -1)"
+  cfg_addr="$(qm config "$id" 2>/dev/null | sed -n 's/^spice: .*addr=\([^,]*\).*/\1/p' | head -1)"
+  [[ -z "$port" && -n "$cfg_spice" ]] && port="$cfg_spice"
+  [[ -z "$host" && -n "$cfg_addr" ]] && host="$cfg_addr"
+
+  [[ -z "$host" ]] && host="${PROXMOX_MANAGER_SPICE_ADDR:-$(hostname -I 2>/dev/null | awk '{print $1}')}"
   id_int=$((10#$id))
   [[ -z "$port" ]] && port="$((61000 + id_int))"
+
+  printf '%s\t%s\n' "$host" "$port"
+}
+
+spice_info() {
+  local id="$1" name="$2"
+  local host port endpoint
+  endpoint="$(_spice_endpoint "$id")"
+  host="${endpoint%%$'\t'*}"
+  port="${endpoint##*$'\t'}"
 
   printf '  %bSPICE:%b spice://%s:%s\n' "${BOLD}${CYAN_BRIGHT}" "${NC}" "$host" "$port"
   umask 077
@@ -1321,12 +1350,16 @@ title=VM ${id} (${name})
 delete-this-file=1
 fullscreen=0
 EOF
-  if have virt-viewer; then
+  if have virt-viewer && _spice_has_gui_session; then
     virt-viewer "$vv" &
     ok "Launching virt-viewer for VM ${id}..."
   else
     ok "SPICE connection file: ${vv}"
-    note "Install virt-viewer with: apt install virt-viewer"
+    if have virt-viewer; then
+      note "No graphical session detected in this shell. Open the .vv file from a desktop session."
+    else
+      note "Install virt-viewer with: apt install virt-viewer"
+    fi
   fi
 }
 
