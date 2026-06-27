@@ -19,8 +19,29 @@ EOL
 EOL
     fi
     ;;
+  monitor)
+    cat <<'EOL'
+qm> info spice
+qm> Entering QEMU Monitor for VM 200 - type 'help' for help
+Server:
+     address: 127.0.0.1:61000 [tls]
+    migrated: false
+        auth: spice
+    compiled: 0.15.2
+  mouse-mode: client
+Channels: none
+EOL
+    ;;
   config)
     case "${1:-}" in
+      200)
+        cat <<'EOL'
+agent: enabled=1
+name: vm-one
+spice: port=61000,addr=127.0.0.1
+vga: qxl
+EOL
+        ;;
       201) echo "name: vm-fallback" ;;
       *) echo "name: vm-${1:-unknown}" ;;
     esac

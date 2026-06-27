@@ -153,6 +153,8 @@ _snap_test "my-snap_2" 0 "with hyphen and underscore"
 _snap_test "$(printf 'a%.0s' {1..40})" 0 "exactly 40 chars (max valid)"
 
 # Invalid names — expect exit 1
+_snap_test "1"         1 "numeric-only name"
+_snap_test "a"         1 "single-letter name"
 _snap_test "_snap"     1 "starts with underscore"
 _snap_test "-bad"      1 "starts with hyphen"
 _snap_test "snap name" 1 "contains space"
@@ -176,6 +178,33 @@ if [[ "$_ct_ip_exit" == "0" ]] && printf '%s\n' "$_ct_ip_out" | grep -q '192.168
   _pass "ip_info: CT returns IPv4 addresses"
 else
   _fail "ip_info: CT did not return expected IPv4 address"
+fi
+
+# ---------------------------------------------------------------------------
+# Unit tests: spice_info()
+# ---------------------------------------------------------------------------
+rm -f /tmp/hermes-virt-viewer-called
+unset DISPLAY WAYLAND_DISPLAY XDG_RUNTIME_DIR
+_spice_exit=0
+_spice_out="$(spice_info 200 vm-one 2>&1)" || _spice_exit=$?
+_spice_vv="$(printf '%s\n' "$_spice_out" | sed -n 's/.*SPICE connection file: //p' | tail -1)"
+if [[ "$_spice_exit" == "0" ]] && printf '%s\n' "$_spice_out" | grep -q 'spice://127.0.0.1:61000'; then
+  _pass "spice_info: URI uses monitor/config host and port"
+else
+  _fail "spice_info: URI did not use expected host/port"
+fi
+
+if [[ -n "$_spice_vv" ]] && [[ -f "$_spice_vv" ]] && grep -q '^host=127.0.0.1$' "$_spice_vv"; then
+  _pass "spice_info: .vv file uses actual SPICE bind host"
+else
+  _fail "spice_info: .vv file did not use expected host"
+fi
+
+if [[ -n "$_spice_vv" ]]; then rm -f "$_spice_vv"; fi
+if [[ ! -e /tmp/hermes-virt-viewer-called ]]; then
+  _pass "spice_info: does not auto-launch virt-viewer without GUI session"
+else
+  _fail "spice_info: auto-launched virt-viewer without GUI session"
 fi
 
 # ---------------------------------------------------------------------------

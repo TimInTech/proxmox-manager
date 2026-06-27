@@ -1,0 +1,4 @@
+#!/usr/bin/env bash
+set -euo pipefail
+: "${HERMES_VIRT_VIEWER_MARKER:=/tmp/hermes-virt-viewer-called}"
+printf '%s\n' "$*" >> "$HERMES_VIRT_VIEWER_MARKER"
