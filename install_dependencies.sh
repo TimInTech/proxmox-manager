@@ -71,10 +71,11 @@ else
 fi
 
 # ---------------------------------------------------------------------------
-# Install pman — global symlink in /usr/local/bin
+# Install pman — root-owned copy in /usr/local/bin
 # ---------------------------------------------------------------------------
 SCRIPT_DIR="$(cd "$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")" && pwd)"
 PMAN_SRC="${SCRIPT_DIR}/proxmox-manager.sh"
+PMAN_DIR="/usr/local/bin"
 PMAN_DST="/usr/local/bin/pman"
 
 if [[ ! -f "$PMAN_SRC" ]]; then
@@ -82,13 +83,33 @@ if [[ ! -f "$PMAN_SRC" ]]; then
   exit 1
 fi
 
-chmod +x "$PMAN_SRC"
-
-if [[ -L "$PMAN_DST" && "$(readlink -f "$PMAN_DST")" == "$(readlink -f "$PMAN_SRC")" ]]; then
-  _log "pman already installed: ${PMAN_DST}"
-else
-  ln -sf "$PMAN_SRC" "$PMAN_DST"
-  _ok "Installed: pman -> ${PMAN_SRC}"
+if [[ ! -d "$PMAN_DIR" || -L "$PMAN_DIR" ]]; then
+  _err "${PMAN_DIR} must be an existing regular directory."
+  exit 1
 fi
+
+PMAN_DIR_OWNER="$(stat -Lc '%u' -- "$PMAN_DIR" 2>/dev/null || printf 'invalid')"
+PMAN_DIR_MODE="$(stat -Lc '%a' -- "$PMAN_DIR" 2>/dev/null || printf 'invalid')"
+if [[ "$PMAN_DIR_OWNER" != "0" || ! "$PMAN_DIR_MODE" =~ ^[0-7]{3,4}$ ]] || ((8#$PMAN_DIR_MODE & 8#022)); then
+  _err "${PMAN_DIR} must be root-owned and not group/world-writable."
+  exit 1
+fi
+
+PMAN_TMP="$(mktemp -p "$PMAN_DIR" '.pman.XXXXXX')" || {
+  _err "Could not create a temporary install file in ${PMAN_DIR}."
+  exit 1
+}
+
+if ! install -o root -g root -m 0755 "$PMAN_SRC" "$PMAN_TMP" || ! cmp -s "$PMAN_SRC" "$PMAN_TMP"; then
+  rm -f -- "$PMAN_TMP"
+  _err "Failed to stage a verified pman executable."
+  exit 1
+fi
+if ! mv -fT -- "$PMAN_TMP" "$PMAN_DST"; then
+  rm -f -- "$PMAN_TMP"
+  _err "Failed to install ${PMAN_DST}."
+  exit 1
+fi
+_ok "Installed root-owned executable: ${PMAN_DST}"
 
 _ok "Done. All optional dependencies are available. Run 'pman' to start."

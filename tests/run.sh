@@ -112,6 +112,72 @@ fi
 # shellcheck source=./proxmox-manager.sh disable=SC1091
 source <(grep -v '^main ' "$SCRIPT")
 
+# Config files must be parsed as data and never execute shell content.
+config_file="$(mktemp)"
+config_probe="$(mktemp)"
+rm -f "$config_probe"
+printf '%s\n' \
+  'STOP_TIMEOUT=90' \
+  'LOG_FILE="/var/log/proxmox manager.log"' \
+  'PROXMOX_MANAGER_SPICE_ADDR=spice.example.invalid' \
+  "UNSUPPORTED=\$(touch $config_probe)" >"$config_file"
+STOP_TIMEOUT=60
+LOG_FILE=''
+PROXMOX_MANAGER_SPICE_ADDR=''
+_load_config_file "$config_file" 2>/dev/null
+if [[ "$STOP_TIMEOUT" == "90" && "$LOG_FILE" == "/var/log/proxmox manager.log" && "$PROXMOX_MANAGER_SPICE_ADDR" == "spice.example.invalid" && ! -e "$config_probe" ]]; then
+  _pass "config parser: allowlisted values parsed without code execution"
+else
+  _fail "config parser: unsafe execution or incorrect parsing"
+fi
+# shellcheck disable=SC2016 # Intentional literal command substitution attack string.
+printf 'LOG_FILE="$(touch %s)"\n' "$config_probe" >"$config_file"
+LOG_FILE=''
+_load_config_file "$config_file" 2>/dev/null
+# shellcheck disable=SC2016 # Verify that the attack string remained literal data.
+if [[ ! -e "$config_probe" && "$LOG_FILE" == *'$('* ]]; then
+  _pass "config parser: treats command substitution as literal data"
+else
+  _fail "config parser: executed command substitution"
+fi
+rm -f "$config_file" "$config_probe"
+STOP_TIMEOUT=60
+LOG_FILE=''
+PROXMOX_MANAGER_SPICE_ADDR=''
+
+# Log files must be private regular files and symlinks must be rejected.
+log_dir="$(mktemp -d)"
+chmod 700 "$log_dir"
+LOG_FILE="$log_dir/pman.log"
+if _prepare_log_file && [[ -f "$LOG_FILE" && ! -L "$LOG_FILE" && "$(stat -c '%a' "$LOG_FILE")" == "600" ]]; then
+  _pass "log security: creates a private regular file"
+else
+  _fail "log security: failed to create a private regular file"
+fi
+rm -f "$LOG_FILE"
+log_target="$log_dir/target"
+log_link="$log_dir/link"
+: >"$log_target"
+ln -s "$log_target" "$log_link"
+LOG_FILE="$log_link"
+if ! _prepare_log_file 2>/dev/null && [[ -z "$LOG_FILE" && ! -s "$log_target" ]]; then
+  _pass "log security: rejects symlink targets"
+else
+  _fail "log security: accepted a symlink target"
+fi
+rm -f "$log_link" "$log_target"
+rmdir "$log_dir"
+
+# User-controlled messages must not interpret backslash escapes.
+LOG_FILE=''
+literal_message='message\\cstill-visible'
+message_out="$(err "$literal_message" 2>&1)"
+if [[ "$message_out" == *"$literal_message"* ]]; then
+  _pass "output safety: preserves literal backslash escapes"
+else
+  _fail "output safety: interpreted backslash escapes"
+fi
+
 _vmid_test() {
   local id="$1" expect_exit="$2" label="$3" actual_exit=0
   validate_vmid "$id" >/dev/null 2>&1 && actual_exit=0 || actual_exit=$?

@@ -7,12 +7,19 @@ on:
 permissions:
   contents: read
 
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   shellcheck:
+    name: Shell checks
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          persist-credentials: false
 
       - name: Install shellcheck
         run: |
@@ -29,8 +36,18 @@ jobs:
           fi
           shellcheck -x "${files[@]}"
 
-      - name: Check shell formatting (shfmt)
+      - name: Download, verify, and run shfmt
+        env:
+          SHFMT_VERSION: 3.13.1
+          SHFMT_SHA256: fb096c5d1ac6beabbdbaa2874d025badb03ee07929f0c9ff67563ce8c75398b1
         run: |
-          curl -sS https://webinstall.dev/shfmt | bash
-          export PATH="$HOME/.local/bin:$PATH"
-          shfmt -d proxmox-manager.sh
+          set -euo pipefail
+          shfmt_path="${RUNNER_TEMP}/shfmt"
+          curl --fail --location --silent --show-error \
+            --proto '=https' --tlsv1.2 \
+            --retry 3 \
+            "https://github.com/mvdan/sh/releases/download/v${SHFMT_VERSION}/shfmt_v${SHFMT_VERSION}_linux_amd64" \
+            --output "${shfmt_path}"
+          printf '%s  %s\n' "${SHFMT_SHA256}" "${shfmt_path}" | sha256sum --check --strict
+          chmod 0755 "${shfmt_path}"
+          "${shfmt_path}" -d proxmox-manager.sh

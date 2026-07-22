@@ -6,30 +6,47 @@ on:
 permissions:
   contents: read
 
+concurrency:
+  group: gitleaks-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   scan:
+    name: Secret scan
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         with:
           fetch-depth: 0
+          persist-credentials: false
 
-      - name: Install gitleaks CLI
+      - name: Download and verify gitleaks CLI
+        env:
+          GITLEAKS_VERSION: 8.30.1
+          GITLEAKS_SHA256: 551f6fc83ea457d62a0d98237cbad105af8d557003051f41f3e7ca7b3f2470eb
         run: |
-          GITLEAKS_VERSION=8.21.2
-          curl -sSfL \
+          set -euo pipefail
+          archive="${RUNNER_TEMP}/gitleaks.tar.gz"
+          install_dir="${RUNNER_TEMP}/gitleaks-bin"
+          curl --fail --location --silent --show-error \
+            --proto '=https' --tlsv1.2 \
+            --retry 3 \
             "https://github.com/gitleaks/gitleaks/releases/download/v${GITLEAKS_VERSION}/gitleaks_${GITLEAKS_VERSION}_linux_x64.tar.gz" \
-            | sudo tar -xz -C /usr/local/bin gitleaks
+            --output "${archive}"
+          printf '%s  %s\n' "${GITLEAKS_SHA256}" "${archive}" | sha256sum --check --strict
+          mkdir -p "${install_dir}"
+          tar -xzf "${archive}" -C "${install_dir}" gitleaks
+          printf '%s\n' "${install_dir}" >> "${GITHUB_PATH}"
 
-      - name: Run gitleaks (workspace scan)
+      - name: Run gitleaks (history scan)
         run: |
-          gitleaks detect --redact --source . \
+          gitleaks git --redact --log-opts="--all" \
             --config .gitleaks.toml \
-            --report-format=sarif --report-path=results.sarif --exit-code=1
+            --report-format=sarif --report-path=results.sarif --exit-code=1 .
 
       - name: Upload SARIF report
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: gitleaks-results
           path: results.sarif

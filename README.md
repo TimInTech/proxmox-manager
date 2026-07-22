@@ -62,7 +62,7 @@ Check out how others are using `proxmox-manager`:
 | 📦 | **Snapshot Management** | List, create, rollback, delete — with name validation and snapshot preview before destructive actions |
 | 🖱️ | **SPICE Integration** | Enable SPICE for VMs and retrieve `.vv` connection files. Auto-launches `virt-viewer` when installed |
 | 🤖 | **Automation-Ready** | `--json` output, `--filter` by status, `--name` ERE filter, `--force` mode, structured logging via `LOG_FILE` |
-| ⚙️ | **Config File** | Persistent defaults via `/etc/pmanrc` or `~/.pmanrc` — CLI flags always win |
+| ⚙️ | **Config File** | Persistent allowlisted defaults via `/etc/pmanrc` or `~/.pmanrc` — CLI flags always win |
 
 ---
 
@@ -125,7 +125,7 @@ chmod +x proxmox-manager.sh
 ./install_dependencies.sh
 ```
 
-Installs a symlink to `/usr/local/bin/pman` so you can call `pman` from anywhere on the host.
+Installs an atomic, root-owned copy at `/usr/local/bin/pman` so later edits to the checkout cannot change the privileged executable.
 
 ---
 
@@ -198,8 +198,10 @@ CLI flags are applied last and always win over config file values.
 # ~/.pmanrc — example
 STOP_TIMEOUT=120                          # stop timeout in seconds (default: 60)
 LOG_FILE="/var/log/proxmox-manager.log"   # structured log file (empty = disabled)
-PROXMOX_MANAGER_SPICE_ADDR="192.168.1.10" # SPICE bind address (default: 127.0.0.1)
+PROXMOX_MANAGER_SPICE_ADDR="spice.example.invalid" # SPICE bind address
 ```
+
+Configuration files are parsed as data, not executed as shell code. Only the three settings shown above are accepted. When enabled, `LOG_FILE` must be an absolute, non-symlinked regular file owned by the current user with mode `0600`; its parent directory must also be owner-controlled and not group/world-writable.
 
 ### Shell Completions
 
