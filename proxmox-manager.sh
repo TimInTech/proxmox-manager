@@ -24,9 +24,10 @@ JSON_FLAG=0
 LOG_FILE="${LOG_FILE:-}"           # Set LOG_FILE=/path/to/file to enable file logging
 FILTER_STATUS=""                   # Filter output by status: running|stopped|paused (empty = no filter)
 STOP_TIMEOUT="${STOP_TIMEOUT:-60}" # Timeout in seconds for stop operations; env-overridable
-FORCE_MODE=0                       # Set to 1 via --force to skip all confirm() prompts
-FILTER_NAME=""                     # ERE substring-match against VM/CT name (empty = no filter)
-declare -A _type_cache=()          # ID→type cache populated by main_menu; used by type_of_id()
+PROXMOX_MANAGER_SPICE_ADDR="${PROXMOX_MANAGER_SPICE_ADDR:-}"
+FORCE_MODE=0              # Set to 1 via --force to skip all confirm() prompts
+FILTER_NAME=""            # ERE substring-match against VM/CT name (empty = no filter)
+declare -A _type_cache=() # ID→type cache populated by main_menu; used by type_of_id()
 
 # =============================================================================
 # COLORS  (active only on a real TTY, or when NO_COLOR is unset)
@@ -115,19 +116,19 @@ trap 'printf "\n%s\n" "Exiting."; exit 0' INT TERM
 
 have() { command -v "$1" >/dev/null 2>&1; }
 err() {
-  printf '%b\n' "  ${RED_BRIGHT}✖  Error:${NC} $*" >&2
+  printf '  %b✖  Error:%b %s\n' "$RED_BRIGHT" "$NC" "$*" >&2
   log "ERROR" "$*"
 }
 ok() {
-  printf '%b\n' "  ${GREEN_BRIGHT}✔  ${NC}$*"
+  printf '  %b✔  %b%s\n' "$GREEN_BRIGHT" "$NC" "$*"
   log "OK" "$*"
 }
 note() {
-  printf '%b\n' "  ${CYAN_BRIGHT}→  ${NC}$*"
+  printf '  %b→  %b%s\n' "$CYAN_BRIGHT" "$NC" "$*"
   log "NOTE" "$*"
 }
 warn() {
-  printf '%b\n' "  ${YELLOW_BRIGHT}⚠  Warning:${NC} $*"
+  printf '  %b⚠  Warning:%b %s\n' "$YELLOW_BRIGHT" "$NC" "$*"
   log "WARN" "$*"
 }
 
@@ -170,6 +171,99 @@ trim() {
   v="${v#"${v%%[![:space:]]*}"}"
   v="${v%"${v##*[![:space:]]}"}"
   printf '%s' "$v"
+}
+
+# _config_warn MESSAGE — report config problems without writing to LOG_FILE.
+# LOG_FILE is not trusted until _prepare_log_file() has validated it.
+_config_warn() {
+  printf '  Warning: %s\n' "$*" >&2
+}
+
+# _load_config_file FILE — parse allowlisted KEY=VALUE settings as data, never shell code.
+_load_config_file() {
+  local file="$1" raw line key value
+  [[ -f "$file" ]] || return 0
+
+  while IFS= read -r raw || [[ -n "$raw" ]]; do
+    line="$(trim "$raw")"
+    [[ -z "$line" || "$line" == \#* ]] && continue
+
+    if [[ ! "$line" =~ ^([A-Z_][A-Z0-9_]*)[[:space:]]*=(.*)$ ]]; then
+      _config_warn "Ignoring invalid config line in $file."
+      continue
+    fi
+    key="${BASH_REMATCH[1]}"
+    value="$(trim "${BASH_REMATCH[2]}")"
+
+    if [[ "$value" =~ ^\"([^\"]*)\"([[:space:]]*#.*)?$ ]]; then
+      value="${BASH_REMATCH[1]}"
+    elif [[ "$value" =~ ^\'([^\']*)\'([[:space:]]*#.*)?$ ]]; then
+      value="${BASH_REMATCH[1]}"
+    elif [[ "$value" =~ ^([^[:space:]#]*)([[:space:]]+#.*)?$ ]]; then
+      value="${BASH_REMATCH[1]}"
+    else
+      _config_warn "Ignoring malformed value for $key in $file."
+      continue
+    fi
+
+    case "$key" in
+    STOP_TIMEOUT | LOG_FILE | PROXMOX_MANAGER_SPICE_ADDR)
+      printf -v "$key" '%s' "$value"
+      ;;
+    *)
+      _config_warn "Ignoring unsupported setting '$key' in $file."
+      ;;
+    esac
+  done <"$file"
+}
+
+# _prepare_log_file — require a private regular file in a trusted directory.
+_prepare_log_file() {
+  [[ -z "$LOG_FILE" ]] && return 0
+  if [[ "$LOG_FILE" != /* ]]; then
+    _config_warn "LOG_FILE must be an absolute path; logging disabled."
+    LOG_FILE=''
+    return 1
+  fi
+
+  local parent owner mode
+  parent="$(dirname -- "$LOG_FILE")"
+  if [[ ! -d "$parent" ]]; then
+    _config_warn "LOG_FILE parent directory does not exist; logging disabled."
+    LOG_FILE=''
+    return 1
+  fi
+  owner="$(stat -Lc '%u' -- "$parent" 2>/dev/null || printf 'invalid')"
+  mode="$(stat -Lc '%a' -- "$parent" 2>/dev/null || printf 'invalid')"
+  if [[ "$owner" != "$EUID" || ! "$mode" =~ ^[0-7]{3,4}$ ]] || ((8#$mode & 8#022)); then
+    _config_warn "LOG_FILE parent directory is not private and owner-controlled; logging disabled."
+    LOG_FILE=''
+    return 1
+  fi
+
+  if [[ -e "$LOG_FILE" || -L "$LOG_FILE" ]]; then
+    if [[ -L "$LOG_FILE" || ! -f "$LOG_FILE" ]]; then
+      _config_warn "LOG_FILE must be a regular file and not a symlink; logging disabled."
+      LOG_FILE=''
+      return 1
+    fi
+    owner="$(stat -Lc '%u' -- "$LOG_FILE" 2>/dev/null || printf 'invalid')"
+    mode="$(stat -Lc '%a' -- "$LOG_FILE" 2>/dev/null || printf 'invalid')"
+    if [[ "$owner" != "$EUID" || ! "$mode" =~ ^[0-7]{3,4}$ ]] || ((8#$mode & 8#077)); then
+      _config_warn "LOG_FILE must be owned by the current user with mode 0600; logging disabled."
+      LOG_FILE=''
+      return 1
+    fi
+  elif ! (
+    umask 077
+    set -o noclobber
+    : >"$LOG_FILE"
+  ) 2>/dev/null; then
+    _config_warn "LOG_FILE could not be created safely; logging disabled."
+    LOG_FILE=''
+    return 1
+  fi
+  return 0
 }
 
 # _repeat CHAR N — print CHAR repeated N times.
@@ -621,10 +715,10 @@ header() {
 _status_color() {
   local st="$1" txt="$2"
   case "$st" in
-  running) printf '%b' "${GREEN_BRIGHT}${txt}${NC}" ;;
-  stopped) printf '%b' "${RED_BRIGHT}${txt}${NC}" ;;
-  paused) printf '%b' "${YELLOW_BRIGHT}${txt}${NC}" ;;
-  *) printf '%b' "${DIM}${txt}${NC}" ;;
+  running) printf '%b%s%b' "$GREEN_BRIGHT" "$txt" "$NC" ;;
+  stopped) printf '%b%s%b' "$RED_BRIGHT" "$txt" "$NC" ;;
+  paused) printf '%b%s%b' "$YELLOW_BRIGHT" "$txt" "$NC" ;;
+  *) printf '%b%s%b' "$DIM" "$txt" "$NC" ;;
   esac
 }
 
@@ -632,10 +726,10 @@ _status_color() {
 _status_sym_color() {
   local st="$1" sym="$2"
   case "$st" in
-  running) printf '%b' "${GREEN_BRIGHT}${sym}${NC}" ;;
-  stopped) printf '%b' "${RED_BRIGHT}${sym}${NC}" ;;
-  paused) printf '%b' "${YELLOW_BRIGHT}${sym}${NC}" ;;
-  *) printf '%b' "${DIM}${sym}${NC}" ;;
+  running) printf '%b%s%b' "$GREEN_BRIGHT" "$sym" "$NC" ;;
+  stopped) printf '%b%s%b' "$RED_BRIGHT" "$sym" "$NC" ;;
+  paused) printf '%b%s%b' "$YELLOW_BRIGHT" "$sym" "$NC" ;;
+  *) printf '%b%s%b' "$DIM" "$sym" "$NC" ;;
   esac
 }
 
@@ -777,11 +871,11 @@ print_table() {
 confirm() {
   local prompt="$1"
   if ((FORCE_MODE == 1)); then
-    printf '%b\n' "  ${YELLOW_BRIGHT}[--force]${NC} Skipping confirmation: ${prompt}"
+    printf '  %b[--force]%b Skipping confirmation: %s\n' "$YELLOW_BRIGHT" "$NC" "$prompt"
     return 0
   fi
   local ans
-  printf '%b' "  ${YELLOW}${prompt} [y/N]:${NC} "
+  printf '  %b%s [y/N]:%b ' "$YELLOW" "$prompt" "$NC"
   read_line ans
   [[ "$ans" =~ ^[yY]$ ]]
 }
@@ -1524,13 +1618,16 @@ ip_info() {
 
 main() {
   # Load config files — CLI flags set by parse_args below will override these values.
-  # shellcheck source=/dev/null
-  [[ -f /etc/pmanrc ]] && source /etc/pmanrc
-  # shellcheck source=/dev/null
-  [[ -f "${HOME}/.pmanrc" ]] && source "${HOME}/.pmanrc"
-  # Validate STOP_TIMEOUT after sourcing config (may have been set there).
+  _load_config_file /etc/pmanrc
+  _load_config_file "${HOME}/.pmanrc"
+  _prepare_log_file || true
+  # Validate settings after parsing config as data.
   if [[ ! "$STOP_TIMEOUT" =~ ^[0-9]+$ ]] || ((STOP_TIMEOUT < 1)); then
     err "STOP_TIMEOUT must be a positive integer (got '$STOP_TIMEOUT'). Check /etc/pmanrc or ~/.pmanrc."
+    exit 1
+  fi
+  if [[ -n "$PROXMOX_MANAGER_SPICE_ADDR" && ! "$PROXMOX_MANAGER_SPICE_ADDR" =~ ^[A-Za-z0-9][A-Za-z0-9._:-]*$ ]]; then
+    err "PROXMOX_MANAGER_SPICE_ADDR contains unsupported characters."
     exit 1
   fi
   parse_args "$@"

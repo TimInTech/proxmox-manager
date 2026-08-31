@@ -8,6 +8,13 @@ Versions follow [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Security
+- Configuration files are now parsed as allowlisted data instead of being executed with `source`.
+- Log files must be private, owner-controlled regular files; unsafe paths and symlinks are rejected.
+- The system-wide `pman` command is installed as an atomic root-owned copy instead of a symlink to a potentially user-writable checkout.
+- GitHub Actions are commit-SHA pinned, remote tool downloads are checksum-verified, workflow permissions are minimized, and checkout credentials are not persisted.
+- User-controlled status and message text is no longer interpreted as `printf %b` escape sequences.
+
 ### Fixed
 - VM IP lookup now accepts the native QEMU Guest Agent list payload from `qm agent ... network-get-interfaces`
   as well as the earlier wrapped shape, preventing parser errors on hosts that return a bare JSON array.
