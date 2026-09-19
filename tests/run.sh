@@ -15,6 +15,12 @@ export TERM=dumb
 
 cd "$ROOT_DIR"
 
+# Isolate from the caller's ~/.pmanrc and state; everything lives in one temp tree.
+TEST_TMP="$(mktemp -d)"
+trap 'rm -rf "$TEST_TMP"' EXIT
+export HOME="$TEST_TMP/home"
+mkdir -p "$HOME"
+
 PASS=0
 FAIL=0
 
@@ -318,6 +324,74 @@ if [[ "$filter_inv_exit" == "1" ]]; then
   _pass "--filter invalid value exits 1"
 else
   _fail "--filter invalid value should exit 1, got $filter_inv_exit"
+fi
+
+# ---------------------------------------------------------------------------
+# Health: CLI modes, config validation, helpers
+# ---------------------------------------------------------------------------
+# _rc CMD... — run CMD with stdout/stderr discarded and print its exit code.
+_rc() {
+  local rc=0
+  "$@" >/dev/null 2>&1 || rc=$?
+  printf '%s' "$rc"
+}
+
+# _expect_rc LABEL EXPECTED CMD... — assert the exit code of CMD.
+_expect_rc() {
+  local label="$1" expected="$2" actual
+  shift 2
+  actual="$(_rc "$@")"
+  if [[ "$actual" == "$expected" ]]; then
+    _pass "$label"
+  else
+    _fail "$label (expected exit $expected, got $actual)"
+  fi
+}
+
+_new_state_dir() {
+  local d
+  d="$(mktemp -d "$TEST_TMP/state.XXXXXX")"
+  chmod 700 "$d"
+  printf '%s' "$d"
+}
+
+_expect_rc "health flags: --check with --json exits 1" 1 "$SCRIPT" --check --json
+_expect_rc "health flags: --check with --health exits 1" 1 "$SCRIPT" --check --health
+_expect_rc "health flags: --check with --filter exits 1" 1 "$SCRIPT" --check --filter running
+_expect_rc "health flags: --dry-run without --check exits 1" 1 "$SCRIPT" --dry-run
+_expect_rc "health flags: --test-notify with --list exits 1" 1 "$SCRIPT" --test-notify --list
+_expect_rc "test-notify: no channel configured exits 1" 1 "$SCRIPT" --test-notify
+
+# Config validation: bad health settings are fatal (exit 3) only for --check.
+printf '%s\n' 'HEALTH_MEM_WARN=96' 'HEALTH_MEM_CRIT=95' >"$HOME/.pmanrc"
+_expect_rc "health config: WARN >= CRIT makes --check exit 3" 3 \
+  env HEALTH_STATE_DIR="$(_new_state_dir)" "$SCRIPT" --check
+_expect_rc "health config: invalid thresholds do not block --list" 0 "$SCRIPT" --list
+printf '%s\n' 'NTFY_URL=https://ntfy.example.invalid/topic' 'NTFY_TOKEN=tk_inline' >"$HOME/.pmanrc"
+cfg_out="$(HEALTH_STATE_DIR="$(_new_state_dir)" "$SCRIPT" --check 2>&1)" && cfg_rc=0 || cfg_rc=$?
+if [[ "$cfg_rc" == "3" && "$cfg_out" == *NTFY_TOKEN_FILE* && "$cfg_out" != *tk_inline* ]]; then
+  _pass "health config: inline NTFY_TOKEN rejected without echoing the secret"
+else
+  _fail "health config: inline NTFY_TOKEN not rejected (exit $cfg_rc)"
+fi
+token_file="$TEST_TMP/ntfy.token"
+printf 'tk_file\n' >"$token_file"
+chmod 644 "$token_file"
+printf '%s\n' 'NTFY_URL=https://ntfy.example.invalid/topic' "NTFY_TOKEN_FILE=$token_file" >"$HOME/.pmanrc"
+_expect_rc "health config: token file with mode 0644 makes --check exit 3" 3 \
+  env HEALTH_STATE_DIR="$(_new_state_dir)" "$SCRIPT" --check
+printf '%s\n' 'NTFY_URL=ftp://ntfy.example.invalid/topic' >"$HOME/.pmanrc"
+_expect_rc "health config: non-http NTFY_URL makes --check exit 3" 3 \
+  env HEALTH_STATE_DIR="$(_new_state_dir)" "$SCRIPT" --check
+printf '%s\n' 'HEALTH_MAIL_TO=root@localhost,bad address' >"$HOME/.pmanrc"
+_expect_rc "health config: invalid HEALTH_MAIL_TO makes --check exit 3" 3 \
+  env HEALTH_STATE_DIR="$(_new_state_dir)" "$SCRIPT" --check
+rm -f "$HOME/.pmanrc"
+
+if [[ "$(_fmt_duration 90061)" == "1d 1h 1m" && "$(_fmt_duration 3660)" == "1h 1m" && "$(_fmt_duration 59)" == "0m" && -z "$(_fmt_duration abc)" ]]; then
+  _pass "_fmt_duration: formats days, hours and minutes"
+else
+  _fail "_fmt_duration: unexpected output"
 fi
 
 # ---------------------------------------------------------------------------

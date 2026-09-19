@@ -27,6 +27,30 @@ FORCE_MODE=0              # Set to 1 via --force to skip all confirm() prompts
 FILTER_NAME=""            # ERE substring-match against VM/CT name (empty = no filter)
 declare -A _type_cache=() # ID→type cache populated by main_menu; used by type_of_id()
 
+# Health monitoring (--health / --check). A threshold of 0 disables that level.
+HEALTH_CPU_WARN="${HEALTH_CPU_WARN:-85}"
+HEALTH_CPU_CRIT="${HEALTH_CPU_CRIT:-95}"
+HEALTH_MEM_WARN="${HEALTH_MEM_WARN:-90}"
+HEALTH_MEM_CRIT="${HEALTH_MEM_CRIT:-95}"
+HEALTH_DISK_WARN="${HEALTH_DISK_WARN:-85}"
+HEALTH_DISK_CRIT="${HEALTH_DISK_CRIT:-95}"
+HEALTH_CPU_RUNS="${HEALTH_CPU_RUNS:-3}"    # consecutive --check runs before a CPU alert
+HEALTH_IGNORE_IDS="${HEALTH_IGNORE_IDS:-}" # VMIDs excluded from health checks (comma/space separated)
+HEALTH_STATE_DIR="${HEALTH_STATE_DIR:-/var/lib/pman}"
+NTFY_URL="${NTFY_URL:-}"                 # e.g. https://ntfy.sh/my-topic (opt-in)
+NTFY_TOKEN_FILE="${NTFY_TOKEN_FILE:-}"   # file with the ntfy access token, mode 0600
+HEALTH_MAIL_TO="${HEALTH_MAIL_TO:-}"     # recipient(s), comma separated (opt-in, needs sendmail)
+HEALTH_MAIL_FROM="${HEALTH_MAIL_FROM:-}" # optional sender address
+HEALTH_FLAG=0
+CHECK_FLAG=0
+DRY_RUN=0
+TEST_NOTIFY_FLAG=0
+FATAL_EXIT=1           # exit code for fatal setup errors (3 = UNKNOWN in --check mode)
+_CONFIG_INLINE_TOKEN=0 # set when a config file contains an inline NTFY_TOKEN
+MSG_TITLE=''           # notification message composed by _compose_message
+MSG_BODY=''
+MSG_PRIORITY=''
+
 # =============================================================================
 # COLORS  (active only on a real TTY, or when NO_COLOR is unset)
 # =============================================================================
@@ -207,14 +231,37 @@ _load_config_file() {
     fi
 
     case "$key" in
-    STOP_TIMEOUT | LOG_FILE | PROXMOX_MANAGER_SPICE_ADDR)
+    STOP_TIMEOUT | LOG_FILE | PROXMOX_MANAGER_SPICE_ADDR | \
+      HEALTH_CPU_WARN | HEALTH_CPU_CRIT | HEALTH_MEM_WARN | HEALTH_MEM_CRIT | \
+      HEALTH_DISK_WARN | HEALTH_DISK_CRIT | HEALTH_CPU_RUNS | HEALTH_IGNORE_IDS | \
+      HEALTH_STATE_DIR | NTFY_URL | NTFY_TOKEN_FILE | HEALTH_MAIL_TO | HEALTH_MAIL_FROM)
       printf -v "$key" '%s' "$value"
+      ;;
+    NTFY_TOKEN)
+      # Secrets never live in the config file itself; see NTFY_TOKEN_FILE.
+      _CONFIG_INLINE_TOKEN=1
+      _config_warn "Ignoring inline NTFY_TOKEN in $file; store the token in a mode 0600 file and set NTFY_TOKEN_FILE."
       ;;
     *)
       _config_warn "Ignoring unsupported setting '$key' in $file."
       ;;
     esac
   done <"$file"
+}
+
+# _owner_mode_ok PATH MASK — true when PATH is owned by the current user and
+# none of the octal permission bits in MASK (e.g. 022, 077) are set.
+_owner_mode_ok() {
+  local path="$1" mask="$2" owner mode
+  owner="$(stat -Lc '%u' -- "$path" 2>/dev/null || printf 'invalid')"
+  mode="$(stat -Lc '%a' -- "$path" 2>/dev/null || printf 'invalid')"
+  if [[ "$owner" != "$EUID" || ! "$mode" =~ ^[0-7]{3,4}$ ]]; then
+    return 1
+  fi
+  if ((8#$mode & 8#$mask)); then
+    return 1
+  fi
+  return 0
 }
 
 # _prepare_log_file — require a private regular file in a trusted directory.
@@ -226,16 +273,14 @@ _prepare_log_file() {
     return 1
   fi
 
-  local parent owner mode
+  local parent
   parent="$(dirname -- "$LOG_FILE")"
   if [[ ! -d "$parent" ]]; then
     _config_warn "LOG_FILE parent directory does not exist; logging disabled."
     LOG_FILE=''
     return 1
   fi
-  owner="$(stat -Lc '%u' -- "$parent" 2>/dev/null || printf 'invalid')"
-  mode="$(stat -Lc '%a' -- "$parent" 2>/dev/null || printf 'invalid')"
-  if [[ "$owner" != "$EUID" || ! "$mode" =~ ^[0-7]{3,4}$ ]] || ((8#$mode & 8#022)); then
+  if ! _owner_mode_ok "$parent" 022; then
     _config_warn "LOG_FILE parent directory is not private and owner-controlled; logging disabled."
     LOG_FILE=''
     return 1
@@ -247,9 +292,7 @@ _prepare_log_file() {
       LOG_FILE=''
       return 1
     fi
-    owner="$(stat -Lc '%u' -- "$LOG_FILE" 2>/dev/null || printf 'invalid')"
-    mode="$(stat -Lc '%a' -- "$LOG_FILE" 2>/dev/null || printf 'invalid')"
-    if [[ "$owner" != "$EUID" || ! "$mode" =~ ^[0-7]{3,4}$ ]] || ((8#$mode & 8#077)); then
+    if ! _owner_mode_ok "$LOG_FILE" 077; then
       _config_warn "LOG_FILE must be owned by the current user with mode 0600; logging disabled."
       LOG_FILE=''
       return 1
@@ -264,6 +307,101 @@ _prepare_log_file() {
     return 1
   fi
   return 0
+}
+
+# _valid_mail_addr ADDR — conservative e-mail address check (no quoting, no spaces).
+_valid_mail_addr() {
+  [[ "$1" =~ ^[A-Za-z0-9._%+-]+@[A-Za-z0-9-]+(\.[A-Za-z0-9-]+)*$ ]]
+}
+
+# _validate_health_config [notify] — validate health settings; print errors, return 1 on failure.
+# With "notify", the notification channel settings are validated as well.
+# Only called in health/check/test-notify modes so bad settings never block the TUI.
+_validate_health_config() {
+  local scope="${1:-}" rc=0 key val metric w c addr
+  local -a addrs=()
+  for key in HEALTH_CPU_WARN HEALTH_CPU_CRIT HEALTH_MEM_WARN HEALTH_MEM_CRIT HEALTH_DISK_WARN HEALTH_DISK_CRIT; do
+    val="${!key}"
+    if [[ ! "$val" =~ ^[0-9]{1,3}$ ]] || ((10#$val > 100)); then
+      err "$key must be an integer between 0 and 100 (got '$val')."
+      rc=1
+    else
+      printf -v "$key" '%d' "$((10#$val))"
+    fi
+  done
+  if ((rc == 0)); then
+    for metric in CPU MEM DISK; do
+      key="HEALTH_${metric}_WARN"
+      w="${!key}"
+      key="HEALTH_${metric}_CRIT"
+      c="${!key}"
+      if ((w > 0 && c > 0 && w >= c)); then
+        err "HEALTH_${metric}_WARN ($w) must be lower than HEALTH_${metric}_CRIT ($c)."
+        rc=1
+      fi
+    done
+  fi
+  if [[ ! "$HEALTH_CPU_RUNS" =~ ^[0-9]{1,3}$ ]] || ((10#$HEALTH_CPU_RUNS < 1 || 10#$HEALTH_CPU_RUNS > 100)); then
+    err "HEALTH_CPU_RUNS must be an integer between 1 and 100 (got '$HEALTH_CPU_RUNS')."
+    rc=1
+  else
+    HEALTH_CPU_RUNS=$((10#$HEALTH_CPU_RUNS))
+  fi
+  if [[ ! "$HEALTH_IGNORE_IDS" =~ ^[0-9,\ ]*$ ]]; then
+    err "HEALTH_IGNORE_IDS must be a comma or space separated list of VMIDs."
+    rc=1
+  fi
+  if [[ ! "$HEALTH_STATE_DIR" =~ ^/[A-Za-z0-9._/-]*$ ]]; then
+    err "HEALTH_STATE_DIR must be an absolute path using only [A-Za-z0-9._/-]."
+    rc=1
+  fi
+  if [[ "$scope" != "notify" ]]; then
+    return "$rc"
+  fi
+
+  if ((_CONFIG_INLINE_TOKEN == 1)); then
+    err "NTFY_TOKEN must not be set in a config file; use NTFY_TOKEN_FILE (mode 0600)."
+    rc=1
+  fi
+  if [[ -n "$NTFY_URL" && ! "$NTFY_URL" =~ ^https?://[A-Za-z0-9.-]+(:[0-9]{1,5})?(/[A-Za-z0-9._~-]+)+/?$ ]]; then
+    err "NTFY_URL must look like https://host[:port]/topic (got an unsupported value)."
+    rc=1
+  fi
+  if [[ -n "$NTFY_TOKEN_FILE" ]]; then
+    if [[ -z "$NTFY_URL" ]]; then
+      err "NTFY_TOKEN_FILE is set but NTFY_URL is empty."
+      rc=1
+    fi
+    if [[ "$NTFY_TOKEN_FILE" != /* || -L "$NTFY_TOKEN_FILE" || ! -f "$NTFY_TOKEN_FILE" ]]; then
+      err "NTFY_TOKEN_FILE must be an absolute path to a regular file (no symlink)."
+      rc=1
+    elif ! _owner_mode_ok "$NTFY_TOKEN_FILE" 077; then
+      err "NTFY_TOKEN_FILE must be owned by the current user with mode 0600."
+      rc=1
+    fi
+    if [[ "$NTFY_URL" == http://* ]]; then
+      _config_warn "NTFY_URL uses plain http; the access token is sent unencrypted."
+    fi
+  fi
+  if [[ -n "$HEALTH_MAIL_TO" ]]; then
+    IFS=',' read -r -a addrs <<<"$HEALTH_MAIL_TO"
+    if ((${#addrs[@]} == 0)); then
+      err "HEALTH_MAIL_TO contains no address."
+      rc=1
+    fi
+    for addr in "${addrs[@]}"; do
+      if ! _valid_mail_addr "$addr"; then
+        err "HEALTH_MAIL_TO contains an invalid address (comma separated, no spaces)."
+        rc=1
+        break
+      fi
+    done
+  fi
+  if [[ -n "$HEALTH_MAIL_FROM" ]] && ! _valid_mail_addr "$HEALTH_MAIL_FROM"; then
+    err "HEALTH_MAIL_FROM must be a single plain e-mail address."
+    rc=1
+  fi
+  return "$rc"
 }
 
 # _repeat CHAR N — print CHAR repeated N times.
@@ -320,14 +458,14 @@ require_root() {
   fi
   ((EUID == 0)) || {
     err "Please run as root."
-    exit 1
+    exit "$FATAL_EXIT"
   }
 }
 
 require_tools() {
   { have qm || have pct; } || {
     err "Neither 'qm' nor 'pct' found. Run on a Proxmox VE host."
-    exit 1
+    exit "$FATAL_EXIT"
   }
 }
 
@@ -360,6 +498,12 @@ Options:
   --once            Run a single interactive refresh (useful for TTY recording)
   --timeout SECS    Timeout for stop operations in seconds (default: 60)
   --force           Skip all confirmation prompts (use with care)
+  --health          Show CPU/memory/disk health of local VMs/CTs
+                    (combine with --list for plain text or --json; --filter/--name apply)
+  --check           Run health checks for cron; alert on changes; exit 0/1/2/3
+                    (OK/WARN/CRIT/UNKNOWN)
+  --dry-run         With --check: print the result and message, send nothing, keep state
+  --test-notify     Send a test message through all configured channels
   --version         Print version and exit
   -h, --help        Show this help
 EOF
@@ -427,6 +571,18 @@ parse_args() {
     --force)
       FORCE_MODE=1
       ;;
+    --health)
+      HEALTH_FLAG=1
+      ;;
+    --check)
+      CHECK_FLAG=1
+      ;;
+    --dry-run)
+      DRY_RUN=1
+      ;;
+    --test-notify)
+      TEST_NOTIFY_FLAG=1
+      ;;
     --version)
       printf 'proxmox-manager.sh %s\n' "$(_script_version)"
       exit 0
@@ -456,6 +612,41 @@ parse_args() {
     err "Options --list and --json are not combinable."
     exit 1
   fi
+  _resolve_mode
+}
+
+# _resolve_mode — derive MODE from the health flags and reject invalid combinations.
+_resolve_mode() {
+  if ((DRY_RUN == 1 && CHECK_FLAG == 0)); then
+    err "Option --dry-run requires --check."
+    exit 1
+  fi
+  if ((CHECK_FLAG == 1)); then
+    if ((LIST_FLAG == 1 || JSON_FLAG == 1 || HEALTH_FLAG == 1 || TEST_NOTIFY_FLAG == 1)); then
+      err "Option --check is not combinable with --list, --json, --health or --test-notify."
+      exit 1
+    fi
+    if [[ -n "$FILTER_STATUS" || -n "$FILTER_NAME" ]]; then
+      err "Option --check always checks all guests; --filter and --name are not supported."
+      exit 1
+    fi
+    MODE="check"
+    return 0
+  fi
+  if ((TEST_NOTIFY_FLAG == 1)); then
+    if ((LIST_FLAG == 1 || JSON_FLAG == 1 || HEALTH_FLAG == 1)); then
+      err "Option --test-notify is not combinable with --list, --json or --health."
+      exit 1
+    fi
+    MODE="test_notify"
+    return 0
+  fi
+  if ((HEALTH_FLAG == 1)); then
+    MODE="health"
+    ((LIST_FLAG == 1)) && MODE="health_list"
+    ((JSON_FLAG == 1)) && MODE="health_json"
+  fi
+  return 0
 }
 
 # =============================================================================
@@ -645,7 +836,14 @@ _box_content() {
 _uptime_short() {
   local secs
   secs="$(cut -d. -f1 /proc/uptime 2>/dev/null || true)"
-  [[ "$secs" =~ ^[0-9]+$ ]] || return 0
+  _fmt_duration "$secs"
+}
+
+# _fmt_duration SECS — compact duration, e.g. "17d 13h 4m"; prints nothing for non-numbers.
+_fmt_duration() {
+  local secs="$1"
+  [[ "$secs" =~ ^[0-9]{1,12}$ ]] || return 0
+  secs=$((10#$secs))
   local d=$((secs / 86400)) h=$((secs % 86400 / 3600)) m=$((secs % 3600 / 60))
   if ((d > 0)); then
     printf '%sd %sh %sm' "$d" "$h" "$m"
@@ -921,6 +1119,82 @@ print_table() {
     printf '%s\n%s\n' "$legend" "$count"
   fi
   return 0
+}
+
+# =============================================================================
+# HEALTH — DATA LAYER & VIEW
+# =============================================================================
+
+# _local_node — print the short name of the local node (validated); return 1 if unknown.
+_local_node() {
+  local n
+  n="$(hostname -s 2>/dev/null || true)"
+  [[ "$n" =~ ^[A-Za-z0-9][A-Za-z0-9.-]{0,62}$ ]] || return 1
+  printf '%s' "$n"
+}
+
+print_health_table() {
+  err "Health view is not implemented yet."
+  return 1
+}
+
+print_health_json() {
+  err "Health view is not implemented yet."
+  return 1
+}
+
+# =============================================================================
+# HEALTH — CHECK ENGINE (--check)
+# =============================================================================
+
+# _check_unknown MESSAGE — report an UNKNOWN result (Nagios style) and exit 3.
+_check_unknown() {
+  err "$*"
+  printf 'PMAN UNKNOWN - %s\n' "$*"
+  exit 3
+}
+
+run_check() {
+  _check_unknown "--check is not implemented yet."
+}
+
+# =============================================================================
+# HEALTH — NOTIFICATIONS
+# =============================================================================
+
+# _notify_channels_configured — true when at least one notification channel is set.
+_notify_channels_configured() {
+  [[ -n "$NTFY_URL" || -n "$HEALTH_MAIL_TO" ]]
+}
+
+# _notify_all — deliver MSG_TITLE/MSG_BODY/MSG_PRIORITY through every configured channel.
+# Returns 1 only when channels are configured and all of them failed.
+# Channel senders (ntfy, sendmail) are added in a later work package.
+_notify_all() {
+  if ! _notify_channels_configured; then
+    return 0
+  fi
+  log "WARN" "Notification delivery not implemented yet; '${MSG_TITLE}' (${MSG_PRIORITY}, ${#MSG_BODY} bytes) not sent."
+  return 0
+}
+
+# run_test_notify — send a test message through all configured channels.
+run_test_notify() {
+  if ! _notify_channels_configured; then
+    err "No notification channel configured (set NTFY_URL and/or HEALTH_MAIL_TO)."
+    exit 1
+  fi
+  local node
+  node="$(_local_node || printf 'unknown')"
+  MSG_TITLE="pman ${node}: test notification"
+  MSG_BODY="Test message from proxmox-manager on ${node}."
+  MSG_PRIORITY="low"
+  if _notify_all; then
+    ok "Test notification handed to all configured channels."
+    exit 0
+  fi
+  err "Test notification failed on all channels."
+  exit 1
 }
 
 # =============================================================================
@@ -1670,16 +1944,17 @@ main() {
   _load_config_file /etc/pmanrc
   _load_config_file "${HOME}/.pmanrc"
   _prepare_log_file || true
+  parse_args "$@"
+  [[ "$MODE" == "check" ]] && FATAL_EXIT=3
   # Validate settings after parsing config as data.
   if [[ ! "$STOP_TIMEOUT" =~ ^[0-9]+$ ]] || ((STOP_TIMEOUT < 1)); then
     err "STOP_TIMEOUT must be a positive integer (got '$STOP_TIMEOUT'). Check /etc/pmanrc or ~/.pmanrc."
-    exit 1
+    exit "$FATAL_EXIT"
   fi
   if [[ -n "$PROXMOX_MANAGER_SPICE_ADDR" && ! "$PROXMOX_MANAGER_SPICE_ADDR" =~ ^[A-Za-z0-9][A-Za-z0-9._:-]*$ ]]; then
     err "PROXMOX_MANAGER_SPICE_ADDR contains unsupported characters."
-    exit 1
+    exit "$FATAL_EXIT"
   fi
-  parse_args "$@"
   if ((FORCE_MODE == 1)); then
     warn "--force active: all confirmation prompts will be skipped automatically."
   fi
@@ -1689,6 +1964,16 @@ main() {
     CLEAR_SCREEN=0
   fi
   log "INFO" "Starting proxmox-manager (mode=$MODE)"
+  case "$MODE" in
+  health | health_list | health_json | test_notify)
+    local scope=''
+    [[ "$MODE" == "test_notify" ]] && scope="notify"
+    _validate_health_config "$scope" || exit 1
+    ;;
+  check)
+    _validate_health_config notify || _check_unknown "Invalid health configuration."
+    ;;
+  esac
   case "$MODE" in
   list)
     if print_table; then
@@ -1700,6 +1985,26 @@ main() {
   json)
     print_json
     exit 0
+    ;;
+  health | health_list)
+    if print_health_table; then
+      exit 0
+    else
+      exit 1
+    fi
+    ;;
+  health_json)
+    if print_health_json; then
+      exit 0
+    else
+      exit 1
+    fi
+    ;;
+  check)
+    run_check
+    ;;
+  test_notify)
+    run_test_notify
     ;;
   interactive)
     while true; do
