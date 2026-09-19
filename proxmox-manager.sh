@@ -50,6 +50,11 @@ _CONFIG_INLINE_TOKEN=0 # set when a config file contains an inline NTFY_TOKEN
 MSG_TITLE=''           # notification message composed by _compose_message
 MSG_BODY=''
 MSG_PRIORITY=''
+HEALTH_NODE=''          # local node name (set by _health_load)
+HEALTH_ERR=''           # reason for the last _health_load/_health_load_tasks failure
+HEALTH_ROWS=()          # parsed guest rows (see _health_parse_resources)
+declare -A _HV_LEVEL=() # per-guest max health level (see _health_evaluate)
+declare -A _HV_FIND=()  # per-guest findings (see _health_evaluate)
 
 # =============================================================================
 # COLORS  (active only on a real TTY, or when NO_COLOR is unset)
@@ -1133,14 +1138,558 @@ _local_node() {
   printf '%s' "$n"
 }
 
-print_health_table() {
-  err "Health view is not implemented yet."
+# _level_name LEVEL — OK / WARN / CRIT for 0 / 1 / 2.
+_level_name() {
+  case "$1" in
+  2) printf 'CRIT' ;;
+  1) printf 'WARN' ;;
+  0) printf 'OK' ;;
+  *) printf 'n/a' ;;
+  esac
+}
+
+# _level_color LEVEL TEXT — print TEXT in the colour of LEVEL.
+_level_color() {
+  local lvl="$1" txt="$2"
+  case "$lvl" in
+  2) printf '%b%s%b' "$RED_BRIGHT" "$txt" "$NC" ;;
+  1) printf '%b%s%b' "$YELLOW_BRIGHT" "$txt" "$NC" ;;
+  0) printf '%b%s%b' "$GREEN_BRIGHT" "$txt" "$NC" ;;
+  *) printf '%b%s%b' "$DIM" "$txt" "$NC" ;;
+  esac
+}
+
+# _level_for VALUE WARN CRIT — print 0 (OK), 1 (WARN) or 2 (CRIT); "-" when VALUE is n/a.
+# A threshold of 0 disables that level.
+_level_for() {
+  local v="$1" w="$2" c="$3"
+  if [[ ! "$v" =~ ^[0-9]{1,6}$ ]]; then
+    printf -- '-'
+  elif ((c > 0 && 10#$v >= c)); then
+    printf '2'
+  elif ((w > 0 && 10#$v >= w)); then
+    printf '1'
+  else
+    printf '0'
+  fi
+}
+
+# _health_ignored ID — true when ID is listed in HEALTH_IGNORE_IDS.
+_health_ignored() {
+  local id="$1" x
+  local -a ids=()
+  IFS=' ' read -r -a ids <<<"${HEALTH_IGNORE_IDS//,/ }"
+  for x in "${ids[@]}"; do
+    if [[ "$x" == "$id" ]]; then
+      return 0
+    fi
+  done
   return 1
 }
 
+# _health_fetch resources|tasks [NODE] — raw pvesh JSON on stdout (30 s timeout).
+_health_fetch() {
+  local kind="$1" node="${2:-}"
+  have pvesh || return 1
+  case "$kind" in
+  resources) timeout 30 pvesh get /cluster/resources --type vm --output-format json 2>/dev/null ;;
+  tasks) timeout 30 pvesh get "/nodes/${node}/tasks" --limit 200 --output-format json 2>/dev/null ;;
+  *) return 1 ;;
+  esac
+}
+
+# _health_parse_resources NODE — read /cluster/resources JSON on stdin and print TSV rows
+# for NODE (templates skipped), sorted by VMID:
+#   vmid  VM|CT  status  name  cpu%  mem%  disk%  uptime-seconds
+# cpu/mem/disk are "-" when not applicable (guest not running, no guest-agent disk data).
+_health_parse_resources() {
+  python3 -c '
+import json, sys
+try:
+    sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+    data = json.loads(sys.stdin.buffer.read())
+except Exception:
+    sys.exit(1)
+if isinstance(data, dict):
+    data = data.get("data", [])
+if not isinstance(data, list):
+    sys.exit(1)
+node = sys.argv[1]
+
+def num(v):
+    try:
+        return float(v)
+    except (TypeError, ValueError):
+        return 0.0
+
+rows = []
+for r in data:
+    if not isinstance(r, dict) or str(r.get("node", "")) != node:
+        continue
+    if num(r.get("template")) == 1:
+        continue
+    kind = {"qemu": "VM", "lxc": "CT"}.get(r.get("type"))
+    if kind is None:
+        continue
+    try:
+        vmid = int(r.get("vmid"))
+    except (TypeError, ValueError):
+        continue
+    if not 1 <= vmid <= 999999:
+        continue
+    status = "".join(c for c in str(r.get("status") or "").lower() if c.isalnum() or c in "-_")[:16]
+    status = status or "unknown"
+    name = "".join(c if c.isprintable() else "?" for c in str(r.get("name") or ""))[:64].strip()
+    name = name or "%s-%d" % (kind, vmid)
+    running = status == "running"
+    cpu = mem = disk = "-"
+    if running:
+        cpu = str(round(num(r.get("cpu")) * 100))
+        maxmem = num(r.get("maxmem"))
+        if maxmem > 0:
+            mem = str(round(num(r.get("mem")) * 100 / maxmem))
+        used, maxdisk = num(r.get("disk")), num(r.get("maxdisk"))
+        if used > 0 and maxdisk > 0:
+            disk = str(round(used * 100 / maxdisk))
+    uptime = int(num(r.get("uptime"))) if running else 0
+    rows.append((vmid, kind, status, name, cpu, mem, disk, str(uptime)))
+rows.sort()
+for row in rows:
+    print("\t".join(str(x) for x in row))
+' "$1"
+}
+
+# _health_parse_tasks — read /nodes/<node>/tasks JSON on stdin and print TSV rows sorted
+# by end time:  endtime  upid  type  id  status
+# Running tasks have endtime 0 and status "running"; missing ids are "-".
+_health_parse_tasks() {
+  python3 -c '
+import json, sys
+try:
+    sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+    data = json.loads(sys.stdin.buffer.read())
+except Exception:
+    sys.exit(1)
+if isinstance(data, dict):
+    data = data.get("data", [])
+if not isinstance(data, list):
+    sys.exit(1)
+safe = set("ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789")
+
+def keep(value, extra, limit):
+    return "".join(c if c in safe or c in extra else "_" for c in str(value or ""))[:limit]
+
+rows = []
+for t in data:
+    if not isinstance(t, dict):
+        continue
+    upid = keep(t.get("upid"), ":@._!=-", 200)
+    if not upid:
+        continue
+    try:
+        end = int(t.get("endtime") or 0)
+    except (TypeError, ValueError):
+        end = 0
+    status = "".join(c if c.isprintable() else "?" for c in str(t.get("status") or ""))[:120].strip()
+    if end <= 0:
+        end, status = 0, "running"
+    status = status or "unknown"
+    rows.append((end, upid, keep(t.get("type"), "-_", 32) or "-", keep(t.get("id"), "._-", 64) or "-", status))
+rows.sort()
+for row in rows:
+    print("\t".join(str(x) for x in row))
+'
+}
+
+# _health_load — fetch and parse the local guests into HEALTH_ROWS (sets HEALTH_NODE).
+# On failure returns 1 with a reason in HEALTH_ERR; prints nothing.
+_health_load() {
+  local raw parsed
+  HEALTH_ROWS=()
+  HEALTH_ERR=''
+  if ! have python3; then
+    HEALTH_ERR="python3 is required for health checks."
+    return 1
+  fi
+  if ! have pvesh; then
+    HEALTH_ERR="'pvesh' not found. Run on a Proxmox VE host."
+    return 1
+  fi
+  if ! HEALTH_NODE="$(_local_node)"; then
+    HEALTH_ERR="Could not determine the local node name."
+    return 1
+  fi
+  if ! raw="$(_health_fetch resources)"; then
+    HEALTH_ERR="pvesh get /cluster/resources failed or timed out."
+    return 1
+  fi
+  if ! parsed="$(printf '%s' "$raw" | _health_parse_resources "$HEALTH_NODE")"; then
+    HEALTH_ERR="Could not parse the pvesh /cluster/resources output."
+    return 1
+  fi
+  if [[ -n "$parsed" ]]; then
+    mapfile -t HEALTH_ROWS <<<"$parsed"
+  fi
+  return 0
+}
+
+# _guest_onboot ID TYPE — true when the guest config has "onboot: 1".
+_guest_onboot() {
+  local id="$1" ty="$2" cfg=''
+  case "$ty" in
+  CT) cfg="$(pct config "$id" 2>/dev/null || true)" ;;
+  VM) cfg="$(qm config "$id" 2>/dev/null || true)" ;;
+  *) return 1 ;;
+  esac
+  grep -qE '^onboot:[[:space:]]*1[[:space:]]*$' <<<"$cfg"
+}
+
+# _health_checks — single source of truth for --health and --check.
+# For every non-ignored guest in HEALTH_ROWS print one TSV row per check:
+#   vmid  type  check(cpu|mem|disk|down)  level(0|1|2|-)  value  name
+# "down" is CRIT when the guest is stopped although onboot=1; --check adds
+# the "stopped unexpectedly" state on top.
+_health_checks() {
+  local row id ty st nm cpu mem disk up lvl
+  for row in "${HEALTH_ROWS[@]}"; do
+    IFS=$'\t' read -r id ty st nm cpu mem disk up <<<"$row"
+    [[ -z "$id" ]] && continue
+    if _health_ignored "$id"; then
+      continue
+    fi
+    printf '%s\t%s\tcpu\t%s\t%s\t%s\n' "$id" "$ty" \
+      "$(_level_for "$cpu" "$HEALTH_CPU_WARN" "$HEALTH_CPU_CRIT")" "$cpu" "$nm"
+    printf '%s\t%s\tmem\t%s\t%s\t%s\n' "$id" "$ty" \
+      "$(_level_for "$mem" "$HEALTH_MEM_WARN" "$HEALTH_MEM_CRIT")" "$mem" "$nm"
+    printf '%s\t%s\tdisk\t%s\t%s\t%s\n' "$id" "$ty" \
+      "$(_level_for "$disk" "$HEALTH_DISK_WARN" "$HEALTH_DISK_CRIT")" "$disk" "$nm"
+    lvl=0
+    if [[ "$st" == "stopped" ]] && _guest_onboot "$id" "$ty"; then
+      lvl=2
+    fi
+    printf '%s\t%s\tdown\t%s\t%s\t%s\n' "$id" "$ty" "$lvl" "$st" "$nm"
+  done
+}
+
+# _health_finding CHECK LEVEL VALUE — human-readable description of a non-OK check.
+_health_finding() {
+  local check="$1" lvl="$2" val="$3" label warn crit thr
+  case "$check" in
+  cpu)
+    label="CPU"
+    warn="$HEALTH_CPU_WARN"
+    crit="$HEALTH_CPU_CRIT"
+    ;;
+  mem)
+    label="memory"
+    warn="$HEALTH_MEM_WARN"
+    crit="$HEALTH_MEM_CRIT"
+    ;;
+  disk)
+    label="disk"
+    warn="$HEALTH_DISK_WARN"
+    crit="$HEALTH_DISK_CRIT"
+    ;;
+  down)
+    if [[ "$lvl" == "2" ]]; then
+      printf 'stopped although onboot=1'
+    else
+      printf 'stopped unexpectedly'
+    fi
+    return 0
+    ;;
+  *)
+    printf '%s' "$check"
+    return 0
+    ;;
+  esac
+  thr="$warn"
+  [[ "$lvl" == "2" ]] && thr="$crit"
+  if [[ "$val" =~ ^[0-9]+$ ]]; then
+    printf '%s %s%% (>= %s%%)' "$label" "$val" "$thr"
+  else
+    printf '%s above %s%% (no current value)' "$label" "$thr"
+  fi
+}
+
+# _pct_text VALUE — "12%" or "n/a".
+_pct_text() {
+  if [[ "$1" =~ ^[0-9]+$ ]]; then
+    printf '%s%%' "$1"
+  else
+    printf 'n/a'
+  fi
+}
+
+# _json_num VALUE — VALUE when it is an integer, otherwise null.
+_json_num() {
+  if [[ "$1" =~ ^[0-9]+$ ]]; then
+    printf '%s' "$1"
+  else
+    printf 'null'
+  fi
+}
+
+# _health_evaluate — run _health_checks for HEALTH_ROWS and fill the caller-visible
+# globals _HV_LEVEL[id] (max level) and _HV_FIND[id] (TAB-joined "level|check|value" items).
+_health_evaluate() {
+  local checks cid chk clvl cval
+  _HV_LEVEL=()
+  _HV_FIND=()
+  checks="$(_health_checks)"
+  while IFS=$'\t' read -r cid _ chk clvl cval _; do
+    [[ -z "$cid" ]] && continue
+    [[ -z "${_HV_LEVEL[$cid]:-}" ]] && _HV_LEVEL[$cid]=0
+    [[ "$clvl" =~ ^[0-2]$ ]] || continue
+    if ((clvl > _HV_LEVEL[$cid])); then
+      _HV_LEVEL[$cid]=$clvl
+    fi
+    if ((clvl > 0)); then
+      _HV_FIND[$cid]+="${clvl}|${chk}|${cval}"$'\t'
+    fi
+  done <<<"$checks"
+  return 0
+}
+
+# _health_row_shown STATUS NAME — apply --filter/--name to a health row.
+_health_row_shown() {
+  local st="$1" nm="$2"
+  if [[ -n "$FILTER_STATUS" && "$st" != "$FILTER_STATUS" ]]; then
+    return 1
+  fi
+  if [[ -n "$FILTER_NAME" && ! "$nm" =~ $FILTER_NAME ]]; then
+    return 1
+  fi
+  return 0
+}
+
+# print_health_table — health overview of local guests (boxed for --health and the
+# interactive menu, plain for --health --list). Returns 1 on error or when empty.
+print_health_table() {
+  local draw_boxes=0
+  [[ "$MODE" == "health" || "$MODE" == "interactive" ]] && draw_boxes=1
+  if ! _health_load; then
+    err "$HEALTH_ERR"
+    return 1
+  fi
+  _health_evaluate
+
+  local -a rows=() findings=()
+  local row id ty st nm cpu mem disk up
+  for row in "${HEALTH_ROWS[@]}"; do
+    IFS=$'\t' read -r id ty st nm cpu mem disk up <<<"$row"
+    if _health_row_shown "$st" "$nm"; then
+      rows+=("$row")
+    fi
+  done
+
+  # │ + 2 + ID 6 + TYPE 5 + STATUS 8 + CPU% 5 + MEM% 5 + DISK% 5 + UPTIME 11 + HEALTH 7
+  #   + 8 separators + NAME + 2 + │
+  local name_w=15 fixed=65
+  for row in "${rows[@]}"; do
+    IFS=$'\t' read -r id ty st nm cpu mem disk up <<<"$row"
+    (($(_vis_width "$nm") > name_w)) && name_w=$(_vis_width "$nm")
+  done
+  if ((draw_boxes)); then
+    local max_name=$(($(_term_cols) - fixed))
+    ((name_w > max_name)) && name_w=$max_name
+    ((name_w < 10)) && name_w=10
+  fi
+  local W=$((fixed + name_w))
+
+  local head
+  printf -v head '%-6s %-5s %-8s %5s %5s %5s %-11s %-7s %s' \
+    "ID" "TYPE" "STATUS" "CPU%" "MEM%" "DISK%" "UPTIME" "HEALTH" "NAME"
+  if ((draw_boxes)); then
+    _draw_line_top $W
+    _box_content "${CYAN}" "${LINE_V}" $W "  ${BOLD}${WHITE}${head}${NC}"
+    _draw_line_mid $W
+  else
+    printf '%b%s%b\n' "${BOLD}${WHITE}" "$head" "${NC}"
+  fi
+
+  if ((${#rows[@]} == 0)); then
+    local msg="No VMs or containers found on node ${HEALTH_NODE}."
+    [[ -n "$FILTER_STATUS" || -n "$FILTER_NAME" ]] && msg="No VMs or containers match the filter."
+    if ((draw_boxes)); then
+      _box_content "${CYAN}" "${LINE_V}" $W "  ${RED_BRIGHT}${msg}${NC}"
+      _draw_line_bot $W
+    else
+      printf '%b%s%b\n' "${RED_BRIGHT}" "$msg" "${NC}"
+    fi
+    return 1
+  fi
+
+  local n_ok=0 n_warn=0 n_crit=0 n_ign=0 n_run=0 lvl hname ty_col line upt item f_lvl f_chk f_val
+  local -a items=()
+  for row in "${rows[@]}"; do
+    IFS=$'\t' read -r id ty st nm cpu mem disk up <<<"$row"
+    [[ "$st" == "running" ]] && n_run=$((n_run + 1))
+    if _health_ignored "$id"; then
+      lvl='-'
+      hname="IGN"
+      n_ign=$((n_ign + 1))
+    else
+      lvl="${_HV_LEVEL[$id]:-0}"
+      hname="$(_level_name "$lvl")"
+      case "$lvl" in
+      2) n_crit=$((n_crit + 1)) ;;
+      1) n_warn=$((n_warn + 1)) ;;
+      *) n_ok=$((n_ok + 1)) ;;
+      esac
+      IFS=$'\t' read -r -a items <<<"${_HV_FIND[$id]:-}"
+      for item in "${items[@]}"; do
+        IFS='|' read -r f_lvl f_chk f_val <<<"$item"
+        findings+=("${f_lvl}"$'\t'"${ty} ${id} (${nm}): $(_health_finding "$f_chk" "$f_lvl" "$f_val")")
+      done
+    fi
+    case "$ty" in
+    CT) printf -v ty_col '%b%-5s%b' "${MAGENTA_BRIGHT}" "$ty" "${NC}" ;;
+    VM) printf -v ty_col '%b%-5s%b' "${BLUE_BRIGHT}" "$ty" "${NC}" ;;
+    *) printf -v ty_col '%-5s' "$ty" ;;
+    esac
+    upt='-'
+    [[ "$st" == "running" ]] && upt="$(_fmt_duration "$up")"
+    printf -v line '%-6s %s %s %5s %5s %5s %-11s %s %s' \
+      "$id" "$ty_col" \
+      "$(_status_color "$st" "$(printf '%-8s' "$st")")" \
+      "$cpu" "$mem" "$disk" "$(_truncate "$upt" 11)" \
+      "$(_level_color "$lvl" "$(printf '%-7s' "$hname")")" \
+      "$(_truncate "$nm" "$name_w")"
+    if ((draw_boxes)); then
+      _box_content "${CYAN}" "${LINE_V}" $W "  ${line}"
+    else
+      printf '%s\n' "$line"
+    fi
+  done
+
+  local totals f
+  printf -v totals '%bTotal:%b %s guests, %s running  %b%s OK%b  %b%s WARN%b  %b%s CRIT%b' \
+    "${BOLD}" "${NC}" "${#rows[@]}" "$n_run" \
+    "${GREEN_BRIGHT}" "$n_ok" "${NC}" "${YELLOW_BRIGHT}" "$n_warn" "${NC}" \
+    "${RED_BRIGHT}" "$n_crit" "${NC}"
+  ((n_ign > 0)) && totals+="  ${n_ign} ignored"
+  if ((draw_boxes)); then
+    _draw_line_mid $W
+    if ((${#findings[@]} > 0)); then
+      _box_content "${CYAN}" "${LINE_V}" $W "  ${BOLD}Findings:${NC}"
+      for f in "${findings[@]}"; do
+        _box_content "${CYAN}" "${LINE_V}" $W \
+          "  $(_level_color "${f%%$'\t'*}" "[$(_level_name "${f%%$'\t'*}")]") $(_truncate "${f#*$'\t'}" $((W - 13)))"
+      done
+      _draw_line_mid $W
+    fi
+    _box_content "${CYAN}" "${LINE_V}" $W "  ${totals}"
+    _draw_line_bot $W
+  else
+    if ((${#findings[@]} > 0)); then
+      printf '\nFindings:\n'
+      for f in "${findings[@]}"; do
+        printf '%s %s\n' "$(_level_color "${f%%$'\t'*}" "[$(_level_name "${f%%$'\t'*}")]")" "${f#*$'\t'}"
+      done
+    fi
+    printf '\n%s\n' "$totals"
+  fi
+  return 0
+}
+
+# print_health_json — health data of local guests as JSON (diagnostics on stderr only).
 print_health_json() {
-  err "Health view is not implemented yet."
-  return 1
+  if ! _health_load; then
+    err "$HEALTH_ERR"
+    return 1
+  fi
+  _health_evaluate
+  local row id ty st nm cpu mem disk up lvl hname ign first=1 ffirst item f_lvl f_chk f_val fval
+  local n=0 n_ok=0 n_warn=0 n_crit=0 n_ign=0
+  local -a items=()
+  printf '{"node":"%s","guests":[' "$(json_escape "$HEALTH_NODE")"
+  for row in "${HEALTH_ROWS[@]}"; do
+    IFS=$'\t' read -r id ty st nm cpu mem disk up <<<"$row"
+    _health_row_shown "$st" "$nm" || continue
+    n=$((n + 1))
+    ign=false
+    if _health_ignored "$id"; then
+      ign=true
+      hname="IGNORED"
+      n_ign=$((n_ign + 1))
+    else
+      lvl="${_HV_LEVEL[$id]:-0}"
+      hname="$(_level_name "$lvl")"
+      case "$lvl" in
+      2) n_crit=$((n_crit + 1)) ;;
+      1) n_warn=$((n_warn + 1)) ;;
+      *) n_ok=$((n_ok + 1)) ;;
+      esac
+    fi
+    ((first)) || printf ','
+    first=0
+    printf '{"id":%s,"type":"%s","status":"%s","name":"%s","cpu":%s,"mem":%s,"disk":%s,"uptime":%s,"health":"%s","ignored":%s,"findings":[' \
+      "$id" "$(json_escape "$ty")" "$(json_escape "$st")" "$(json_escape "$nm")" \
+      "$(_json_num "$cpu")" "$(_json_num "$mem")" "$(_json_num "$disk")" \
+      "$([[ "$st" == "running" ]] && _json_num "$up" || printf 'null')" \
+      "$hname" "$ign"
+    ffirst=1
+    if [[ "$ign" == "false" ]]; then
+      IFS=$'\t' read -r -a items <<<"${_HV_FIND[$id]:-}"
+      for item in "${items[@]}"; do
+        IFS='|' read -r f_lvl f_chk f_val <<<"$item"
+        ((ffirst)) || printf ','
+        ffirst=0
+        fval="$(_json_num "$f_val")"
+        [[ "$fval" == "null" ]] && fval="\"$(json_escape "$f_val")\""
+        printf '{"check":"%s","level":"%s","value":%s,"text":"%s"}' \
+          "$f_chk" "$(_level_name "$f_lvl")" "$fval" \
+          "$(json_escape "$(_health_finding "$f_chk" "$f_lvl" "$f_val")")"
+      done
+    fi
+    printf ']}'
+  done
+  printf '],"summary":{"guests":%s,"ok":%s,"warn":%s,"crit":%s,"ignored":%s}}\n' \
+    "$n" "$n_ok" "$n_warn" "$n_crit" "$n_ign"
+  return 0
+}
+
+# _health_status_line ID — one-line health summary for the status action.
+# Fails silently (return 1) when pvesh/python3 are missing or the guest is unknown.
+_health_status_line() {
+  local want="$1" row id ty st nm cpu mem disk up found='' lvl tag upt
+  _validate_health_config >/dev/null 2>&1 || return 1
+  _health_load 2>/dev/null || return 1
+  for row in "${HEALTH_ROWS[@]}"; do
+    IFS=$'\t' read -r id ty st nm cpu mem disk up <<<"$row"
+    if [[ "$id" == "$want" ]]; then
+      found="$row"
+      break
+    fi
+  done
+  [[ -n "$found" ]] || return 1
+  if _health_ignored "$want"; then
+    lvl='-'
+    tag="IGNORED"
+  else
+    HEALTH_ROWS=("$found")
+    _health_evaluate
+    lvl="${_HV_LEVEL[$want]:-0}"
+    tag="$(_level_name "$lvl")"
+  fi
+  upt='-'
+  [[ "$st" == "running" ]] && upt="$(_fmt_duration "$up")"
+  printf '  Health: CPU %s  MEM %s  DISK %s  up %s  [%s]\n' \
+    "$(_pct_text "$cpu")" "$(_pct_text "$mem")" "$(_pct_text "$disk")" "$upt" \
+    "$(_level_color "$lvl" "$tag")"
+  return 0
+}
+
+# health_overview — interactive health view (main menu key "h").
+health_overview() {
+  echo
+  if _validate_health_config; then
+    print_health_table || true
+  fi
+  printf '\n  %bPress Enter to continue...%b ' "${DIM}" "${NC}"
+  local _dummy
+  read_line _dummy
 }
 
 # =============================================================================
@@ -1220,13 +1769,14 @@ main_menu() {
   if ! print_table; then return 1; fi
   echo
   printf '  %b%s%b  %s\n' "${BOLD}" "Keys:" "${NC}" \
-    "<VMID> = open action menu   ${BOLD}r${NC} = refresh   ${BOLD}q${NC} = quit"
+    "<VMID> = open action menu   ${BOLD}h${NC} = health   ${BOLD}r${NC} = refresh   ${BOLD}q${NC} = quit"
   printf '  %b→%b ' "${CYAN_BRIGHT}" "${NC}"
   local choice
   read_line choice
   case "$choice" in
   q | Q) exit 0 ;;
   r | R | '') return 0 ;;
+  h | H) health_overview ;;
   *)
     if [[ "$choice" =~ ^[0-9]+$ ]]; then
       if ! validate_vmid "$choice"; then
@@ -1247,7 +1797,7 @@ main_menu() {
         err "VMID $choice not found. Press 'r' to refresh the list."
       fi
     else
-      err "Invalid input: '$choice'. Enter a numeric VMID, 'r', or 'q'."
+      err "Invalid input: '$choice'. Enter a numeric VMID, 'h', 'r', or 'q'."
     fi
     ;;
   esac
@@ -1468,6 +2018,7 @@ do_action() {
         err "Could not retrieve status for VM $id."
       fi
     fi
+    _health_status_line "$id" 2>/dev/null || true
     ;;
 
   *) err "Unknown action: $act" ;;

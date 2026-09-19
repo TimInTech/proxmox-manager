@@ -45,6 +45,10 @@ EOL
       201) echo "name: vm-fallback" ;;
       *) echo "name: vm-${1:-unknown}" ;;
     esac
+    # PMAN_MOCK_ONBOOT_IDS: space separated VMIDs that report "onboot: 1".
+    if [[ " ${PMAN_MOCK_ONBOOT_IDS:-} " == *" ${1:-} "* ]]; then
+      echo "onboot: 1"
+    fi
     ;;
   status)
     echo "status: running"

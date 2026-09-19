@@ -395,6 +395,97 @@ else
 fi
 
 # ---------------------------------------------------------------------------
+# Health view: --health, --health --list, --health --json, menu key, status line
+# ---------------------------------------------------------------------------
+FIXTURES="$ROOT_DIR/tests/fixtures"
+
+health_list_out="$("$SCRIPT" --health --list)"
+if grep -qE '^100 +CT +running' <<<"$health_list_out" && grep -qE '^200 +VM +running' <<<"$health_list_out" &&
+  ! grep -qE '^(300|9000) ' <<<"$health_list_out"; then
+  _pass "--health --list: local guests only, templates and other nodes skipped"
+else
+  _fail "--health --list: unexpected guest set"
+fi
+
+printf '%s\n' 'UNSUPPORTED_KEY=1' >"$HOME/.pmanrc"
+health_json_out="$("$SCRIPT" --health --json 2>/dev/null)"
+rm -f "$HOME/.pmanrc"
+if python3 -c '
+import json, sys
+d = json.loads(sys.stdin.read())
+g = {x["id"]: x for x in d["guests"]}
+assert d["node"] == "mock-host"
+assert sorted(g) == [100, 101, 200, 201]
+assert g[200]["disk"] is None and g[200]["cpu"] == 5 and g[200]["uptime"] == 90061
+assert g[101]["cpu"] is None and g[101]["uptime"] is None
+assert d["summary"] == {"guests": 4, "ok": 4, "warn": 0, "crit": 0, "ignored": 0}
+' <<<"$health_json_out" 2>/dev/null; then
+  _pass "--health --json: valid JSON on stdout only, n/a metrics are null"
+else
+  _fail "--health --json: invalid JSON or unexpected content"
+fi
+
+hot_out="$(PMAN_MOCK_RESOURCES="$FIXTURES/resources-hot.json" PMAN_MOCK_ONBOOT_IDS=101 "$SCRIPT" --health --list)"
+if grep -q '\[CRIT\] CT 100 (ct-one): memory 96%' <<<"$hot_out" &&
+  grep -q '\[WARN\] VM 200 (vm-one): CPU 90%' <<<"$hot_out" &&
+  grep -q '\[CRIT\] CT 101 (ct-fallback): stopped although onboot=1' <<<"$hot_out" &&
+  grep -q '1 OK  1 WARN  2 CRIT' <<<"$hot_out"; then
+  _pass "--health: thresholds and onboot produce findings and totals"
+else
+  _fail "--health: findings or totals missing"
+fi
+
+ign_out="$(PMAN_MOCK_RESOURCES="$FIXTURES/resources-hot.json" HEALTH_IGNORE_IDS=100 "$SCRIPT" --health --list)"
+if grep -qE '^100 .* IGN ' <<<"$ign_out" && ! grep -q 'CT 100 (ct-one)' <<<"$ign_out"; then
+  _pass "--health: HEALTH_IGNORE_IDS suppresses findings"
+else
+  _fail "--health: ignored guest still reported"
+fi
+
+hfilter_out="$("$SCRIPT" --health --list --filter running --name '^vm')"
+if grep -qE '^200 ' <<<"$hfilter_out" && ! grep -qE '^(100|101|201) ' <<<"$hfilter_out"; then
+  _pass "--health: --filter and --name apply"
+else
+  _fail "--health: --filter/--name not applied"
+fi
+
+_expect_rc "--health: pvesh failure exits 1" 1 env PMAN_MOCK_PVESH_FAIL=1 "$SCRIPT" --health
+
+if [[ "$(_level_for 84 85 95)" == "0" && "$(_level_for 85 85 95)" == "1" && "$(_level_for 95 85 95)" == "2" &&
+  "$(_level_for 99 0 0)" == "0" && "$(_level_for - 85 95)" == "-" ]]; then
+  _pass "_level_for: thresholds, disabled levels and n/a"
+else
+  _fail "_level_for: unexpected level"
+fi
+
+parsed_rows="$(pvesh get /cluster/resources | _health_parse_resources mock-host)"
+if [[ "$(printf '%s\n' "$parsed_rows" | cut -f1 | tr '\n' ' ')" == "100 101 200 201 " ]] &&
+  grep -qP '^200\tVM\trunning\tvm-one\t5\t25\t-\t90061$' <<<"$parsed_rows"; then
+  _pass "_health_parse_resources: node/template filter and TSV fields"
+else
+  _fail "_health_parse_resources: unexpected rows"
+fi
+if ! printf 'not json' | _health_parse_resources mock-host >/dev/null 2>&1; then
+  _pass "_health_parse_resources: invalid JSON fails"
+else
+  _fail "_health_parse_resources: invalid JSON accepted"
+fi
+
+menu_out="$(printf 'h\n\n' | "$SCRIPT" --once --no-clear 2>&1)" && menu_rc=0 || menu_rc=$?
+if [[ "$menu_rc" == "0" ]] && grep -q 'HEALTH' <<<"$menu_out" && grep -q 'Total: 4 guests' <<<"$menu_out"; then
+  _pass "interactive: key 'h' shows the health overview"
+else
+  _fail "interactive: key 'h' did not show the health overview (exit $menu_rc)"
+fi
+
+status_out="$(do_action 100 CT status ct-one 2>&1)"
+if grep -q 'Health: CPU 12%  MEM 25%  DISK 12%  up 1h 0m  \[OK\]' <<<"$status_out"; then
+  _pass "status action: prints a health line"
+else
+  _fail "status action: health line missing"
+fi
+
+# ---------------------------------------------------------------------------
 # Summary
 # ---------------------------------------------------------------------------
 echo
