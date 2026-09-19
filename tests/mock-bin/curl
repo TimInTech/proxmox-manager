@@ -2,6 +2,7 @@
 # Mock curl: never touches the network.
 # Appends argv to $PMAN_MOCK_CURL_LOG, the stdin config to ${PMAN_MOCK_CURL_LOG}.cfg and
 # every @file body to ${PMAN_MOCK_CURL_LOG}.body; exits ${PMAN_MOCK_CURL_RC:-0}.
+# PMAN_MOCK_CURL_SLEEP=N delays the call; PMAN_MOCK_FD_LOG records open fds.
 set -euo pipefail
 if [[ -n "${PMAN_MOCK_FD_LOG:-}" ]]; then
   for fd in /proc/"$$"/fd/*; do
@@ -10,6 +11,9 @@ if [[ -n "${PMAN_MOCK_FD_LOG:-}" ]]; then
 fi
 log="${PMAN_MOCK_CURL_LOG:-}"
 cfg="$(cat)"
+if [[ -n "${PMAN_MOCK_CURL_SLEEP:-}" ]]; then
+  sleep "$PMAN_MOCK_CURL_SLEEP"
+fi
 if [[ -n "$log" ]]; then
   printf '%s\n' "$*" >>"$log"
   printf '%s\n---\n' "$cfg" >>"${log}.cfg"

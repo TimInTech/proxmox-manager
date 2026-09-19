@@ -35,11 +35,17 @@ Versions follow [Semantic Versioning](https://semver.org/).
 - Outbound traffic is now possible, but only when notifications are configured (opt-in).
 
 ### Security
-- The ntfy access token is read from a `0600` file owned by the caller; an inline `NTFY_TOKEN` in a
-  config file is rejected. The token, URL and headers reach `curl` only via its stdin config, never
-  argv; redirects are not followed, and the token is never sent over plain `http://`.
+- The ntfy access token is read from a `0600` file owned by the caller in a directory nobody else can
+  write; the open descriptor is verified before reading (no swap between check and use). An inline
+  `NTFY_TOKEN` in a config file and a token with an `http://` URL are configuration errors.
+- The token, URL and headers reach `curl` only via its stdin config, never argv; `curl -q` ignores
+  `~/.curlrc`, redirects are not followed, a token forces `https` only, and requests are not retried.
 - Logs name only the ntfy host, never the topic path or the token.
 - Mail headers are built from validated single-line values (no header injection).
+- JSON output escapes all control characters; `_truncate` never cuts inside a UTF-8 character.
+- `qm`/`pct` config fallbacks run with a timeout; the `--check` lock descriptor is not inherited by
+  child processes and the lock file is never truncated; the state directory's parent must not be
+  group/world-writable.
 - The `--check` state lives in a `0700` directory, is written atomically with mode `0600`, is parsed
   as validated data (never sourced), and parallel runs are prevented with `flock`.
 

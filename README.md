@@ -235,7 +235,8 @@ install -d -m 700 /etc/pman
 install -m 600 /dev/null /etc/pman/ntfy.token && nano /etc/pman/ntfy.token
 ```
 
-The token is only sent over `https://`. **E-mail** uses the local `sendmail` (postfix, which PVE
+The token file and its directory must not be writable by others; a token requires an `https://`
+URL (`http://` plus a token is a configuration error). **E-mail** uses the local `sendmail` (postfix, which PVE
 installs for its own notifications, works out of the box when it can relay):
 
 ```bash
@@ -362,7 +363,7 @@ shellcheck proxmox-manager.sh
 tests/run.sh
 ```
 
-100 tests covering `validate_vmid`, `validate_snapshot_name`, `ip_info`, `--filter`, CLI flags, config
+131 tests covering `validate_vmid`, `validate_snapshot_name`, `ip_info`, `--filter`, CLI flags, config
 parsing, the health view, the `--check` engine and notifications (mocked `pvesh`, `curl`, `sendmail`;
 no network, no root).
 

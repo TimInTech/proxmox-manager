@@ -674,6 +674,11 @@ else
   else
     _fail "notify: hot run did not send exactly one ntfy + one mail (exit $chk_rc)"
   fi
+  if grep -q '^-q -fsS --max-time 10 --proto =https -o /dev/null --data-binary @' "$nlog.curl" && ! grep -q -- '--retry' "$nlog.curl"; then
+    _pass "notify: curl ignores .curlrc (-q first), https only with a token, no retry"
+  else
+    _fail "notify: unexpected curl arguments: $(head -1 "$nlog.curl")"
+  fi
   if grep -q 'tk_secret123' "$nlog.curl.cfg" && ! grep -q 'tk_secret123' "$nlog.curl" && ! grep -q 'pman-topic' "$nlog.curl"; then
     _pass "notify: token and topic only in curl stdin config, never in argv"
   else
@@ -802,9 +807,15 @@ else
   env "PMAN_MOCK_CURL_LOG=$nlog.curl" NTFY_URL=http://ntfy.example.invalid/pman-topic "NTFY_TOKEN_FILE=$ntfy_tok" \
     "$SCRIPT" --test-notify >/dev/null 2>&1 || tn_rc=$?
   if [[ "$tn_rc" == "1" && ! -e "$nlog.curl" ]]; then
-    _pass "notify: token is never sent over plain http (channel fails)"
+    _pass "notify: token with plain http is rejected by --test-notify"
   else
     _fail "notify: token sent over http or wrong exit ($tn_rc)"
+  fi
+  _chk "$(_new_state_dir)" "PMAN_MOCK_CURL_LOG=$nlog.curl" NTFY_URL=http://ntfy.example.invalid/pman-topic "NTFY_TOKEN_FILE=$ntfy_tok"
+  if [[ "$chk_rc" == "3" && ! -e "$nlog.curl" ]]; then
+    _pass "notify: token with plain http makes --check exit 3"
+  else
+    _fail "notify: http + token not rejected by --check (exit $chk_rc)"
   fi
 
   # Header injection: CR/LF in the title must not create extra headers.
@@ -830,6 +841,84 @@ sd="$(_new_state_dir)"
 _chk "$sd"
 _chk "$sd" "$STOPPED_200" "PMAN_MOCK_TASKS=$FIXTURES/tasks-vzdump-200.json"
 _expect_chk "--check: stop during a running vzdump (stop mode) is OK" 0 "PMAN OK"
+
+# Security review regressions ----------------------------------------------
+# Token file: directory must be trusted; the open descriptor is verified.
+tok_dir="$TEST_TMP/tokdir"
+mkdir -p "$tok_dir"
+chmod 777 "$tok_dir"
+printf 'tk_other\n' >"$tok_dir/t"
+chmod 600 "$tok_dir/t"
+_chk "$(_new_state_dir)" NTFY_URL=https://ntfy.example.invalid/pman-topic "NTFY_TOKEN_FILE=$tok_dir/t"
+_expect_chk "security: token file in a world-writable directory makes --check exit 3" 3 "PMAN UNKNOWN"
+chmod 700 "$tok_dir"
+saved_tf="$NTFY_TOKEN_FILE"
+NTFY_TOKEN_FILE="$tok_dir/t"
+tok_ok="$(_read_ntfy_token)" || tok_ok=''
+printf 'tk_leak\n' >"$tok_dir/other"
+chmod 644 "$tok_dir/other"
+NTFY_TOKEN_FILE="$tok_dir/other"
+tok_bad=0
+_read_ntfy_token >/dev/null 2>&1 || tok_bad=$?
+ln -s "$tok_dir/t" "$tok_dir/link"
+NTFY_TOKEN_FILE="$tok_dir/link"
+tok_link=0
+_read_ntfy_token >/dev/null 2>&1 || tok_link=$?
+NTFY_TOKEN_FILE="$saved_tf"
+if [[ "$tok_ok" == "tk_other" && "$tok_bad" == "1" && "$tok_link" == "1" ]]; then
+  _pass "security: token read via a verified descriptor (mode and symlink checked)"
+else
+  _fail "security: token reader accepted an unsafe file ($tok_ok/$tok_bad/$tok_link)"
+fi
+
+# State dir: parent must not be group/world-writable; lock file is never truncated.
+open_parent="$TEST_TMP/open-parent"
+mkdir -p "$open_parent"
+chmod 777 "$open_parent"
+_chk "$open_parent/state"
+if [[ "$chk_rc" == "3" && ! -e "$open_parent/state" ]]; then
+  _pass "security: HEALTH_STATE_DIR below a world-writable parent is refused"
+else
+  _fail "security: world-writable parent accepted (exit $chk_rc)"
+fi
+sd="$(_new_state_dir)"
+printf 'keep\n' >"$sd/check.lock"
+chmod 600 "$sd/check.lock"
+_chk "$sd"
+if [[ "$chk_rc" == "0" && "$(cat "$sd/check.lock")" == "keep" ]]; then
+  _pass "security: lock file is opened for append, not truncated"
+else
+  _fail "security: lock file truncated (exit $chk_rc)"
+fi
+
+if [[ "$(json_escape $'a\x01b\x1fc\n\t"')" == 'a\u0001b\u001fc\n\t\"' ]]; then
+  _pass "json_escape: control characters escaped as \\u00XX"
+else
+  _fail "json_escape: control characters not escaped"
+fi
+utf_cut="$(_truncate 'aüüüüüüüüü' 5)"
+if python3 -c 'import sys; sys.stdin.buffer.read().decode("utf-8")' <<<"$utf_cut" 2>/dev/null &&
+  [[ "$(_vis_width "$utf_cut")" == "5" ]]; then
+  _pass "_truncate: never cuts inside a UTF-8 character"
+else
+  _fail "_truncate: produced invalid UTF-8 or wrong width"
+fi
+
+# --test-notify removes the ntfy body temp file when interrupted.
+tn_tmp="$TEST_TMP/tn-tmp"
+mkdir -p "$tn_tmp"
+NTFY_URL=https://ntfy.example.invalid/pman-topic PMAN_MOCK_CURL_SLEEP=1 TMPDIR="$tn_tmp" \
+  "$SCRIPT" --test-notify >/dev/null 2>&1 &
+tn_pid=$!
+sleep 0.4
+kill -TERM "$tn_pid" 2>/dev/null || true
+tn_rc=0
+wait "$tn_pid" || tn_rc=$?
+if [[ "$tn_rc" != "0" && -z "$(ls -A "$tn_tmp")" ]]; then
+  _pass "--test-notify: interrupted run removes its temp file"
+else
+  _fail "--test-notify: temp file left after SIGTERM (exit $tn_rc)"
+fi
 
 # Review regressions -------------------------------------------------------
 # Metric alerts of a guest that stops resolve instead of sticking forever.

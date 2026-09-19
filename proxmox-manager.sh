@@ -283,6 +283,22 @@ _owner_mode_ok() {
   return 0
 }
 
+# _trusted_dir DIR — true when DIR is a directory (no symlink) owned by root or the
+# current user and not writable by group or others, so nobody else can swap its entries.
+_trusted_dir() {
+  local dir="$1" owner mode
+  [[ -d "$dir" && ! -L "$dir" ]] || return 1
+  owner="$(stat -c '%u' -- "$dir" 2>/dev/null || printf 'invalid')"
+  mode="$(stat -c '%a' -- "$dir" 2>/dev/null || printf 'invalid')"
+  if [[ "$owner" != "0" && "$owner" != "$EUID" ]] || [[ ! "$mode" =~ ^[0-7]{3,4}$ ]]; then
+    return 1
+  fi
+  if ((8#$mode & 8#022)); then
+    return 1
+  fi
+  return 0
+}
+
 # _prepare_log_file — require a private regular file in a trusted directory.
 _prepare_log_file() {
   [[ -z "$LOG_FILE" ]] && return 0
@@ -397,9 +413,13 @@ _validate_health_config() {
     elif ! _owner_mode_ok "$NTFY_TOKEN_FILE" 077; then
       err "NTFY_TOKEN_FILE must be owned by the current user with mode 0600."
       rc=1
+    elif ! _trusted_dir "$(dirname -- "$NTFY_TOKEN_FILE")"; then
+      err "The directory of NTFY_TOKEN_FILE must be owned by root or the current user and not group/world-writable."
+      rc=1
     fi
     if [[ "$NTFY_URL" == http://* ]]; then
-      _config_warn "NTFY_URL uses plain http; the access token is sent unencrypted."
+      err "NTFY_TOKEN_FILE requires an https:// NTFY_URL; the token is never sent over plain http."
+      rc=1
     fi
   fi
   if [[ -n "$HEALTH_MAIL_TO" ]]; then
@@ -679,6 +699,18 @@ json_escape() {
   s="${s//$'\n'/\\n}"
   s="${s//$'\r'/\\r}"
   s="${s//$'\t'/\\t}"
+  # Any other control character becomes \u00XX.
+  if [[ "$s" == *[$'\x01'-$'\x1f']* ]]; then
+    local out='' c i
+    for ((i = 0; i < ${#s}; i++)); do
+      c="${s:i:1}"
+      if [[ "$c" == [$'\x01'-$'\x1f'] ]]; then
+        printf -v c '\\u%04x' "'$c"
+      fi
+      out+="$c"
+    done
+    s="$out"
+  fi
   printf '%s' "$s"
 }
 
@@ -827,9 +859,20 @@ _truncate() {
   local text="$1" max="$2"
   if (($(_vis_width "$text") <= max)); then
     printf '%s' "$text"
-  else
-    printf '%s%s' "${text:0:max-1}" "$TRUNC_MARK"
+    return 0
   fi
+  # Copy whole UTF-8 characters (lead byte plus continuation bytes) up to max-1 columns.
+  local out='' i=0 n=0 len=${#text}
+  while ((n < max - 1 && i < len)); do
+    out+="${text:i:1}"
+    i=$((i + 1))
+    while ((i < len)) && [[ "${text:i:1}" == [$'\x80'-$'\xbf'] ]]; do
+      out+="${text:i:1}"
+      i=$((i + 1))
+    done
+    n=$((n + 1))
+  done
+  printf '%s%s' "$out" "$TRUNC_MARK"
 }
 
 # _term_cols — terminal width (fallback 80).
@@ -1386,8 +1429,8 @@ _guest_onboot() {
     return 1
   fi
   case "$ty" in
-  CT) cfg="$(pct config "$id" 2>/dev/null 9>&- || true)" ;;
-  VM) cfg="$(qm config "$id" 2>/dev/null 9>&- || true)" ;;
+  CT) cfg="$(timeout 10 pct config "$id" 2>/dev/null 9>&- || true)" ;;
+  VM) cfg="$(timeout 10 qm config "$id" 2>/dev/null 9>&- || true)" ;;
   esac
   grep -qE '^onboot:[[:space:]]*1[[:space:]]*$' <<<"$cfg"
 }
@@ -1810,9 +1853,14 @@ _check_on_exit() {
 
 # _check_state_dir DIR — create DIR (0700) if needed; require a private, owned directory.
 _check_state_dir() {
-  local dir="$1"
+  local dir="$1" parent
   if [[ -L "$dir" ]]; then
     err "HEALTH_STATE_DIR must not be a symlink."
+    return 1
+  fi
+  parent="$(dirname -- "$dir")"
+  if [[ -d "$parent" ]] && ! _trusted_dir "$parent"; then
+    err "The parent of HEALTH_STATE_DIR (${parent}) must be owned by root or the current user and not group/world-writable."
     return 1
   fi
   if [[ ! -d "$dir" ]]; then
@@ -2206,7 +2254,7 @@ run_check() {
     umask 077
     # The lock lives on fd 9; child processes get "9>&-" so e.g. a forking MTA
     # cannot keep holding it after this run has finished.
-    if ! { exec 9>"${dir%/}/check.lock"; } 2>/dev/null; then
+    if ! { exec 9>>"${dir%/}/check.lock"; } 2>/dev/null; then
       _check_unknown "Could not open the lock file in ${dir}."
     fi
     umask "$old_umask"
@@ -2360,11 +2408,34 @@ _notify_warn() {
   warn "$*" >&2
 }
 
+# _read_ntfy_token — print the token from NTFY_TOKEN_FILE. The file is opened once and
+# the open descriptor itself is checked (regular file, owner, mode 0600), so swapping the
+# path between validation and use cannot leak another file; its directory must be trusted.
+_read_ntfy_token() {
+  local fd info line=''
+  if [[ -L "$NTFY_TOKEN_FILE" ]] || ! _trusted_dir "$(dirname -- "$NTFY_TOKEN_FILE")"; then
+    return 1
+  fi
+  if ! { exec {fd}<"$NTFY_TOKEN_FILE"; } 2>/dev/null; then
+    return 1
+  fi
+  info="$(stat -L -c '%F|%u|%a' -- "/proc/self/fd/${fd}" 2>/dev/null || true)"
+  if [[ "$info" =~ ^regular(\ empty)?\ file\|([0-9]+)\|([0-7]{3,4})$ ]] &&
+    [[ "${BASH_REMATCH[2]}" == "$EUID" ]] && ((!(8#${BASH_REMATCH[3]} & 8#077))); then
+    IFS= read -r line <&"$fd" || true
+  else
+    line=''
+  fi
+  exec {fd}<&-
+  [[ "$line" =~ ^[A-Za-z0-9_.-]{1,256}$ ]] || return 1
+  printf '%s' "$line"
+}
+
 # _notify_ntfy — send the message to NTFY_URL. URL, headers and the optional token are
 # passed to curl via its stdin config, never in argv; the body comes from a private temp
 # file. Only the host is logged, never the topic path or the token.
 _notify_ntfy() {
-  local host token='' tag title cfg rc=0 out
+  local host token='' tag title cfg rc=0 out proto
   host="${NTFY_URL#*://}"
   host="${host%%/*}"
   if ! have curl; then
@@ -2376,11 +2447,8 @@ _notify_ntfy() {
       _notify_warn "ntfy: refusing to send the access token over plain http to ${host}; use https."
       return 1
     fi
-    if ! IFS= read -r token <"$NTFY_TOKEN_FILE" && [[ -z "$token" ]]; then
-      token=''
-    fi
-    if [[ ! "$token" =~ ^[A-Za-z0-9_.-]{1,256}$ ]]; then
-      _notify_warn "ntfy: token in NTFY_TOKEN_FILE is empty or has unsupported characters."
+    if ! token="$(_read_ntfy_token)"; then
+      _notify_warn "ntfy: NTFY_TOKEN_FILE is unsafe, unreadable or has an invalid token."
       return 1
     fi
   fi
@@ -2404,7 +2472,11 @@ _notify_ntfy() {
   if [[ -n "$token" ]]; then
     cfg+="header = \"Authorization: Bearer ${token}\""$'\n'
   fi
-  out="$(curl -fsS --max-time 10 --retry 2 --proto '=http,https' -o /dev/null \
+  # -q first: ignore ~/.curlrc. No --retry: a retried POST can duplicate a push, and
+  # unsent changes are resent by the next --check run anyway.
+  proto='=http,https'
+  [[ -n "$token" ]] && proto='=https'
+  out="$(curl -q -fsS --max-time 10 --proto "$proto" -o /dev/null \
     --data-binary "@${_NOTIFY_TMP}" --config - <<<"$cfg" 2>&1 9>&-)" || rc=$?
   rm -f -- "$_NOTIFY_TMP"
   _NOTIFY_TMP=''
@@ -2487,6 +2559,14 @@ _notify_all() {
   return 0
 }
 
+# _notify_cleanup — EXIT trap of --test-notify: remove a pending ntfy body file.
+_notify_cleanup() {
+  if [[ -n "$_NOTIFY_TMP" ]]; then
+    rm -f -- "$_NOTIFY_TMP"
+    _NOTIFY_TMP=''
+  fi
+}
+
 # run_test_notify — send a test message through all configured channels.
 run_test_notify() {
   if ! _notify_channels_configured; then
@@ -2494,6 +2574,8 @@ run_test_notify() {
     exit 1
   fi
   local node
+  trap '_notify_cleanup' EXIT
+  trap 'exit 1' INT TERM
   node="$(_local_node || printf 'unknown')"
   MSG_TITLE="pman ${node}: test notification"
   MSG_BODY="Test message from proxmox-manager on ${node}. Alerts from --check will arrive here."
