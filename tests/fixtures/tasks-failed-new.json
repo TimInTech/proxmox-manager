@@ -3,5 +3,5 @@
 {"upid": "UPID:mock-host:00001001:00002001:65000001:qmstart:200:root@pam:", "node": "mock-host", "type": "qmstart", "id": "200", "user": "root@pam", "starttime": 1700000200, "endtime": 1700000205, "status": "OK"},
 {"upid": "UPID:mock-host:00001002:00002002:65000002:vzdump:100:root@pam:", "node": "mock-host", "type": "vzdump", "id": "100", "user": "root@pam", "starttime": 1700000300, "endtime": 1700000400, "status": "WARNINGS: 1"},
 {"upid": "UPID:mock-host:00001003:00002003:65000003:qmstart:201:root@pam:", "node": "mock-host", "type": "qmstart", "id": "201", "user": "root@pam", "starttime": 1700000500, "endtime": 1700000501, "status": "start failed: QEMU exited with code 1"},
-{"upid": "UPID:mock-host:00001004:00002004:65000004:vncproxy:200:root@pam:", "node": "mock-host", "type": "vncproxy", "id": "200", "user": "root@pam", "starttime": 1700000600}
+{"upid": "UPID:mock-host:00001004:00002004:65000004:vncproxy:200:root@pam:", "node": "mock-host", "type": "vncproxy", "id": "200", "user": "root@pam", "starttime": 1700000600, "status": "RUNNING"}
 ]

@@ -355,9 +355,10 @@ _new_state_dir() {
   printf '%s' "$d"
 }
 
-_expect_rc "health flags: --check with --json exits 1" 1 "$SCRIPT" --check --json
-_expect_rc "health flags: --check with --health exits 1" 1 "$SCRIPT" --check --health
-_expect_rc "health flags: --check with --filter exits 1" 1 "$SCRIPT" --check --filter running
+_expect_rc "health flags: --check with --json exits 3 (UNKNOWN)" 3 "$SCRIPT" --check --json
+_expect_rc "health flags: --check with --health exits 3 (UNKNOWN)" 3 "$SCRIPT" --check --health
+_expect_rc "health flags: --check with --filter exits 3 (UNKNOWN)" 3 "$SCRIPT" --check --filter running
+_expect_rc "health flags: --check with an unknown option exits 3" 3 "$SCRIPT" --check --bogus
 _expect_rc "health flags: --dry-run without --check exits 1" 1 "$SCRIPT" --dry-run
 _expect_rc "health flags: --test-notify with --list exits 1" 1 "$SCRIPT" --test-notify --list
 _expect_rc "test-notify: no channel configured exits 1" 1 "$SCRIPT" --test-notify
@@ -715,17 +716,68 @@ else
   _notify_env n3
   sd="$(_new_state_dir)"
   _chk "$sd" "${NENV[@]}" "$HOT" PMAN_MOCK_CURL_RC=7 PMAN_MOCK_SENDMAIL_RC=75
-  if [[ "$chk_rc" == "2" && ! -e "$sd/health.state" ]]; then
-    _pass "notify: all channels fail -> exit reflects health, state not saved"
+  if [[ "$chk_rc" == "2" && -e "$sd/health.state" ]] && ! grep -q $'^C\tmem:100\t2' "$sd/health.state" &&
+    grep -q $'^R\t100$' "$sd/health.state"; then
+    _pass "notify: all channels fail -> exit reflects health, state saved, alerts kept pending"
   else
     _fail "notify: all-fail handling wrong (exit $chk_rc)"
   fi
   rm -f "$nlog".*
   _chk "$sd" "${NENV[@]}" "$HOT"
-  if [[ "$chk_rc" == "2" && "$(_count "$nlog.curl" .)" == "1" && -e "$sd/health.state" ]] && grep -qF 'Priority: urgent' "$nlog.curl.cfg"; then
+  if [[ "$chk_rc" == "2" && "$(_count "$nlog.curl" .)" == "1" ]] && grep -qF 'Priority: urgent' "$nlog.curl.cfg" &&
+    grep -qF '[CRIT] CT 100 (ct-one): memory 96%' "$nlog.curl.body"; then
     _pass "notify: next run resends after a total failure"
   else
     _fail "notify: alert not resent after a total failure"
+  fi
+  _chk "$sd" "${NENV[@]}" "$HOT"
+  if [[ "$(_count "$nlog.curl.body" 'memory 96%')" == "1" ]]; then
+    _pass "notify: resent alert is delivered exactly once"
+  else
+    _fail "notify: resent alert delivered more than once"
+  fi
+
+  # CPU counter keeps advancing while delivery fails; the WARN fires once delivery works.
+  _notify_env n7
+  sd="$(_new_state_dir)"
+  _chk "$sd" "${NENV[@]}" "$CPU_HOT"
+  _chk "$sd" "${NENV[@]}" "$CPU_HOT"
+  _chk "$sd" "${NENV[@]}" "$CPU_HOT" PMAN_MOCK_CURL_RC=7 PMAN_MOCK_SENDMAIL_RC=75
+  if [[ "$chk_rc" == "1" ]] && grep -q $'^C\tcpu:200\t0\t0\t3$' "$sd/health.state"; then
+    _pass "notify: CPU counter advances although delivery failed"
+  else
+    _fail "notify: CPU counter not saved after delivery failure (exit $chk_rc)"
+  fi
+  rm -f "$nlog".*
+  _chk "$sd" "${NENV[@]}" "$CPU_HOT"
+  if [[ "$(_count "$nlog.curl" .)" == "1" ]] && grep -qF '[WARN] VM 200 (vm-one): CPU 90%' "$nlog.curl.body"; then
+    _pass "notify: pending CPU alert delivered on the next run"
+  else
+    _fail "notify: pending CPU alert not delivered"
+  fi
+
+  # Tasks: failed task events are resent after a total delivery failure.
+  _notify_env n8
+  sd="$(_new_state_dir)"
+  _chk "$sd" "${NENV[@]}" "PMAN_MOCK_TASKS=$FIXTURES/tasks-failed-old.json"
+  _chk "$sd" "${NENV[@]}" "PMAN_MOCK_TASKS=$FIXTURES/tasks-failed-new.json" PMAN_MOCK_CURL_RC=7 PMAN_MOCK_SENDMAIL_RC=75
+  rm -f "$nlog".*
+  _chk "$sd" "${NENV[@]}" "PMAN_MOCK_TASKS=$FIXTURES/tasks-failed-new.json"
+  if [[ "$chk_rc" == "2" && "$(_count "$nlog.curl" .)" == "1" ]] && grep -qF 'task qmstart 201 failed' "$nlog.curl.body"; then
+    _pass "notify: unsent task events are resent on the next run"
+  else
+    _fail "notify: unsent task events lost (exit $chk_rc)"
+  fi
+
+  # The --check lock (fd 9) must not leak into child processes.
+  _notify_env n9
+  sd="$(_new_state_dir)"
+  _chk "$sd" "${NENV[@]}" "$HOT" "PMAN_MOCK_FD_LOG=$nlog.fds"
+  if [[ -s "$nlog.fds" ]] && grep -q '^sendmail ' "$nlog.fds" && grep -q '^curl ' "$nlog.fds" &&
+    grep -q '^pvesh ' "$nlog.fds" && ! grep -q 'check.lock' "$nlog.fds"; then
+    _pass "notify: lock fd is closed for pvesh, curl and sendmail"
+  else
+    _fail "notify: lock fd inherited by a child process"
   fi
 
   _notify_env n4
@@ -778,6 +830,116 @@ sd="$(_new_state_dir)"
 _chk "$sd"
 _chk "$sd" "$STOPPED_200" "PMAN_MOCK_TASKS=$FIXTURES/tasks-vzdump-200.json"
 _expect_chk "--check: stop during a running vzdump (stop mode) is OK" 0 "PMAN OK"
+
+# Review regressions -------------------------------------------------------
+# Metric alerts of a guest that stops resolve instead of sticking forever.
+sd="$(_new_state_dir)"
+_chk "$sd" "$HOT"
+_chk "$sd" "PMAN_MOCK_RESOURCES=$FIXTURES/resources-100-stopped.json" "PMAN_MOCK_TASKS=$FIXTURES/tasks-vzshutdown-100.json"
+_expect_chk "--check: metric alerts resolve when the guest stops" 0 "[RESOLVED] CT 100 (ct-one): mem alert cleared (guest stopped)"
+_chk "$sd" "PMAN_MOCK_RESOURCES=$FIXTURES/resources-100-stopped.json" "PMAN_MOCK_TASKS=$FIXTURES/tasks-vzshutdown-100.json"
+if [[ "$chk_rc" == "0" && "$(wc -l <<<"$chk_out")" == "1" ]]; then
+  _pass "--check: stopped guest stays quiet afterwards"
+else
+  _fail "--check: stopped guest still reported (exit $chk_rc)"
+fi
+# A metric that is n/a on a running guest keeps its state but is not reported or counted.
+sd="$(_new_state_dir)"
+printf '%s\n' '# pman-health-state v1' "W	1	1700000005" "C	disk:200	2	1	0" >"$sd/health.state"
+chmod 600 "$sd/health.state"
+_chk "$sd"
+if [[ "$chk_rc" == "0" ]] && ! grep -q 'disk' <<<"$chk_out" && grep -q $'^C\tdisk:200\t2' "$sd/health.state"; then
+  _pass "--check: n/a metric on a running guest is kept silently"
+else
+  _fail "--check: n/a metric on a running guest reported or dropped (exit $chk_rc)"
+fi
+
+# Shutdown task older than the last run (pvestatd lag) still explains the stop.
+sd="$(_new_state_dir)"
+_chk "$sd" "PMAN_MOCK_TASKS=$FIXTURES/tasks-shutdown-old-200.json"
+_chk "$sd" "$STOPPED_200" "PMAN_MOCK_TASKS=$FIXTURES/tasks-shutdown-old-200.json"
+_expect_chk "--check: shutdown seen before the stop (status lag) is OK" 0 "PMAN OK"
+sd="$(_new_state_dir)"
+_chk "$sd" "PMAN_MOCK_TASKS=$FIXTURES/tasks-suspend-200.json"
+_chk "$sd" "$STOPPED_200" "PMAN_MOCK_TASKS=$FIXTURES/tasks-suspend-200.json"
+_expect_chk "--check: hibernate (qmsuspend, WARNINGS) is not an unexpected stop" 0 "PMAN OK"
+sd="$(_new_state_dir)"
+_chk "$sd" "PMAN_MOCK_TASKS=$FIXTURES/tasks-restart-after-stop-200.json"
+_chk "$sd" "$STOPPED_200" "PMAN_MOCK_TASKS=$FIXTURES/tasks-restart-after-stop-200.json"
+_expect_chk "--check: stop after a later start task is unexpected" 1 "stopped unexpectedly"
+sd="$(_new_state_dir)"
+_chk "$sd"
+_chk "$sd" "$STOPPED_200"
+_chk "$sd" "$STOPPED_200" "PMAN_MOCK_TASKS=$FIXTURES/tasks-shutdown-old-200.json"
+_expect_chk "--check: a stop task found later clears the unexpected-stop latch" 0 "[RESOLVED] VM 200 (vm-one)"
+
+# Tasks are read with --source all (running tasks are not archived yet).
+pv_log="$TEST_TMP/pvesh.args"
+_chk "$(_new_state_dir)" "PMAN_MOCK_PVESH_LOG=$pv_log"
+if grep -q -- '^get /nodes/mock-host/tasks --source all --limit 200 --output-format json$' "$pv_log"; then
+  _pass "--check: task list uses --source all"
+else
+  _fail "--check: task list does not use --source all"
+fi
+
+# onboot=1 guest stopped by an admin task is WARN, unexplained it stays CRIT.
+sd="$(_new_state_dir)"
+_chk "$sd" PMAN_MOCK_ONBOOT_IDS=201 "PMAN_MOCK_TASKS=$FIXTURES/tasks-shutdown-201.json"
+_expect_chk "--check: onboot guest stopped by a task is WARN" 1 "[WARN] VM 201 (vm-fallback): stopped by a Proxmox task although onboot=1"
+
+# --force must not break machine-readable output.
+force_json="$("$SCRIPT" --health --json --force 2>/dev/null)"
+force_list_json="$("$SCRIPT" --json --force 2>/dev/null)"
+if python3 -c 'import json,sys; json.loads(sys.argv[1]); json.loads(sys.argv[2])' "$force_json" "$force_list_json" 2>/dev/null; then
+  _pass "--force: --json and --health --json stay valid JSON"
+else
+  _fail "--force: JSON output corrupted by the --force warning"
+fi
+_chk "$(_new_state_dir)" -- --force
+if [[ "$(head -1 <<<"$chk_out")" == "PMAN OK -"* ]]; then
+  _pass "--force: --check keeps the Nagios summary as first line"
+else
+  _fail "--force: --check first line is not the summary"
+fi
+
+# Ignored guests are not counted; an empty node is not an error.
+_chk "$(_new_state_dir)" HEALTH_IGNORE_IDS=100
+_expect_chk "--check: ignored guests are not counted" 0 "; 3 guests on mock-host"
+empty_rc=0
+empty_out="$(PMAN_MOCK_RESOURCES="$FIXTURES/resources-empty.json" "$SCRIPT" --health 2>&1)" || empty_rc=$?
+if [[ "$empty_rc" == "0" && "$empty_out" == *"No guests found on node mock-host."* ]]; then
+  _pass "--health: no guests exits 0 with a message"
+else
+  _fail "--health: no guests exit $empty_rc"
+fi
+
+# Narrow terminals: no line wider than COLUMNS, finding text never cut.
+narrow_out="$(COLUMNS=50 LANG=C.UTF-8 PMAN_MOCK_RESOURCES="$FIXTURES/resources-hot.json" PMAN_MOCK_ONBOOT_IDS=101 "$SCRIPT" --health)"
+if python3 -c 'import sys; assert max(len(l) for l in sys.stdin.read().splitlines()) <= 50' <<<"$narrow_out" 2>/dev/null &&
+  grep -qF 'stopped although onboot=1' <<<"$narrow_out" && grep -qF 'memory 96% (>= 95%)' <<<"$narrow_out"; then
+  _pass "--health: fits 50 columns without cutting findings"
+else
+  _fail "--health: narrow layout overflows or cuts findings"
+fi
+
+# onboot lookup reads the current section of /etc/pve configs; node name from uname -n.
+pve_etc="$TEST_TMP/pve-etc"
+mkdir -p "$pve_etc/qemu-server" "$pve_etc/lxc"
+printf '%s\n' 'name: a' 'onboot: 1' '[snap1]' 'onboot: 0' >"$pve_etc/qemu-server/555.conf"
+printf '%s\n' 'hostname: b' '[snap1]' 'onboot: 1' >"$pve_etc/lxc/556.conf"
+saved_etc="$PVE_ETC_DIR"
+PVE_ETC_DIR="$pve_etc"
+if _guest_onboot 555 VM && ! _guest_onboot 556 CT && PMAN_MOCK_ONBOOT_IDS=557 _guest_onboot 557 VM; then
+  _pass "_guest_onboot: reads the current config section, falls back to qm/pct"
+else
+  _fail "_guest_onboot: wrong onboot detection"
+fi
+PVE_ETC_DIR="$saved_etc"
+if [[ "$(_local_node)" == "mock-host" ]]; then
+  _pass "_local_node: uname -n up to the first dot"
+else
+  _fail "_local_node: unexpected node name"
+fi
 
 # ---------------------------------------------------------------------------
 # Summary

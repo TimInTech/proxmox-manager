@@ -58,6 +58,7 @@ declare -A _HV_LEVEL=() # per-guest max health level (see _health_evaluate)
 declare -A _HV_FIND=()  # per-guest findings (see _health_evaluate)
 HEALTH_TASKS=()         # parsed task rows (see _health_parse_tasks)
 HEALTH_STATE_HEADER='# pman-health-state v1'
+PVE_ETC_DIR='/etc/pve'                                             # guest configs for the onboot lookup (overridden only by tests)
 _CHECK_TMP=''                                                      # temp state file removed by the --check EXIT trap
 _CHECK_DONE=0                                                      # set right before --check exits normally
 _NOTIFY_TMP=''                                                     # temp body file of _notify_ntfy
@@ -547,14 +548,14 @@ parse_args() {
     --filter)
       if [[ $# -lt 2 ]]; then
         err "--filter requires a value: running, stopped, or paused."
-        exit 1
+        exit "$FATAL_EXIT"
       fi
       FILTER_STATUS="$2"
       case "$FILTER_STATUS" in
       running | stopped | paused) ;;
       *)
         err "Invalid --filter value '$FILTER_STATUS'. Valid: running, stopped, paused."
-        exit 1
+        exit "$FATAL_EXIT"
         ;;
       esac
       shift # consume the STATUS value; outer shift consumes --filter
@@ -562,19 +563,19 @@ parse_args() {
     --timeout)
       if [[ $# -lt 2 ]]; then
         err "--timeout requires a value in seconds (e.g., --timeout 30)."
-        exit 1
+        exit "$FATAL_EXIT"
       fi
       STOP_TIMEOUT="$2"
       if [[ ! "$STOP_TIMEOUT" =~ ^[0-9]+$ ]] || ((STOP_TIMEOUT < 1)); then
         err "--timeout requires a positive integer (seconds), got '$STOP_TIMEOUT'."
-        exit 1
+        exit "$FATAL_EXIT"
       fi
       shift # consume the SECS value; outer shift consumes --timeout
       ;;
     --name)
       if [[ $# -lt 2 ]]; then
         err "--name requires an ERE pattern value."
-        exit 1
+        exit "$FATAL_EXIT"
       fi
       FILTER_NAME="$2"
       # Validate ERE: grep exit code ≥2 means invalid pattern
@@ -582,7 +583,7 @@ parse_args() {
       echo '' | grep -E -- "$FILTER_NAME" >/dev/null 2>&1 || _grep_rc=$?
       if ((_grep_rc >= 2)); then
         err "--name pattern '$FILTER_NAME' is not a valid ERE."
-        exit 1
+        exit "$FATAL_EXIT"
       fi
       shift
       ;;
@@ -616,19 +617,19 @@ parse_args() {
     -*)
       err "Unknown option: $1"
       usage
-      exit 1
+      exit "$FATAL_EXIT"
       ;;
     *)
       err "Unexpected argument: $1"
       usage
-      exit 1
+      exit "$FATAL_EXIT"
       ;;
     esac
     shift
   done
   if ((LIST_FLAG == 1 && JSON_FLAG == 1)); then
     err "Options --list and --json are not combinable."
-    exit 1
+    exit "$FATAL_EXIT"
   fi
   _resolve_mode
 }
@@ -637,16 +638,16 @@ parse_args() {
 _resolve_mode() {
   if ((DRY_RUN == 1 && CHECK_FLAG == 0)); then
     err "Option --dry-run requires --check."
-    exit 1
+    exit "$FATAL_EXIT"
   fi
   if ((CHECK_FLAG == 1)); then
     if ((LIST_FLAG == 1 || JSON_FLAG == 1 || HEALTH_FLAG == 1 || TEST_NOTIFY_FLAG == 1)); then
       err "Option --check is not combinable with --list, --json, --health or --test-notify."
-      exit 1
+      exit "$FATAL_EXIT"
     fi
     if [[ -n "$FILTER_STATUS" || -n "$FILTER_NAME" ]]; then
       err "Option --check always checks all guests; --filter and --name are not supported."
-      exit 1
+      exit "$FATAL_EXIT"
     fi
     MODE="check"
     return 0
@@ -654,7 +655,7 @@ _resolve_mode() {
   if ((TEST_NOTIFY_FLAG == 1)); then
     if ((LIST_FLAG == 1 || JSON_FLAG == 1 || HEALTH_FLAG == 1)); then
       err "Option --test-notify is not combinable with --list, --json or --health."
-      exit 1
+      exit "$FATAL_EXIT"
     fi
     MODE="test_notify"
     return 0
@@ -1144,9 +1145,11 @@ print_table() {
 # =============================================================================
 
 # _local_node — print the short name of the local node (validated); return 1 if unknown.
+# Uses PVE::INotify::nodename semantics: `uname -n` up to the first dot.
 _local_node() {
   local n
-  n="$(hostname -s 2>/dev/null || true)"
+  n="$(uname -n 2>/dev/null || true)"
+  n="${n%%.*}"
   [[ "$n" =~ ^[A-Za-z0-9][A-Za-z0-9.-]{0,62}$ ]] || return 1
   printf '%s' "$n"
 }
@@ -1205,8 +1208,8 @@ _health_fetch() {
   local kind="$1" node="${2:-}"
   have pvesh || return 1
   case "$kind" in
-  resources) timeout 30 pvesh get /cluster/resources --type vm --output-format json 2>/dev/null ;;
-  tasks) timeout 30 pvesh get "/nodes/${node}/tasks" --limit 200 --output-format json 2>/dev/null ;;
+  resources) timeout 30 pvesh get /cluster/resources --type vm --output-format json 2>/dev/null 9>&- ;;
+  tasks) timeout 30 pvesh get "/nodes/${node}/tasks" --source all --limit 200 --output-format json 2>/dev/null 9>&- ;;
   *) return 1 ;;
   esac
 }
@@ -1269,7 +1272,7 @@ for r in data:
 rows.sort()
 for row in rows:
     print("\t".join(str(x) for x in row))
-' "$1"
+' "$1" 9>&-
 }
 
 # _health_parse_tasks — read /nodes/<node>/tasks JSON on stdin and print TSV rows sorted
@@ -1311,7 +1314,7 @@ for t in data:
 rows.sort()
 for row in rows:
     print("\t".join(str(x) for x in row))
-'
+' 9>&-
 }
 
 # _health_load — fetch and parse the local guests into HEALTH_ROWS (sets HEALTH_NODE).
@@ -1367,12 +1370,24 @@ _health_load_tasks() {
 }
 
 # _guest_onboot ID TYPE — true when the guest config has "onboot: 1".
+# Reads the current config section of PVE_ETC_DIR/{qemu-server,lxc}/ID.conf (snapshot
+# sections start at the first "[" line); falls back to qm/pct config when unreadable.
 _guest_onboot() {
-  local id="$1" ty="$2" cfg=''
+  local id="$1" ty="$2" cfg='' conf
   case "$ty" in
-  CT) cfg="$(pct config "$id" 2>/dev/null || true)" ;;
-  VM) cfg="$(qm config "$id" 2>/dev/null || true)" ;;
+  CT) conf="${PVE_ETC_DIR}/lxc/${id}.conf" ;;
+  VM) conf="${PVE_ETC_DIR}/qemu-server/${id}.conf" ;;
   *) return 1 ;;
+  esac
+  if [[ "$id" =~ ^[0-9]+$ && -f "$conf" && -r "$conf" ]]; then
+    if awk '/^\[/ { exit } /^onboot:[[:space:]]*1[[:space:]]*$/ { found = 1 } END { exit !found }' "$conf"; then
+      return 0
+    fi
+    return 1
+  fi
+  case "$ty" in
+  CT) cfg="$(pct config "$id" 2>/dev/null 9>&- || true)" ;;
+  VM) cfg="$(qm config "$id" 2>/dev/null 9>&- || true)" ;;
   esac
   grep -qE '^onboot:[[:space:]]*1[[:space:]]*$' <<<"$cfg"
 }
@@ -1426,6 +1441,8 @@ _health_finding() {
   down)
     if [[ "$lvl" == "2" ]]; then
       printf 'stopped although onboot=1'
+    elif [[ "$val" == "onboot-task" ]]; then
+      printf 'stopped by a Proxmox task although onboot=1'
     else
       printf 'stopped unexpectedly'
     fi
@@ -1496,8 +1513,25 @@ _health_row_shown() {
   return 0
 }
 
+# _health_finding_line WIDTH ENTRY — render one findings entry ("lvl TAB type id TAB name
+# TAB text") within WIDTH columns: the guest name is shortened, the finding text never.
+_health_finding_line() {
+  local width="$1" entry="$2" f_lvl f_guest f_name f_text tag avail
+  IFS=$'\t' read -r f_lvl f_guest f_name f_text <<<"$entry"
+  tag="[$(_level_name "$f_lvl")]"
+  avail=$((width - ${#tag} - 1 - ${#f_guest} - 4 - $(_vis_width "$f_text")))
+  if ((width <= 0 || avail >= $(_vis_width "$f_name"))); then
+    printf '%s %s (%s): %s' "$(_level_color "$f_lvl" "$tag")" "$f_guest" "$f_name" "$f_text"
+  elif ((avail >= 4)); then
+    printf '%s %s (%s): %s' "$(_level_color "$f_lvl" "$tag")" "$f_guest" "$(_truncate "$f_name" "$avail")" "$f_text"
+  else
+    printf '%s %s: %s' "$(_level_color "$f_lvl" "$tag")" "$f_guest" "$f_text"
+  fi
+}
+
 # print_health_table — health overview of local guests (boxed for --health and the
-# interactive menu, plain for --health --list). Returns 1 on error or when empty.
+# interactive menu, plain for --health --list). Narrow terminals drop UPTIME, DISK% and
+# TYPE (in that order) before the NAME column shrinks. Returns 1 only on errors.
 print_health_table() {
   local draw_boxes=0
   [[ "$MODE" == "health" || "$MODE" == "interactive" ]] && draw_boxes=1
@@ -1516,23 +1550,40 @@ print_health_table() {
     fi
   done
 
-  # │ + 2 + ID 6 + TYPE 5 + STATUS 8 + CPU% 5 + MEM% 5 + DISK% 5 + UPTIME 11 + HEALTH 7
-  #   + 8 separators + NAME + 2 + │
-  local name_w=15 fixed=65
+  # 2 borders + 4 margin + ID 7 + TYPE 6 + STATUS 9 + CPU% 6 + MEM% 6 + DISK% 6
+  #   + UPTIME 12 + HEALTH 8 + NAME
+  local name_w=15 fixed=65 show_type=1 show_disk=1 show_up=1 cols
   for row in "${rows[@]}"; do
     IFS=$'\t' read -r id ty st nm cpu mem disk up <<<"$row"
     (($(_vis_width "$nm") > name_w)) && name_w=$(_vis_width "$nm")
   done
   if ((draw_boxes)); then
-    local max_name=$(($(_term_cols) - fixed))
+    cols="$(_term_cols)"
+    if ((fixed + 10 > cols)); then
+      show_up=0
+      fixed=$((fixed - 12))
+    fi
+    if ((fixed + 10 > cols)); then
+      show_disk=0
+      fixed=$((fixed - 6))
+    fi
+    if ((fixed + 10 > cols)); then
+      show_type=0
+      fixed=$((fixed - 6))
+    fi
+    local max_name=$((cols - fixed))
     ((name_w > max_name)) && name_w=$max_name
-    ((name_w < 10)) && name_w=10
+    ((name_w < 6)) && name_w=6
   fi
   local W=$((fixed + name_w))
 
   local head
-  printf -v head '%-6s %-5s %-8s %5s %5s %5s %-11s %-7s %s' \
-    "ID" "TYPE" "STATUS" "CPU%" "MEM%" "DISK%" "UPTIME" "HEALTH" "NAME"
+  printf -v head '%-6s ' "ID"
+  ((show_type)) && head+="$(printf '%-5s ' "TYPE")"
+  head+="$(printf '%-8s %5s %5s ' "STATUS" "CPU%" "MEM%")"
+  ((show_disk)) && head+="$(printf '%5s ' "DISK%")"
+  ((show_up)) && head+="$(printf '%-11s ' "UPTIME")"
+  head+="$(printf '%-7s %s' "HEALTH" "NAME")"
   if ((draw_boxes)); then
     _draw_line_top $W
     _box_content "${CYAN}" "${LINE_V}" $W "  ${BOLD}${WHITE}${head}${NC}"
@@ -1542,15 +1593,15 @@ print_health_table() {
   fi
 
   if ((${#rows[@]} == 0)); then
-    local msg="No VMs or containers found on node ${HEALTH_NODE}."
-    [[ -n "$FILTER_STATUS" || -n "$FILTER_NAME" ]] && msg="No VMs or containers match the filter."
+    local msg="No guests found on node ${HEALTH_NODE}."
+    [[ -n "$FILTER_STATUS" || -n "$FILTER_NAME" ]] && msg="No guests match the filter."
     if ((draw_boxes)); then
-      _box_content "${CYAN}" "${LINE_V}" $W "  ${RED_BRIGHT}${msg}${NC}"
+      _box_content "${CYAN}" "${LINE_V}" $W "  ${DIM}$(_truncate "$msg" $((W - 6)))${NC}"
       _draw_line_bot $W
     else
-      printf '%b%s%b\n' "${RED_BRIGHT}" "$msg" "${NC}"
+      printf '%s\n' "$msg"
     fi
-    return 1
+    return 0
   fi
 
   local n_ok=0 n_warn=0 n_crit=0 n_ign=0 n_run=0 lvl hname ty_col line upt item f_lvl f_chk f_val
@@ -1573,22 +1624,22 @@ print_health_table() {
       IFS=$'\t' read -r -a items <<<"${_HV_FIND[$id]:-}"
       for item in "${items[@]}"; do
         IFS='|' read -r f_lvl f_chk f_val <<<"$item"
-        findings+=("${f_lvl}"$'\t'"${ty} ${id} (${nm}): $(_health_finding "$f_chk" "$f_lvl" "$f_val")")
+        findings+=("${f_lvl}"$'\t'"${ty} ${id}"$'\t'"${nm}"$'\t'"$(_health_finding "$f_chk" "$f_lvl" "$f_val")")
       done
     fi
     case "$ty" in
-    CT) printf -v ty_col '%b%-5s%b' "${MAGENTA_BRIGHT}" "$ty" "${NC}" ;;
-    VM) printf -v ty_col '%b%-5s%b' "${BLUE_BRIGHT}" "$ty" "${NC}" ;;
-    *) printf -v ty_col '%-5s' "$ty" ;;
+    CT) printf -v ty_col '%b%-5s%b ' "${MAGENTA_BRIGHT}" "$ty" "${NC}" ;;
+    VM) printf -v ty_col '%b%-5s%b ' "${BLUE_BRIGHT}" "$ty" "${NC}" ;;
+    *) printf -v ty_col '%-5s ' "$ty" ;;
     esac
+    ((show_type)) || ty_col=''
     upt='-'
     [[ "$st" == "running" ]] && upt="$(_fmt_duration "$up")"
-    printf -v line '%-6s %s %s %5s %5s %5s %-11s %s %s' \
-      "$id" "$ty_col" \
-      "$(_status_color "$st" "$(printf '%-8s' "$st")")" \
-      "$cpu" "$mem" "$disk" "$(_truncate "$upt" 11)" \
-      "$(_level_color "$lvl" "$(printf '%-7s' "$hname")")" \
-      "$(_truncate "$nm" "$name_w")"
+    printf -v line '%-6s %s%s %5s %5s ' "$id" "$ty_col" \
+      "$(_status_color "$st" "$(printf '%-8s' "$st")")" "$cpu" "$mem"
+    ((show_disk)) && line+="$(printf '%5s ' "$disk")"
+    ((show_up)) && line+="$(printf '%-11s ' "$(_truncate "$upt" 11)")"
+    line+="$(_level_color "$lvl" "$(printf '%-7s' "$hname")") $(_truncate "$nm" "$name_w")"
     if ((draw_boxes)); then
       _box_content "${CYAN}" "${LINE_V}" $W "  ${line}"
     else
@@ -1602,13 +1653,17 @@ print_health_table() {
     "${GREEN_BRIGHT}" "$n_ok" "${NC}" "${YELLOW_BRIGHT}" "$n_warn" "${NC}" \
     "${RED_BRIGHT}" "$n_crit" "${NC}"
   ((n_ign > 0)) && totals+="  ${n_ign} ignored"
+  if ((draw_boxes && $(_vis_width "$totals") > W - 6)); then
+    printf -v totals '%s guests  %b%s OK%b %b%s WARN%b %b%s CRIT%b' "${#rows[@]}" \
+      "${GREEN_BRIGHT}" "$n_ok" "${NC}" "${YELLOW_BRIGHT}" "$n_warn" "${NC}" \
+      "${RED_BRIGHT}" "$n_crit" "${NC}"
+  fi
   if ((draw_boxes)); then
     _draw_line_mid $W
     if ((${#findings[@]} > 0)); then
       _box_content "${CYAN}" "${LINE_V}" $W "  ${BOLD}Findings:${NC}"
       for f in "${findings[@]}"; do
-        _box_content "${CYAN}" "${LINE_V}" $W \
-          "  $(_level_color "${f%%$'\t'*}" "[$(_level_name "${f%%$'\t'*}")]") $(_truncate "${f#*$'\t'}" $((W - 13)))"
+        _box_content "${CYAN}" "${LINE_V}" $W "  $(_health_finding_line $((W - 6)) "$f")"
       done
       _draw_line_mid $W
     fi
@@ -1618,7 +1673,7 @@ print_health_table() {
     if ((${#findings[@]} > 0)); then
       printf '\nFindings:\n'
       for f in "${findings[@]}"; do
-        printf '%s %s\n' "$(_level_color "${f%%$'\t'*}" "[$(_level_name "${f%%$'\t'*}")]")" "${f#*$'\t'}"
+        printf '%s\n' "$(_health_finding_line 0 "$f")"
       done
     fi
     printf '\n%s\n' "$totals"
@@ -1858,11 +1913,14 @@ _state_save() {
 }
 
 # _check_process_tasks — scan HEALTH_TASKS (uses run_check's "events" and "excused").
-# Advances the task watermark (_N_TASK_TS/_N_TASK), appends failed tasks that finished
-# since the last run to "events" (level TAB text) and marks guests with a successful or
-# running stop/shutdown/destroy/migrate task in "excused". The first run is a baseline.
+# Advances the task watermark (_N_TASK_TS/_N_TASK) and appends failed tasks that finished
+# since the last run to "events" (level TAB text); the first run is a baseline.
+# A guest is "excused" (stopped on purpose) when its most recent lifecycle task is a
+# running or successful stop/shutdown/suspend/destroy/migrate/backup, or a running
+# reboot. No time window: /cluster/resources may lag behind the task list.
 _check_process_tasks() {
   local row t_end t_upid t_type t_id t_status is_new lvl k
+  local -A lc_type=() lc_status=() lc_end=()
   _N_TASK_TS=$_S_TASK_TS
   _N_TASK=()
   for k in "${!_S_TASK[@]}"; do
@@ -1873,18 +1931,20 @@ _check_process_tasks() {
     [[ "$t_end" =~ ^[0-9]{1,12}$ && -n "$t_upid" ]] || continue
     t_end=$((10#$t_end))
     case "$t_type" in
-    qmstop | qmshutdown | vzstop | vzshutdown | qmdestroy | vzdestroy | qmigrate | vzmigrate)
-      if ((t_end == 0)) || { [[ "$t_status" == "OK" ]] && ((t_end >= _S_RUN_TS)); }; then
-        excused["$t_id"]=1
-      fi
-      ;;
-    vzdump)
-      # Backups in stop mode stop the guest; a running multi-guest job (no id) excuses all.
-      if ((t_end == 0)) || { [[ "$t_status" == "OK" ]] && ((t_end >= _S_RUN_TS)); }; then
-        excused["$t_id"]=1
-      fi
-      if ((t_end == 0)) && [[ "$t_id" == "-" ]]; then
-        excused[all]=1
+    qmstart | vzstart | qmresume | vzresume | qmreboot | vzreboot | qmstop | qmshutdown | \
+      vzstop | vzshutdown | qmsuspend | vzsuspend | qmdestroy | vzdestroy | qmigrate | \
+      vzmigrate | vzdump)
+      if [[ "$t_id" == "-" ]]; then
+        # A running multi-guest backup job (no single id) may stop any guest.
+        if [[ "$t_type" == "vzdump" ]] && ((t_end == 0)); then
+          excused[all]=1
+        fi
+      elif [[ -z "${lc_end[$t_id]:-}" ]] || ((lc_end[$t_id] != 0)); then
+        # Rows are sorted by end time with running tasks (0) first; a running task
+        # stays the most recent one, otherwise later rows replace earlier ones.
+        lc_type["$t_id"]="$t_type"
+        lc_status["$t_id"]="$t_status"
+        lc_end["$t_id"]=$t_end
       fi
       ;;
     esac
@@ -1914,6 +1974,21 @@ _check_process_tasks() {
       fi
     fi
   done
+  for k in "${!lc_type[@]}"; do
+    case "${lc_type[$k]}" in
+    qmstop | qmshutdown | vzstop | vzshutdown | qmsuspend | vzsuspend | qmdestroy | vzdestroy | \
+      qmigrate | vzmigrate | vzdump)
+      if ((lc_end[$k] == 0)) || [[ "${lc_status[$k]}" == "OK" || "${lc_status[$k]}" == WARNINGS* ]]; then
+        excused["$k"]=1
+      fi
+      ;;
+    qmreboot | vzreboot)
+      if ((lc_end[$k] == 0)); then
+        excused["$k"]=1
+      fi
+      ;;
+    esac
+  done
   return 0
 }
 
@@ -1921,11 +1996,15 @@ _check_process_tasks() {
 # from _health_checks and the previous state. Uses run_check's "excused" and fills its
 # "seen", "vals" and "labels" arrays.
 #   cpu: alerts after HEALTH_CPU_RUNS consecutive runs; mem/disk: immediately;
-#   n/a metric: previous state kept; down: onboot CRIT, or WARN (latched in the streak
-#   field) when a guest that was running last time stopped without a matching task.
+#   metrics of a stopped guest resolve (CPU counter restarts); a metric that is n/a on a
+#   running guest keeps its previous state silently (marked in run_check's "stale");
+#   down: stopped with onboot=1 is CRIT (WARN when stopped by a task), and a guest that
+#   was running last time and stopped without a task is WARN, latched in the streak
+#   field until it runs again or a stop task explains it.
 _check_process_states() {
   local now="$1" checks row cid chk clvl cval key prev pstreak psince lvl streak
   local id ty st nm cpu mem disk up
+  local -A gst=()
   _N_LVL=()
   _N_SINCE=()
   _N_STREAK=()
@@ -1934,6 +2013,7 @@ _check_process_states() {
     IFS=$'\t' read -r id ty st nm cpu mem disk up <<<"$row"
     [[ -z "$id" ]] && continue
     labels["$id"]="${ty} ${id} (${nm})"
+    gst["$id"]="$st"
     if [[ "$st" == "running" ]] && ! _health_ignored "$id"; then
       _N_RUN["$id"]=1
     fi
@@ -1948,11 +2028,18 @@ _check_process_states() {
     pstreak="${_S_STREAK[$key]:-0}"
     psince="${_S_SINCE[$key]:-0}"
     if [[ "$clvl" == "-" ]]; then
-      # Metric not available (guest not running): keep the previous state.
+      if [[ "${gst[$cid]:-}" != "running" ]]; then
+        # Guest not running: its metric alerts resolve and the CPU counter restarts.
+        vals["$key"]="guest-stopped"
+        continue
+      fi
+      # Running, but the metric is n/a (e.g. VM disk without guest agent): keep the
+      # previous state without reporting or counting it.
       if [[ -n "${_S_LVL[$key]:-}" ]]; then
         _N_LVL["$key"]=$prev
         _N_SINCE["$key"]=$psince
         _N_STREAK["$key"]=$pstreak
+        stale["$key"]=1
       fi
       continue
     fi
@@ -1973,9 +2060,15 @@ _check_process_states() {
     down)
       # The streak field latches "stopped unexpectedly" until the guest runs again.
       if [[ "$cval" == "stopped" ]]; then
-        if ((pstreak > 0)); then
+        if [[ -n "${excused[$cid]:-}${excused[all]:-}" ]]; then
+          # Stopped on purpose: no "unexpected" latch; onboot=1 is only a WARN then.
+          if ((lvl == 2)); then
+            lvl=1
+            vals["$key"]="onboot-task"
+          fi
+        elif ((pstreak > 0)); then
           streak=1
-        elif ((_S_BASE == 1)) && [[ -n "${_S_RUN[$cid]:-}" && -z "${excused[$cid]:-}${excused[all]:-}" ]]; then
+        elif ((_S_BASE == 1)) && [[ -n "${_S_RUN[$cid]:-}" ]]; then
           streak=1
         fi
         if ((streak == 1 && lvl < 1)); then
@@ -2001,6 +2094,10 @@ _check_process_states() {
 # _resolved_text CHECK VALUE — description of a check that returned to OK.
 _resolved_text() {
   local chk="$1" val="$2"
+  if [[ "$val" == "guest-stopped" ]]; then
+    printf '%s alert cleared (guest stopped)' "$chk"
+    return 0
+  fi
   case "$chk" in
   cpu) printf 'CPU back to normal (%s)' "$(_pct_text "$val")" ;;
   mem) printf 'memory back to normal (%s)' "$(_pct_text "$val")" ;;
@@ -2062,12 +2159,40 @@ _compose_message() {
   return 0
 }
 
+# _check_keep_unsent — after a total delivery failure keep run_check's "trans_keys" at
+# their previous level (counters and latches advance) and keep the old task watermark,
+# so exactly these alerts fire again on the next run.
+_check_keep_unsent() {
+  local key
+  for key in "${trans_keys[@]}"; do
+    if [[ -n "${_S_LVL[$key]:-}" ]]; then
+      _N_STREAK["$key"]="${_N_STREAK[$key]:-${_S_STREAK[$key]:-0}}"
+      _N_LVL["$key"]="${_S_LVL[$key]}"
+      _N_SINCE["$key"]="${_S_SINCE[$key]:-0}"
+    elif ((${_N_STREAK[$key]:-0} > 0)); then
+      _N_LVL["$key"]=0
+      _N_SINCE["$key"]=0
+    else
+      unset "_N_LVL[$key]" "_N_SINCE[$key]" "_N_STREAK[$key]"
+    fi
+  done
+  if ((${#events[@]} > 0)); then
+    _N_TASK_TS=$_S_TASK_TS
+    _N_TASK=()
+    for key in "${!_S_TASK[@]}"; do
+      _N_TASK["$key"]=1
+    done
+  fi
+  return 0
+}
+
 # run_check — --check: evaluate all local guests and recent tasks, alert on changes.
 # Exit code: 0 OK, 1 WARN, 2 CRIT, 3 UNKNOWN (config, lock, state or pvesh failure).
 run_check() {
-  local dir="${HEALTH_STATE_DIR%/}" file lock_fd now old_umask
-  local -A excused=() seen=() vals=() labels=()
+  local dir="${HEALTH_STATE_DIR%/}" file now old_umask
+  local -A excused=() seen=() vals=() labels=() stale=()
   local -a events=() keys=() cur_lines=() new_lines=() imp_lines=() res_lines=() ev_lines=()
+  local -a trans_keys=()
   [[ -z "$dir" ]] && dir="/"
   file="${dir%/}/health.state"
   trap 'exit 3' INT TERM
@@ -2079,11 +2204,13 @@ run_check() {
     have flock || _check_unknown "'flock' not found (util-linux)."
     old_umask="$(umask)"
     umask 077
-    if ! { exec {lock_fd}>"${dir%/}/check.lock"; } 2>/dev/null; then
+    # The lock lives on fd 9; child processes get "9>&-" so e.g. a forking MTA
+    # cannot keep holding it after this run has finished.
+    if ! { exec 9>"${dir%/}/check.lock"; } 2>/dev/null; then
       _check_unknown "Could not open the lock file in ${dir}."
     fi
     umask "$old_umask"
-    flock -n "$lock_fd" || _check_unknown "Another --check run is still active (lock held)."
+    flock -n 9 || _check_unknown "Another --check run is still active (lock held)."
   fi
   if ! _state_load "$file"; then
     ((DRY_RUN == 1)) || _check_unknown "Could not read the state file ${file}."
@@ -2096,7 +2223,11 @@ run_check() {
 
   local key chk id prev new label since dur text ev ev_lvl rc=0 lvl_new=0
   local n_new=0 n_imp=0 n_res=0 n_warn=0 n_crit=0 n_guests=0
-  n_guests=${#HEALTH_ROWS[@]}
+  for key in "${HEALTH_ROWS[@]}"; do
+    if ! _health_ignored "${key%%$'\t'*}"; then
+      n_guests=$((n_guests + 1))
+    fi
+  done
   mapfile -t keys < <(printf '%s\n' "${!seen[@]}" "${!_S_LVL[@]}" | awk 'NF' | sort -t: -k2,2n -k1,1 -u)
   for key in "${keys[@]}"; do
     chk="${key%%:*}"
@@ -2104,6 +2235,9 @@ run_check() {
     prev="${_S_LVL[$key]:-0}"
     new="${_N_LVL[$key]:-0}"
     label="${labels[$id]:-guest ${id}}"
+    if [[ -n "${stale[$key]:-}" ]]; then
+      continue # n/a on a running guest: state kept, not reported
+    fi
     if [[ -z "${seen[$key]:-}" ]]; then
       # Guest vanished or is ignored now: resolve (silently when ignored).
       if _health_ignored "$id"; then
@@ -2123,6 +2257,9 @@ run_check() {
       if ((new > rc)); then
         rc=$new
       fi
+    fi
+    if ((new != prev)); then
+      trans_keys+=("$key")
     fi
     if ((new > prev)); then
       new_lines+=("[$(_level_name "$new")] ${text}")
@@ -2192,9 +2329,8 @@ run_check() {
   if ((changes > 0)); then
     log "INFO" "health alert: ${MSG_TITLE}"
     if ! _notify_all; then
-      err "All notification channels failed; state not saved so the next run retries."
-      _CHECK_DONE=1
-      exit "$rc"
+      err "All notification channels failed; the changes stay pending for the next run."
+      _check_keep_unsent
     fi
   fi
   _N_RUN_TS=$now
@@ -2269,7 +2405,7 @@ _notify_ntfy() {
     cfg+="header = \"Authorization: Bearer ${token}\""$'\n'
   fi
   out="$(curl -fsS --max-time 10 --retry 2 --proto '=http,https' -o /dev/null \
-    --data-binary "@${_NOTIFY_TMP}" --config - <<<"$cfg" 2>&1)" || rc=$?
+    --data-binary "@${_NOTIFY_TMP}" --config - <<<"$cfg" 2>&1 9>&-)" || rc=$?
   rm -f -- "$_NOTIFY_TMP"
   _NOTIFY_TMP=''
   if ((rc != 0)); then
@@ -2319,7 +2455,7 @@ _notify_mail() {
     printf 'Content-Transfer-Encoding: 8bit\n'
     printf 'Auto-Submitted: auto-generated\n'
     printf '\n%s\n' "$MSG_BODY"
-  } | timeout 30 "$sm" -t -oi >/dev/null 2>&1 || rc=$?
+  } | timeout 30 "$sm" -t -oi >/dev/null 2>&1 9>&- || rc=$?
   if ((rc != 0)); then
     _notify_warn "mail: sendmail failed (exit ${rc})."
     return 1
@@ -3115,6 +3251,15 @@ ip_info() {
 # =============================================================================
 
 main() {
+  local arg
+  # --check reports UNKNOWN (3) for every setup problem, including signals and usage
+  # errors that happen before run_check installs its own traps.
+  for arg in "$@"; do
+    if [[ "$arg" == "--check" ]]; then
+      FATAL_EXIT=3
+      trap 'exit 3' INT TERM
+    fi
+  done
   # Load config files — CLI flags set by parse_args below will override these values.
   _load_config_file /etc/pmanrc
   _load_config_file "${HOME}/.pmanrc"
@@ -3131,7 +3276,10 @@ main() {
     exit "$FATAL_EXIT"
   fi
   if ((FORCE_MODE == 1)); then
-    warn "--force active: all confirmation prompts will be skipped automatically."
+    case "$MODE" in
+    json | health_json | check) warn "--force active: all confirmation prompts will be skipped automatically." >&2 ;;
+    *) warn "--force active: all confirmation prompts will be skipped automatically." ;;
+    esac
   fi
   require_root
   require_tools

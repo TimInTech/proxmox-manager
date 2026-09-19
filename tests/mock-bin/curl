@@ -3,6 +3,11 @@
 # Appends argv to $PMAN_MOCK_CURL_LOG, the stdin config to ${PMAN_MOCK_CURL_LOG}.cfg and
 # every @file body to ${PMAN_MOCK_CURL_LOG}.body; exits ${PMAN_MOCK_CURL_RC:-0}.
 set -euo pipefail
+if [[ -n "${PMAN_MOCK_FD_LOG:-}" ]]; then
+  for fd in /proc/"$$"/fd/*; do
+    printf 'curl %s\n' "$(readlink "$fd" || true)"
+  done >>"$PMAN_MOCK_FD_LOG"
+fi
 log="${PMAN_MOCK_CURL_LOG:-}"
 cfg="$(cat)"
 if [[ -n "$log" ]]; then

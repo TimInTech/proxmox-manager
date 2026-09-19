@@ -3,7 +3,17 @@
 # PMAN_MOCK_RESOURCES / PMAN_MOCK_TASKS: fixture files replacing the inline defaults.
 # The token @NOW@ in a fixture is replaced with the current epoch.
 # PMAN_MOCK_PVESH_FAIL=1 makes every call fail; PMAN_MOCK_PVESH_SLEEP=N delays each call.
+# PMAN_MOCK_PVESH_LOG: append argv; PMAN_MOCK_FD_LOG: append the targets of open fds.
 set -euo pipefail
+
+if [[ -n "${PMAN_MOCK_PVESH_LOG:-}" ]]; then
+  printf '%s\n' "$*" >>"$PMAN_MOCK_PVESH_LOG"
+fi
+if [[ -n "${PMAN_MOCK_FD_LOG:-}" ]]; then
+  for fd in /proc/"$$"/fd/*; do
+    printf 'pvesh %s\n' "$(readlink "$fd" || true)"
+  done >>"$PMAN_MOCK_FD_LOG"
+fi
 
 if [[ -n "${PMAN_MOCK_PVESH_SLEEP:-}" ]]; then
   sleep "$PMAN_MOCK_PVESH_SLEEP"

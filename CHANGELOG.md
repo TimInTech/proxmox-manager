@@ -16,9 +16,10 @@ Versions follow [Semantic Versioning](https://semver.org/).
   on other cluster nodes are skipped. `--filter` and `--name` apply.
 - Main menu key `h` opens the health overview; the status action prints an extra `Health:` line.
 - `--check` for cron: alerts only on changes (new, escalated, improved, resolved) for resource
-  thresholds (CPU after `HEALTH_CPU_RUNS` consecutive runs), guests stopped with `onboot=1`, guests
-  that stopped without a stop/shutdown/migrate/destroy/backup task, and failed node tasks.
-  Nagios-style summary and exit codes 0 OK, 1 WARN, 2 CRIT, 3 UNKNOWN.
+  thresholds (CPU after `HEALTH_CPU_RUNS` consecutive runs; resolved when the guest stops), guests
+  stopped with `onboot=1`, guests whose latest lifecycle task does not explain a stop (stop, shutdown,
+  suspend, migrate, destroy, backup), and failed node tasks (read with `--source all`).
+  Nagios-style summary and exit codes 0 OK, 1 WARN, 2 CRIT, 3 UNKNOWN (also for usage errors).
 - `--dry-run` (with `--check`) prints the result and the composed message without sending or
   writing state; `--test-notify` sends a test message.
 - Notifications via ntfy (`NTFY_URL`, optional `NTFY_TOKEN_FILE`) and e-mail through the local
@@ -30,6 +31,7 @@ Versions follow [Semantic Versioning](https://semver.org/).
 
 ### Changed
 - `STOP_TIMEOUT` and `PROXMOX_MANAGER_SPICE_ADDR` are validated after the command line is parsed.
+- With `--json` the `--force` warning goes to stderr, so the JSON output stays valid.
 - Outbound traffic is now possible, but only when notifications are configured (opt-in).
 
 ### Security

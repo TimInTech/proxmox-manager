@@ -202,8 +202,9 @@ the `Health:` line of the status action.
 |---|---|---|
 | CPU | WARN / CRIT | Must stay above the threshold for `HEALTH_CPU_RUNS` runs in a row |
 | Memory, disk | WARN / CRIT | Immediately. VM disk usage needs the QEMU guest agent, otherwise n/a |
-| Stopped with `onboot=1` | CRIT | Guest is configured to start at boot but is not running |
-| Stopped unexpectedly | WARN | Was running at the last check, no stop/shutdown/migrate/destroy/backup task |
+| _(guest stops)_ | — | CPU / memory / disk alerts of a stopped guest are resolved |
+| Stopped with `onboot=1` | CRIT | Configured to start at boot but not running (WARN if stopped by a task) |
+| Stopped unexpectedly | WARN | Was running at the last check; its latest task is no stop/shutdown/suspend/migrate/destroy/backup |
 | Failed task | WARN / CRIT | Any node task that ended not `OK` since the last run (`WARNINGS` → WARN) |
 
 Thresholds (percent; `0` disables that level):
@@ -218,9 +219,9 @@ Thresholds (percent; `0` disables that level):
 A notification is sent only when something changes: new or escalated problems, improvements and
 `RESOLVED` (with duration). All changes of one run go into one message. The first run only
 records a baseline, so old failed tasks are not reported. State is kept in `HEALTH_STATE_DIR`
-(default `/var/lib/pman`, mode `0700`); if every channel fails, the state is not saved and the next
-run tries again. Exit codes: `0` OK · `1` WARN · `2` CRIT · `3` UNKNOWN (config, lock or `pvesh`
-error) — the output is a Nagios-style summary line plus one line per problem.
+(default `/var/lib/pman`, mode `0700`); if every channel fails, the unsent changes stay pending and
+are sent by the next run. Exit codes: `0` OK · `1` WARN · `2` CRIT · `3` UNKNOWN (usage, config,
+lock or `pvesh` error) — the output is a Nagios-style summary line plus one line per problem.
 
 **ntfy** — push to phone/desktop via [ntfy](https://ntfy.sh) (public or self-hosted):
 
