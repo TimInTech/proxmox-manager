@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # Proxmox VM/CT Management Tool
-# Version 2.12.0 — 2026-09-19
+# Version 2.12.1 — 2026-09-19
+# - fix: action and snapshot menus draw a closed frame (right border, padded rows)
 # - fix: #33 TUI frames aligned by visible width; long guest names fit/truncate; PVE version parsed correctly
 # - feat: #28 show current IP addresses for running VMs/CTs
 # - security: #31 config files parsed as allowlisted data; private log files; no %b on user text
@@ -983,7 +984,7 @@ action_menu() {
   local st
   st="$(status_of "$id" "$ty")"
 
-  local W=52
+  local W=53
   echo
   _draw_line_top $W
 
@@ -994,50 +995,37 @@ action_menu() {
   VM) printf -v ty_col '%b%s%b' "${BLUE_BRIGHT}${BOLD}" "$ty" "${NC}" ;;
   *) ty_col="${BOLD}${ty}${NC}" ;;
   esac
-  printf '%b%s%b  %s %s  %b(%s)%b\n' \
-    "${CYAN}" "${LINE_V}" "${NC}" \
-    "$ty_col" \
-    "${BOLD}${id}${NC}" \
-    "${DIM}" "$name" "${NC}"
+  # "  TY ID  (" + name + ")" + right margin must fit into W - 2
+  local name_max=$((W - 2 - 2 - ${#ty} - 1 - ${#id} - 3 - 1 - 2))
+  _box_content "${CYAN}" "${LINE_V}" $W \
+    "  ${ty_col} ${BOLD}${id}${NC}  ${DIM}($(_truncate "$name" "$name_max"))${NC}"
 
   # Status row — use _sym_for_status to avoid indirect expansion under set -u
   local st_sym
   st_sym="$(_sym_for_status "$st")"
-  printf '%b%s%b  Status: ' "${CYAN}" "${LINE_V}" "${NC}"
-  _status_sym_color "$st" "$st_sym"
-  printf ' '
-  _status_color "$st" "$st"
-  printf '\n'
+  _box_content "${CYAN}" "${LINE_V}" $W \
+    "  Status: $(_status_sym_color "$st" "$st_sym") $(_status_color "$st" "$st")"
 
   _draw_line_mid $W
 
   # Actions
-  printf '%b%s%b  %b1%b) Start        %b2%b) Stop         %b3%b) Restart\n' \
-    "${CYAN}" "${LINE_V}" "${NC}" \
-    "${GREEN_BRIGHT}" "${NC}" \
-    "${RED_BRIGHT}" "${NC}" \
-    "${YELLOW_BRIGHT}" "${NC}"
-  printf '%b%s%b  %b4%b) Status       %b5%b) Console      %b6%b) Snapshots\n' \
-    "${CYAN}" "${LINE_V}" "${NC}" \
-    "${CYAN_BRIGHT}" "${NC}" \
-    "${CYAN_BRIGHT}" "${NC}" \
-    "${CYAN_BRIGHT}" "${NC}"
-  printf '%b%s%b  %b7%b) IP info\n' \
-    "${CYAN}" "${LINE_V}" "${NC}" \
-    "${CYAN_BRIGHT}" "${NC}"
+  local row
+  printf -v row '  %b1%b) Start        %b2%b) Stop         %b3%b) Restart' \
+    "${GREEN_BRIGHT}" "${NC}" "${RED_BRIGHT}" "${NC}" "${YELLOW_BRIGHT}" "${NC}"
+  _box_content "${CYAN}" "${LINE_V}" $W "$row"
+  printf -v row '  %b4%b) Status       %b5%b) Console      %b6%b) Snapshots' \
+    "${CYAN_BRIGHT}" "${NC}" "${CYAN_BRIGHT}" "${NC}" "${CYAN_BRIGHT}" "${NC}"
+  _box_content "${CYAN}" "${LINE_V}" $W "$row"
   if [[ "$ty" == "VM" ]]; then
-    printf '%b%s%b  %b8%b) SPICE info   %b9%b) Enable SPICE\n' \
-      "${CYAN}" "${LINE_V}" "${NC}" \
-      "${CYAN_BRIGHT}" "${NC}" \
-      "${CYAN_BRIGHT}" "${NC}"
-    printf '%b%s%b  %b10%b) Back\n' \
-      "${CYAN}" "${LINE_V}" "${NC}" \
-      "${DIM}" "${NC}"
+    printf -v row '  %b7%b) IP info      %b8%b) SPICE info   %b9%b) Enable SPICE' \
+      "${CYAN_BRIGHT}" "${NC}" "${CYAN_BRIGHT}" "${NC}" "${CYAN_BRIGHT}" "${NC}"
+    _box_content "${CYAN}" "${LINE_V}" $W "$row"
+    printf -v row '  %b10%b) Back' "${DIM}" "${NC}"
   else
-    printf '%b%s%b  %b8%b) Back\n' \
-      "${CYAN}" "${LINE_V}" "${NC}" \
-      "${DIM}" "${NC}"
+    printf -v row '  %b7%b) IP info      %b8%b) Back' \
+      "${CYAN_BRIGHT}" "${NC}" "${DIM}" "${NC}"
   fi
+  _box_content "${CYAN}" "${LINE_V}" $W "$row"
 
   _draw_line_bot $W
   echo
@@ -1324,18 +1312,19 @@ _list_snapshots() {
 
 snapshots_menu() {
   local id="$1" ty="$2" name="$3"
-  local W=45
+  local W=53
   echo
   _draw_line_top $W
-  printf '%b%s%b  %bSnapshot menu%b — %s %s (%s)\n' \
-    "${CYAN}" "${LINE_V}" "${NC}" \
-    "${BOLD}${CYAN_BRIGHT}" "${NC}" "$ty" "$id" "$name"
+  # "  Snapshot menu — TY ID (" + name + ")" + right margin must fit into W - 2
+  local name_max=$((W - 2 - 18 - ${#ty} - 1 - ${#id} - 2 - 1 - 2))
+  _box_content "${CYAN}" "${LINE_V}" $W \
+    "  ${BOLD}${CYAN_BRIGHT}Snapshot menu${NC} — ${ty} ${id} ($(_truncate "$name" "$name_max"))"
   _draw_line_mid $W
-  printf '%b%s%b  %b1%b) List snapshots\n' "${CYAN}" "${LINE_V}" "${NC}" "${CYAN_BRIGHT}" "${NC}"
-  printf '%b%s%b  %b2%b) Create snapshot\n' "${CYAN}" "${LINE_V}" "${NC}" "${GREEN_BRIGHT}" "${NC}"
-  printf '%b%s%b  %b3%b) Rollback to snapshot\n' "${CYAN}" "${LINE_V}" "${NC}" "${YELLOW_BRIGHT}" "${NC}"
-  printf '%b%s%b  %b4%b) Delete snapshot\n' "${CYAN}" "${LINE_V}" "${NC}" "${RED_BRIGHT}" "${NC}"
-  printf '%b%s%b  %b5%b) Back\n' "${CYAN}" "${LINE_V}" "${NC}" "${DIM}" "${NC}"
+  _box_content "${CYAN}" "${LINE_V}" $W "  ${CYAN_BRIGHT}1${NC}) List snapshots"
+  _box_content "${CYAN}" "${LINE_V}" $W "  ${GREEN_BRIGHT}2${NC}) Create snapshot"
+  _box_content "${CYAN}" "${LINE_V}" $W "  ${YELLOW_BRIGHT}3${NC}) Rollback to snapshot"
+  _box_content "${CYAN}" "${LINE_V}" $W "  ${RED_BRIGHT}4${NC}) Delete snapshot"
+  _box_content "${CYAN}" "${LINE_V}" $W "  ${DIM}5${NC}) Back"
   _draw_line_bot $W
   echo
   printf '  %b→%b Selection [1-5]: ' "${CYAN_BRIGHT}" "${NC}"

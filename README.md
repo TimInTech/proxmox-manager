@@ -8,7 +8,7 @@
 ║  ██████╔╝ ██╔████╔██║ ███████║ ██╔██╗ ██║                ║
 ║  ██╔═══╝  ██║╚██╔╝██║ ██╔══██║ ██║╚██╗██║                ║
 ║  ██║      ██║ ╚═╝ ██║ ██║  ██║ ██║ ╚████║                ║
-║  ╚═╝      ╚═╝     ╚═╝ ╚═╝  ╚═╝ ╚═╝  ╚═══╝  v2.12.0       ║
+║  ╚═╝      ╚═╝     ╚═╝ ╚═╝  ╚═╝ ╚═╝  ╚═══╝  v2.12.1       ║
 ║                                                          ║
 ║  Proxmox VM/CT Manager · Single Bash · No Dependencies   ║
 ╚══════════════════════════════════════════════════════════╝
@@ -227,7 +227,11 @@ cp completions/pman.zsh ~/.zsh/completions/_pman
 
 ## 📋 Changelog
 
-### 🆕 [v2.12.0](CHANGELOG.md) — 2026-09-19
+### 🆕 [v2.12.1](CHANGELOG.md) — 2026-09-19
+
+> Action and snapshot menus draw a closed frame · README screenshots regenerated
+
+### [v2.12.0](CHANGELOG.md) — 2026-09-19
 
 | Issue | Change |
 |---|---|
