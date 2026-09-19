@@ -59,6 +59,7 @@ HEALTH_TASKS=()         # parsed task rows (see _health_parse_tasks)
 HEALTH_STATE_HEADER='# pman-health-state v1'
 _CHECK_TMP=''                                                      # temp state file removed by the --check EXIT trap
 _CHECK_DONE=0                                                      # set right before --check exits normally
+_NOTIFY_TMP=''                                                     # temp body file of _notify_ntfy
 declare -A _S_LVL=() _S_SINCE=() _S_STREAK=() _S_RUN=() _S_TASK=() # previous --check state
 _S_BASE=0
 _S_RUN_TS=0
@@ -1742,6 +1743,10 @@ _check_on_exit() {
     rm -f -- "$_CHECK_TMP"
     _CHECK_TMP=''
   fi
+  if [[ -n "$_NOTIFY_TMP" ]]; then
+    rm -f -- "$_NOTIFY_TMP"
+    _NOTIFY_TMP=''
+  fi
   if ((_CHECK_DONE == 0 && rc != 3)); then
     exit 3
   fi
@@ -1872,6 +1877,15 @@ _check_process_tasks() {
         excused["$t_id"]=1
       fi
       ;;
+    vzdump)
+      # Backups in stop mode stop the guest; a running multi-guest job (no id) excuses all.
+      if ((t_end == 0)) || { [[ "$t_status" == "OK" ]] && ((t_end >= _S_RUN_TS)); }; then
+        excused["$t_id"]=1
+      fi
+      if ((t_end == 0)) && [[ "$t_id" == "-" ]]; then
+        excused[all]=1
+      fi
+      ;;
     esac
     if ((t_end == 0)); then
       continue # still running
@@ -1960,7 +1974,7 @@ _check_process_states() {
       if [[ "$cval" == "stopped" ]]; then
         if ((pstreak > 0)); then
           streak=1
-        elif ((_S_BASE == 1)) && [[ -n "${_S_RUN[$cid]:-}" && -z "${excused[$cid]:-}" ]]; then
+        elif ((_S_BASE == 1)) && [[ -n "${_S_RUN[$cid]:-}" && -z "${excused[$cid]:-}${excused[all]:-}" ]]; then
           streak=1
         fi
         if ((streak == 1 && lvl < 1)); then
@@ -2197,18 +2211,143 @@ _notify_channels_configured() {
   [[ -n "$NTFY_URL" || -n "$HEALTH_MAIL_TO" ]]
 }
 
-# _notify_all — deliver MSG_TITLE/MSG_BODY/MSG_PRIORITY through every configured channel.
-# Returns 1 only when channels are configured and all of them failed; with no channel
-# configured there is nothing to deliver and it returns 0.
-# Channel senders (ntfy, sendmail) are added in a later work package; until then a
-# configured channel counts as failed so --check keeps its state and retries later.
-_notify_all() {
-  if ! _notify_channels_configured; then
-    return 0
+# _notify_title — MSG_TITLE reduced to one line of printable ASCII (header-safe).
+_notify_title() {
+  local t="${MSG_TITLE//[$'\r\n\t']/ }"
+  t="${t//[^ -~]/?}"
+  printf '%s' "${t:0:200}"
+}
+
+# _notify_warn MESSAGE — channel failure: warning on stderr (keeps --check stdout clean) and log.
+_notify_warn() {
+  warn "$*" >&2
+}
+
+# _notify_ntfy — send the message to NTFY_URL. URL, headers and the optional token are
+# passed to curl via its stdin config, never in argv; the body comes from a private temp
+# file. Only the host is logged, never the topic path or the token.
+_notify_ntfy() {
+  local host token='' tag title cfg rc=0 out
+  host="${NTFY_URL#*://}"
+  host="${host%%/*}"
+  if ! have curl; then
+    _notify_warn "ntfy: 'curl' not found."
+    return 1
   fi
-  err "Notification delivery is not implemented yet."
-  log "WARN" "Notification not sent: '${MSG_TITLE}' (${MSG_PRIORITY}, ${#MSG_BODY} bytes)."
-  return 1
+  if [[ -n "$NTFY_TOKEN_FILE" ]]; then
+    if [[ "$NTFY_URL" != https://* ]]; then
+      _notify_warn "ntfy: refusing to send the access token over plain http to ${host}; use https."
+      return 1
+    fi
+    if ! IFS= read -r token <"$NTFY_TOKEN_FILE" && [[ -z "$token" ]]; then
+      token=''
+    fi
+    if [[ ! "$token" =~ ^[A-Za-z0-9_.-]{1,256}$ ]]; then
+      _notify_warn "ntfy: token in NTFY_TOKEN_FILE is empty or has unsupported characters."
+      return 1
+    fi
+  fi
+  case "$MSG_PRIORITY" in
+  urgent) tag="rotating_light" ;;
+  high) tag="warning" ;;
+  *) tag="white_check_mark" ;;
+  esac
+  title="$(_notify_title)"
+  title="${title//\\/\\\\}"
+  title="${title//\"/\\\"}"
+  _NOTIFY_TMP="$(umask 077 && mktemp -p "${TMPDIR:-/tmp}" pman-ntfy.XXXXXX)" || {
+    _notify_warn "ntfy: could not create a temporary file."
+    return 1
+  }
+  printf '%s\n' "$MSG_BODY" >"$_NOTIFY_TMP"
+  cfg="url = \"${NTFY_URL}\""$'\n'
+  cfg+="header = \"Title: ${title}\""$'\n'
+  cfg+="header = \"Priority: ${MSG_PRIORITY:-default}\""$'\n'
+  cfg+="header = \"Tags: ${tag}\""$'\n'
+  if [[ -n "$token" ]]; then
+    cfg+="header = \"Authorization: Bearer ${token}\""$'\n'
+  fi
+  out="$(curl -fsS --max-time 10 --retry 2 --proto '=http,https' -o /dev/null \
+    --data-binary "@${_NOTIFY_TMP}" --config - <<<"$cfg" 2>&1)" || rc=$?
+  rm -f -- "$_NOTIFY_TMP"
+  _NOTIFY_TMP=''
+  if ((rc != 0)); then
+    # curl's message may contain the topic URL; keep it out of the terminal and the log.
+    _notify_warn "ntfy: delivery to ${host} failed (curl exit ${rc})."
+    return 1
+  fi
+  log "INFO" "ntfy: sent to ${host}"
+  return 0
+}
+
+# _notify_mail — send the message to HEALTH_MAIL_TO via the local sendmail (postfix etc.).
+# Header values are validated single-line strings, so no header injection is possible.
+_notify_mail() {
+  local sm addr to='' subject rc=0
+  local -a addrs=()
+  sm="$(command -v sendmail 2>/dev/null || true)"
+  if [[ -z "$sm" && -x /usr/sbin/sendmail ]]; then
+    sm="/usr/sbin/sendmail"
+  fi
+  if [[ -z "$sm" ]]; then
+    _notify_warn "mail: 'sendmail' not found (install postfix or another MTA)."
+    return 1
+  fi
+  IFS=',' read -r -a addrs <<<"$HEALTH_MAIL_TO"
+  for addr in "${addrs[@]}"; do
+    if ! _valid_mail_addr "$addr"; then
+      _notify_warn "mail: invalid recipient address in HEALTH_MAIL_TO."
+      return 1
+    fi
+    to+="${to:+, }${addr}"
+  done
+  if [[ -z "$to" ]] || { [[ -n "$HEALTH_MAIL_FROM" ]] && ! _valid_mail_addr "$HEALTH_MAIL_FROM"; }; then
+    _notify_warn "mail: invalid HEALTH_MAIL_TO/HEALTH_MAIL_FROM."
+    return 1
+  fi
+  subject="$(_notify_title)"
+  {
+    printf 'To: %s\n' "$to"
+    if [[ -n "$HEALTH_MAIL_FROM" ]]; then
+      printf 'From: %s\n' "$HEALTH_MAIL_FROM"
+    fi
+    printf 'Subject: %s\n' "$subject"
+    printf 'Date: %s\n' "$(date -R)"
+    printf 'MIME-Version: 1.0\n'
+    printf 'Content-Type: text/plain; charset=UTF-8\n'
+    printf 'Content-Transfer-Encoding: 8bit\n'
+    printf 'Auto-Submitted: auto-generated\n'
+    printf '\n%s\n' "$MSG_BODY"
+  } | timeout 30 "$sm" -t -oi >/dev/null 2>&1 || rc=$?
+  if ((rc != 0)); then
+    _notify_warn "mail: sendmail failed (exit ${rc})."
+    return 1
+  fi
+  log "INFO" "mail: sent to ${#addrs[@]} recipient(s)"
+  return 0
+}
+
+# _notify_all — deliver MSG_TITLE/MSG_BODY/MSG_PRIORITY through every configured channel.
+# Returns 0 when no channel is configured or at least one succeeded, 1 when all failed.
+_notify_all() {
+  local configured=0 delivered=0
+  if [[ -n "$NTFY_URL" ]]; then
+    configured=$((configured + 1))
+    if _notify_ntfy; then
+      delivered=$((delivered + 1))
+    fi
+  fi
+  if [[ -n "$HEALTH_MAIL_TO" ]]; then
+    configured=$((configured + 1))
+    if _notify_mail; then
+      delivered=$((delivered + 1))
+    fi
+  fi
+  if ((configured > 0 && delivered == 0)); then
+    log "WARN" "Notification failed on all ${configured} channel(s): ${MSG_TITLE}"
+    return 1
+  fi
+  return 0
 }
 
 # run_test_notify — send a test message through all configured channels.
@@ -2220,10 +2359,10 @@ run_test_notify() {
   local node
   node="$(_local_node || printf 'unknown')"
   MSG_TITLE="pman ${node}: test notification"
-  MSG_BODY="Test message from proxmox-manager on ${node}."
+  MSG_BODY="Test message from proxmox-manager on ${node}. Alerts from --check will arrive here."
   MSG_PRIORITY="low"
   if _notify_all; then
-    ok "Test notification handed to all configured channels."
+    ok "Test notification sent (at least one channel succeeded)."
     exit 0
   fi
   err "Test notification failed on all channels."

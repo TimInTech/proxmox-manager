@@ -1,0 +1,17 @@
+#!/usr/bin/env bash
+# Mock curl: never touches the network.
+# Appends argv to $PMAN_MOCK_CURL_LOG, the stdin config to ${PMAN_MOCK_CURL_LOG}.cfg and
+# every @file body to ${PMAN_MOCK_CURL_LOG}.body; exits ${PMAN_MOCK_CURL_RC:-0}.
+set -euo pipefail
+log="${PMAN_MOCK_CURL_LOG:-}"
+cfg="$(cat)"
+if [[ -n "$log" ]]; then
+  printf '%s\n' "$*" >>"$log"
+  printf '%s\n---\n' "$cfg" >>"${log}.cfg"
+  for arg in "$@"; do
+    if [[ "$arg" == @* && -f "${arg#@}" ]]; then
+      cat -- "${arg#@}" >>"${log}.body"
+    fi
+  done
+fi
+exit "${PMAN_MOCK_CURL_RC:-0}"

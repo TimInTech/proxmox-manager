@@ -642,6 +642,144 @@ else
 fi
 
 # ---------------------------------------------------------------------------
+# Notifications: ntfy (curl mock) and e-mail (sendmail mock); no real network
+# ---------------------------------------------------------------------------
+if [[ "$(command -v curl)" != "$MOCK_BIN/curl" || "$(command -v sendmail)" != "$MOCK_BIN/sendmail" ]]; then
+  _fail "notify: curl/sendmail mocks are not first in PATH; skipping notification tests"
+else
+  ntfy_tok="$TEST_TMP/ntfy-ok.token"
+  printf 'tk_secret123\n' >"$ntfy_tok"
+  chmod 600 "$ntfy_tok"
+  notify_tmp="$TEST_TMP/notify-tmp"
+  mkdir -p "$notify_tmp"
+
+  # _notify_env NAME — fresh curl/sendmail logs; sets NENV for _chk.
+  _notify_env() {
+    nlog="$TEST_TMP/$1"
+    rm -f "$nlog".*
+    NENV=("NTFY_URL=https://ntfy.example.invalid/pman-topic" "NTFY_TOKEN_FILE=$ntfy_tok"
+      "HEALTH_MAIL_TO=root@localhost" "HEALTH_MAIL_FROM=pman@example.invalid"
+      "PMAN_MOCK_CURL_LOG=$nlog.curl" "PMAN_MOCK_SENDMAIL_LOG=$nlog.mail" "TMPDIR=$notify_tmp")
+  }
+  _count() { if [[ -f "$1" ]]; then grep -c "$2" "$1"; else printf '0'; fi; }
+
+  _notify_env n1
+  sd="$(_new_state_dir)"
+  _chk "$sd" "${NENV[@]}" "$HOT"
+  if [[ "$chk_rc" == "2" && "$(_count "$nlog.curl" .)" == "1" && "$(_count "$nlog.mail" '^ARGV: -t -oi$')" == "1" ]] &&
+    grep -qF 'header = "Priority: urgent"' "$nlog.curl.cfg" && grep -qF 'header = "Tags: rotating_light"' "$nlog.curl.cfg" &&
+    grep -q '^Subject: pman mock-host: CRIT' "$nlog.mail" && grep -qF '[CRIT] CT 100 (ct-one): memory 96%' "$nlog.curl.body"; then
+    _pass "notify: hot run sends one ntfy (urgent) and one mail (CRIT)"
+  else
+    _fail "notify: hot run did not send exactly one ntfy + one mail (exit $chk_rc)"
+  fi
+  if grep -q 'tk_secret123' "$nlog.curl.cfg" && ! grep -q 'tk_secret123' "$nlog.curl" && ! grep -q 'pman-topic' "$nlog.curl"; then
+    _pass "notify: token and topic only in curl stdin config, never in argv"
+  else
+    _fail "notify: token or topic leaked into curl argv"
+  fi
+  if [[ -z "$(ls -A "$notify_tmp")" ]]; then
+    _pass "notify: ntfy body temp file removed"
+  else
+    _fail "notify: ntfy body temp file left behind"
+  fi
+  if grep -q '^To: root@localhost$' "$nlog.mail" && grep -q '^From: pman@example.invalid$' "$nlog.mail" &&
+    grep -q '^Content-Type: text/plain; charset=UTF-8$' "$nlog.mail" && grep -q '^Auto-Submitted: auto-generated$' "$nlog.mail"; then
+    _pass "notify: mail has To/From/Subject/MIME/Auto-Submitted headers"
+  else
+    _fail "notify: mail headers missing"
+  fi
+  _chk "$sd" "${NENV[@]}" "$HOT"
+  if [[ "$chk_rc" == "2" && "$(_count "$nlog.curl" .)" == "1" && "$(_count "$nlog.mail" '^ARGV')" == "1" ]]; then
+    _pass "notify: unchanged state sends nothing"
+  else
+    _fail "notify: repeated alert on unchanged state"
+  fi
+  _chk "$sd" "${NENV[@]}"
+  if [[ "$chk_rc" == "0" && "$(_count "$nlog.curl" .)" == "2" ]] && tail -6 "$nlog.curl.cfg" | grep -qF 'Priority: low' &&
+    grep -qF '[RESOLVED] CT 100 (ct-one)' "$nlog.curl.body" && grep -q '^Subject: pman mock-host: RESOLVED' "$nlog.mail"; then
+    _pass "notify: recovery sends RESOLVED with priority low"
+  else
+    _fail "notify: recovery notification wrong (exit $chk_rc)"
+  fi
+
+  _notify_env n2
+  sd="$(_new_state_dir)"
+  _chk "$sd" "${NENV[@]}" "$HOT" PMAN_MOCK_CURL_RC=22
+  if [[ "$chk_rc" == "2" ]] && grep -q $'^C\tmem:100\t2' "$sd/health.state" 2>/dev/null; then
+    _pass "notify: ntfy fails, mail works -> state saved"
+  else
+    _fail "notify: partial failure handling wrong (exit $chk_rc)"
+  fi
+
+  _notify_env n3
+  sd="$(_new_state_dir)"
+  _chk "$sd" "${NENV[@]}" "$HOT" PMAN_MOCK_CURL_RC=7 PMAN_MOCK_SENDMAIL_RC=75
+  if [[ "$chk_rc" == "2" && ! -e "$sd/health.state" ]]; then
+    _pass "notify: all channels fail -> exit reflects health, state not saved"
+  else
+    _fail "notify: all-fail handling wrong (exit $chk_rc)"
+  fi
+  rm -f "$nlog".*
+  _chk "$sd" "${NENV[@]}" "$HOT"
+  if [[ "$chk_rc" == "2" && "$(_count "$nlog.curl" .)" == "1" && -e "$sd/health.state" ]] && grep -qF 'Priority: urgent' "$nlog.curl.cfg"; then
+    _pass "notify: next run resends after a total failure"
+  else
+    _fail "notify: alert not resent after a total failure"
+  fi
+
+  _notify_env n4
+  tn_rc=0
+  env "${NENV[@]}" "$SCRIPT" --test-notify >/dev/null 2>&1 || tn_rc=$?
+  if [[ "$tn_rc" == "0" && "$(_count "$nlog.curl" .)" == "1" && "$(_count "$nlog.mail" '^ARGV')" == "1" ]] &&
+    grep -q '^Subject: pman mock-host: test notification$' "$nlog.mail"; then
+    _pass "--test-notify: sends through both channels (exit 0)"
+  else
+    _fail "--test-notify: expected one ntfy + one mail (exit $tn_rc)"
+  fi
+  tn_rc=0
+  env "${NENV[@]}" PMAN_MOCK_CURL_RC=22 PMAN_MOCK_SENDMAIL_RC=1 "$SCRIPT" --test-notify >/dev/null 2>&1 || tn_rc=$?
+  if [[ "$tn_rc" == "1" ]]; then
+    _pass "--test-notify: all channels failing exits 1"
+  else
+    _fail "--test-notify: all channels failing exited $tn_rc"
+  fi
+
+  _notify_env n5
+  tn_rc=0
+  env "PMAN_MOCK_CURL_LOG=$nlog.curl" NTFY_URL=http://ntfy.example.invalid/pman-topic "NTFY_TOKEN_FILE=$ntfy_tok" \
+    "$SCRIPT" --test-notify >/dev/null 2>&1 || tn_rc=$?
+  if [[ "$tn_rc" == "1" && ! -e "$nlog.curl" ]]; then
+    _pass "notify: token is never sent over plain http (channel fails)"
+  else
+    _fail "notify: token sent over http or wrong exit ($tn_rc)"
+  fi
+
+  # Header injection: CR/LF in the title must not create extra headers.
+  _notify_env n6
+  inj_rc=0
+  (
+    export PMAN_MOCK_SENDMAIL_LOG="$nlog.mail"
+    HEALTH_MAIL_TO="root@localhost"
+    HEALTH_MAIL_FROM=""
+    MSG_TITLE=$'pman x: CRIT\r\nBcc: evil@example.invalid'
+    MSG_BODY="body"
+    MSG_PRIORITY="urgent"
+    _notify_mail >/dev/null 2>&1
+  ) || inj_rc=$?
+  if [[ "$inj_rc" == "0" ]] && ! grep -q '^Bcc:' "$nlog.mail" && grep -q '^Subject: pman x: CRIT  Bcc: evil@example.invalid$' "$nlog.mail"; then
+    _pass "notify: CR/LF in the title cannot inject mail headers"
+  else
+    _fail "notify: mail header injection possible (exit $inj_rc)"
+  fi
+fi
+
+sd="$(_new_state_dir)"
+_chk "$sd"
+_chk "$sd" "$STOPPED_200" "PMAN_MOCK_TASKS=$FIXTURES/tasks-vzdump-200.json"
+_expect_chk "--check: stop during a running vzdump (stop mode) is OK" 0 "PMAN OK"
+
+# ---------------------------------------------------------------------------
 # Summary
 # ---------------------------------------------------------------------------
 echo
