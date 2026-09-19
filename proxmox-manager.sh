@@ -878,7 +878,9 @@ _truncate() {
 # _term_cols — terminal width (fallback 80).
 _term_cols() {
   local c="${COLUMNS:-}"
-  if [[ ! "$c" =~ ^[0-9]+$ ]] && [[ -t 1 ]]; then
+  # Callers use $(_term_cols), so stdout is a pipe here; stderr still
+  # points at the terminal in interactive use.
+  if [[ ! "$c" =~ ^[0-9]+$ ]] && { [[ -t 1 ]] || [[ -t 2 ]]; }; then
     c="$(tput cols 2>/dev/null || true)"
   fi
   [[ "$c" =~ ^[0-9]+$ ]] && ((c >= 40)) || c=80
