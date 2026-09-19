@@ -8,6 +8,47 @@ Versions follow [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [2.13.0] - 2026-09-19
+
+### Added
+- `--health` (boxed), `--health --list` and `--health --json`: CPU, memory and disk usage, uptime
+  and a health level per local VM/CT, read from `pvesh get /cluster/resources`; templates and guests
+  on other cluster nodes are skipped. `--filter` and `--name` apply.
+- Main menu key `h` opens the health overview; the status action prints an extra `Health:` line.
+- `--check` for cron: alerts only on changes (new, escalated, improved, resolved) for resource
+  thresholds (CPU after `HEALTH_CPU_RUNS` consecutive runs; resolved when the guest stops), guests
+  stopped with `onboot=1`, guests whose latest lifecycle task does not explain a stop (stop, shutdown,
+  suspend, migrate, destroy, backup), and failed node tasks (read with `--source all`).
+  Nagios-style summary and exit codes 0 OK, 1 WARN, 2 CRIT, 3 UNKNOWN (also for usage errors).
+- `--dry-run` (with `--check`) prints the result and the composed message without sending or
+  writing state; `--test-notify` sends a test message.
+- Notifications via ntfy (`NTFY_URL`, optional `NTFY_TOKEN_FILE`) and e-mail through the local
+  `sendmail` (`HEALTH_MAIL_TO`, `HEALTH_MAIL_FROM`); one combined message per run.
+- New config keys `HEALTH_{CPU,MEM,DISK}_{WARN,CRIT}` (`0` disables a level), `HEALTH_CPU_RUNS`,
+  `HEALTH_IGNORE_IDS`, `HEALTH_STATE_DIR` (default `/var/lib/pman`) and the notification keys above.
+- CI runs the test suite (`tests/run.sh`); shell completions gained `--name`, `--health`,
+  `--check`, `--dry-run` and `--test-notify`.
+
+### Changed
+- `STOP_TIMEOUT` and `PROXMOX_MANAGER_SPICE_ADDR` are validated after the command line is parsed.
+- With `--json` the `--force` warning goes to stderr, so the JSON output stays valid.
+- Outbound traffic is now possible, but only when notifications are configured (opt-in).
+
+### Security
+- The ntfy access token is read from a `0600` file owned by the caller in a directory nobody else can
+  write; the open descriptor is verified before reading (no swap between check and use). An inline
+  `NTFY_TOKEN` in a config file and a token with an `http://` URL are configuration errors.
+- The token, URL and headers reach `curl` only via its stdin config, never argv; `curl -q` ignores
+  `~/.curlrc`, redirects are not followed, a token forces `https` only, and requests are not retried.
+- Logs name only the ntfy host, never the topic path or the token.
+- Mail headers are built from validated single-line values (no header injection).
+- JSON output escapes all control characters; `_truncate` never cuts inside a UTF-8 character.
+- `qm`/`pct` config fallbacks run with a timeout; the `--check` lock descriptor is not inherited by
+  child processes and the lock file is never truncated; the state directory's parent must not be
+  group/world-writable.
+- The `--check` state lives in a `0700` directory, is written atomically with mode `0600`, is parsed
+  as validated data (never sourced), and parallel runs are prevented with `flock`.
+
 ## [2.12.1] - 2026-09-19
 
 ### Fixed

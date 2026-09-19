@@ -11,11 +11,16 @@ _pman() {
     prev="${COMP_WORDS[COMP_CWORD-1]}"
   }
 
-  local all_flags="--list --json --filter --no-clear --once --timeout --force --version --help"
+  local all_flags="--list --json --filter --name --no-clear --once --timeout --force --health --check --dry-run --test-notify --version --help"
 
   case "$prev" in
     --filter)
       COMPREPLY=($(compgen -W "running stopped paused" -- "$cur"))
+      return 0
+      ;;
+    --name)
+      # Free-form ERE pattern; nothing sensible to complete
+      COMPREPLY=()
       return 0
       ;;
     --timeout)

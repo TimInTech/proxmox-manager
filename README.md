@@ -8,7 +8,7 @@
 ║  ██████╔╝ ██╔████╔██║ ███████║ ██╔██╗ ██║                ║
 ║  ██╔═══╝  ██║╚██╔╝██║ ██╔══██║ ██║╚██╗██║                ║
 ║  ██║      ██║ ╚═╝ ██║ ██║  ██║ ██║ ╚████║                ║
-║  ╚═╝      ╚═╝     ╚═╝ ╚═╝  ╚═╝ ╚═╝  ╚═══╝  v2.12.1       ║
+║  ╚═╝      ╚═╝     ╚═╝ ╚═╝  ╚═╝ ╚═╝  ╚═══╝  v2.13.0       ║
 ║                                                          ║
 ║  Proxmox VM/CT Manager · Single Bash · No Dependencies   ║
 ╚══════════════════════════════════════════════════════════╝
@@ -61,6 +61,7 @@ Check out how others are using `proxmox-manager`:
 | 🌐 | **IP Address Lookup** | Shows current IPv4 addresses for running VMs and CTs — VM via QEMU Guest Agent, CT via `pct exec` |
 | 📦 | **Snapshot Management** | List, create, rollback, delete — with name validation and snapshot preview before destructive actions |
 | 🖱️ | **SPICE Integration** | Enable SPICE for VMs and retrieve `.vv` connection files. Auto-launches `virt-viewer` when installed |
+| 🩺 | **Health & Alerts** | CPU / RAM / disk per guest, stopped-with-onboot, unexpected stops and failed tasks — `--health` view, `--check` for cron with ntfy / e-mail alerts (opt-in) |
 | 🤖 | **Automation-Ready** | `--json` output, `--filter` by status, `--name` ERE filter, `--force` mode, structured logging via `LOG_FILE` |
 | ⚙️ | **Config File** | Persistent allowlisted defaults via `/etc/pmanrc` or `~/.pmanrc` — CLI flags always win |
 
@@ -97,13 +98,14 @@ A single `proxmox-manager.sh` script — no build step, no service, no config fi
   └───────────────────────────────┘
 ```
 
-> ✅ No network calls · ✅ No background process · ✅ Bash ≥ 4.0 · ✅ PVE 7.x / 8.x / 9.x
+> ✅ No network calls (unless alerts are configured) · ✅ No background process · ✅ Bash ≥ 4.0 · ✅ PVE 7.x / 8.x / 9.x
 
 ---
 
 ## 🚀 Installation
 
-**Requirements:** Proxmox VE host · Bash ≥ 4.0 · Root privileges · `qm` / `pct` (bundled with PVE)
+**Requirements:** Proxmox VE host · Bash ≥ 4.0 · Root privileges · `qm` / `pct` / `pvesh` and
+`python3` (all bundled with PVE) · optional: `sendmail` (e.g. postfix) for e-mail alerts
 
 ### Step 1 — Clone
 
@@ -142,6 +144,10 @@ Installs an atomic, root-owned copy at `/usr/local/bin/pman` so later edits to t
 | `pman --timeout 30` | Custom stop timeout in seconds (default: 60) |
 | `pman --no-clear` | Don't clear screen in interactive mode |
 | `pman --once` | Run a single interactive refresh cycle (useful for TTY recording) |
+| `pman --health` | Health overview: CPU / MEM / DISK %, uptime and level per guest (`--list`, `--json` combinable) |
+| `pman --check` | Health check for cron: alerts on changes, exit `0` OK · `1` WARN · `2` CRIT · `3` UNKNOWN |
+| `pman --check --dry-run` | Show the check result and the message that would be sent; nothing is sent or saved |
+| `pman --test-notify` | Send a test message through all configured channels |
 | `pman --version` | Print version and exit |
 | `pman -h, --help` | Show usage information and exit |
 
@@ -157,7 +163,7 @@ Displays a table of all VMs/containers. Enter a VMID to open the action menu.
 [+] running   [-] stopped   [~] paused   [?] unknown
 ```
 
-Press `r` to refresh · `q` to quit
+Press `h` for the health overview · `r` to refresh · `q` to quit
 
 ### JSON output
 
@@ -183,6 +189,79 @@ apt install virt-viewer
 
 When `virt-viewer` is **not** installed, the path to the generated `.vv` file is printed together with the install hint. The SPICE bind address defaults to `127.0.0.1` and can be overridden via `PROXMOX_MANAGER_SPICE_ADDR` (env var or `~/.pmanrc`).
 
+### Health monitoring & alerts
+
+`pman --health` shows every guest on the **local node** (templates skipped) with CPU, memory and
+disk usage, uptime and a health level; `--list` prints plain text, `--json` machine-readable
+data (`null` where a value is not available). The same data backs the `h` key in the TUI and
+the `Health:` line of the status action.
+
+`pman --check` is meant for cron. It evaluates:
+
+| Check | Level | Notes |
+|---|---|---|
+| CPU | WARN / CRIT | Must stay above the threshold for `HEALTH_CPU_RUNS` runs in a row |
+| Memory, disk | WARN / CRIT | Immediately. VM disk usage needs the QEMU guest agent, otherwise n/a |
+| _(guest stops)_ | — | CPU / memory / disk alerts of a stopped guest are resolved |
+| Stopped with `onboot=1` | CRIT | Configured to start at boot but not running (WARN if stopped by a task) |
+| Stopped unexpectedly | WARN | Was running at the last check; its latest task is no stop/shutdown/suspend/migrate/destroy/backup |
+| Failed task | WARN / CRIT | Any node task that ended not `OK` since the last run (`WARNINGS` → WARN) |
+
+Thresholds (percent; `0` disables that level):
+
+| Key | Default | Key | Default |
+|---|---|---|---|
+| `HEALTH_CPU_WARN` | 85 | `HEALTH_CPU_CRIT` | 95 |
+| `HEALTH_MEM_WARN` | 90 | `HEALTH_MEM_CRIT` | 95 |
+| `HEALTH_DISK_WARN` | 85 | `HEALTH_DISK_CRIT` | 95 |
+| `HEALTH_CPU_RUNS` | 3 | `HEALTH_IGNORE_IDS` | _(empty)_ e.g. `105,210` |
+
+A notification is sent only when something changes: new or escalated problems, improvements and
+`RESOLVED` (with duration). All changes of one run go into one message. The first run only
+records a baseline, so old failed tasks are not reported. State is kept in `HEALTH_STATE_DIR`
+(default `/var/lib/pman`, mode `0700`); if every channel fails, the unsent changes stay pending and
+are sent by the next run. Exit codes: `0` OK · `1` WARN · `2` CRIT · `3` UNKNOWN (usage, config,
+lock or `pvesh` error) — the output is a Nagios-style summary line plus one line per problem.
+
+**ntfy** — push to phone/desktop via [ntfy](https://ntfy.sh) (public or self-hosted):
+
+```bash
+# /etc/pmanrc
+NTFY_URL="https://ntfy.sh/pman-alerts-CHANGE-ME"   # use a hard-to-guess topic
+NTFY_TOKEN_FILE="/etc/pman/ntfy.token"             # optional, for protected topics
+
+# store the token in a private file (never inline in pmanrc)
+install -d -m 700 /etc/pman
+install -m 600 /dev/null /etc/pman/ntfy.token && nano /etc/pman/ntfy.token
+```
+
+The token file and its directory must not be writable by others; a token requires an `https://`
+URL (`http://` plus a token is a configuration error). **E-mail** uses the local `sendmail` (postfix, which PVE
+installs for its own notifications, works out of the box when it can relay):
+
+```bash
+# /etc/pmanrc
+HEALTH_MAIL_TO="admin@example.com"       # comma separated, no spaces
+HEALTH_MAIL_FROM="pman@pve.example.com"  # optional
+```
+
+Test the channels, then add the cron job (set `PATH`, cron's default lacks `/usr/sbin`):
+
+```bash
+pman --test-notify
+pman --check --dry-run; echo "exit $?"
+```
+
+```
+# /etc/cron.d/pman-health
+PATH=/usr/sbin:/usr/bin:/sbin:/bin
+*/5 * * * * root /usr/local/bin/pman --check >/dev/null 2>&1
+```
+
+Limitations: a shutdown from **inside** a guest has no Proxmox task and is reported as
+"stopped unexpectedly"; in a cluster, run the cron job on **every node** (each checks only its own
+guests); failed tasks are read from the last 200 node tasks.
+
 ### Configuration
 
 `proxmox-manager` checks the following files at startup (in this order):
@@ -199,9 +278,17 @@ CLI flags are applied last and always win over config file values.
 STOP_TIMEOUT=120                          # stop timeout in seconds (default: 60)
 LOG_FILE="/var/log/proxmox-manager.log"   # structured log file (empty = disabled)
 PROXMOX_MANAGER_SPICE_ADDR="spice.example.invalid" # SPICE bind address
+HEALTH_MEM_WARN=80                        # health thresholds, see "Health monitoring & alerts"
+NTFY_URL="https://ntfy.sh/pman-alerts-CHANGE-ME"
 ```
 
-Configuration files are parsed as data, not executed as shell code. Only the three settings shown above are accepted. When enabled, `LOG_FILE` must be an absolute, non-symlinked regular file owned by the current user with mode `0600`; its parent directory must also be owner-controlled and not group/world-writable.
+Configuration files are parsed as data, not executed as shell code. Accepted keys:
+`STOP_TIMEOUT`, `LOG_FILE`, `PROXMOX_MANAGER_SPICE_ADDR`, `HEALTH_CPU_WARN`, `HEALTH_CPU_CRIT`,
+`HEALTH_MEM_WARN`, `HEALTH_MEM_CRIT`, `HEALTH_DISK_WARN`, `HEALTH_DISK_CRIT`, `HEALTH_CPU_RUNS`,
+`HEALTH_IGNORE_IDS`, `HEALTH_STATE_DIR`, `NTFY_URL`, `NTFY_TOKEN_FILE`, `HEALTH_MAIL_TO` and
+`HEALTH_MAIL_FROM`; anything else is ignored with a warning. Health settings are validated only
+by `--health`, `--check` and `--test-notify`, so a typo never blocks the TUI. Because the file
+may name alert targets, keep it private: `chmod 600 /etc/pmanrc`. When enabled, `LOG_FILE` must be an absolute, non-symlinked regular file owned by the current user with mode `0600`; its parent directory must also be owner-controlled and not group/world-writable.
 
 ### Shell Completions
 
@@ -220,14 +307,20 @@ cp completions/pman.zsh ~/.zsh/completions/_pman
 
 - **Root required:** `qm` and `pct` need elevated privileges — there's no workaround.
 - **No credentials stored:** Relies entirely on Proxmox host authentication.
-- **No outbound traffic:** All operations are local to the node.
+- **No outbound traffic unless notifications are configured:** alerts via ntfy / e-mail are opt-in;
+  the ntfy token is read from a `0600` file, passed to `curl` via stdin and never sent over plain http.
 - **CI hardening:** ShellCheck on every push · Gitleaks scan for accidental secrets.
 
 ---
 
 ## 📋 Changelog
 
-### 🆕 [v2.12.1](CHANGELOG.md) — 2026-09-19
+### 🆕 [v2.13.0](CHANGELOG.md) — 2026-09-19
+
+> Health view (`--health`, key `h`) · `--check` for cron with ntfy / e-mail alerts on changes ·
+> exit codes 0/1/2/3 · `--test-notify`
+
+### [v2.12.1](CHANGELOG.md) — 2026-09-19
 
 > Action and snapshot menus draw a closed frame · README screenshots regenerated
 
@@ -270,7 +363,9 @@ shellcheck proxmox-manager.sh
 tests/run.sh
 ```
 
-31 tests covering `validate_vmid`, `validate_snapshot_name`, `ip_info`, `--filter`, and CLI flags.
+131 tests covering `validate_vmid`, `validate_snapshot_name`, `ip_info`, `--filter`, CLI flags, config
+parsing, the health view, the `--check` engine and notifications (mocked `pvesh`, `curl`, `sendmail`;
+no network, no root).
 
 ---
 
