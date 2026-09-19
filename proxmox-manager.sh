@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # Proxmox VM/CT Management Tool
-# Version 2.12.1 — 2026-09-19
+# Version 2.13.0 — 2026-09-19
+# - feat: health view (--health, menu key h) and cron checks (--check) with ntfy/e-mail alerts
 # - fix: action and snapshot menus draw a closed frame (right border, padded rows)
 # - fix: #33 TUI frames aligned by visible width; long guest names fit/truncate; PVE version parsed correctly
 # - feat: #28 show current IP addresses for running VMs/CTs

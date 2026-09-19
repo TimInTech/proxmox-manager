@@ -8,6 +8,39 @@ Versions follow [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [2.13.0] - 2026-09-19
+
+### Added
+- `--health` (boxed), `--health --list` and `--health --json`: CPU, memory and disk usage, uptime
+  and a health level per local VM/CT, read from `pvesh get /cluster/resources`; templates and guests
+  on other cluster nodes are skipped. `--filter` and `--name` apply.
+- Main menu key `h` opens the health overview; the status action prints an extra `Health:` line.
+- `--check` for cron: alerts only on changes (new, escalated, improved, resolved) for resource
+  thresholds (CPU after `HEALTH_CPU_RUNS` consecutive runs), guests stopped with `onboot=1`, guests
+  that stopped without a stop/shutdown/migrate/destroy/backup task, and failed node tasks.
+  Nagios-style summary and exit codes 0 OK, 1 WARN, 2 CRIT, 3 UNKNOWN.
+- `--dry-run` (with `--check`) prints the result and the composed message without sending or
+  writing state; `--test-notify` sends a test message.
+- Notifications via ntfy (`NTFY_URL`, optional `NTFY_TOKEN_FILE`) and e-mail through the local
+  `sendmail` (`HEALTH_MAIL_TO`, `HEALTH_MAIL_FROM`); one combined message per run.
+- New config keys `HEALTH_{CPU,MEM,DISK}_{WARN,CRIT}` (`0` disables a level), `HEALTH_CPU_RUNS`,
+  `HEALTH_IGNORE_IDS`, `HEALTH_STATE_DIR` (default `/var/lib/pman`) and the notification keys above.
+- CI runs the test suite (`tests/run.sh`); shell completions gained `--name`, `--health`,
+  `--check`, `--dry-run` and `--test-notify`.
+
+### Changed
+- `STOP_TIMEOUT` and `PROXMOX_MANAGER_SPICE_ADDR` are validated after the command line is parsed.
+- Outbound traffic is now possible, but only when notifications are configured (opt-in).
+
+### Security
+- The ntfy access token is read from a `0600` file owned by the caller; an inline `NTFY_TOKEN` in a
+  config file is rejected. The token, URL and headers reach `curl` only via its stdin config, never
+  argv; redirects are not followed, and the token is never sent over plain `http://`.
+- Logs name only the ntfy host, never the topic path or the token.
+- Mail headers are built from validated single-line values (no header injection).
+- The `--check` state lives in a `0700` directory, is written atomically with mode `0600`, is parsed
+  as validated data (never sourced), and parallel runs are prevented with `flock`.
+
 ## [2.12.1] - 2026-09-19
 
 ### Fixed
