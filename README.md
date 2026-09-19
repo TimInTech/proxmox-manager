@@ -8,7 +8,7 @@
 ║  ██████╔╝██╔████╔██║ ███████║ ██╔██╗ ██║               ║
 ║  ██╔═══╝ ██║╚██╔╝██║ ██╔══██║ ██║╚██╗██║               ║
 ║  ██║     ██║ ╚═╝ ██║ ██║  ██║ ██║ ╚████║               ║
-║  ╚═╝     ╚═╝     ╚═╝ ╚═╝  ╚═╝ ╚═╝  ╚═══╝  v2.11.1     ║
+║  ╚═╝     ╚═╝     ╚═╝ ╚═╝  ╚═╝ ╚═╝  ╚═══╝  v2.12.0     ║
 ║                                                          ║
 ║  Proxmox VM/CT Manager · Single Bash · No Dependencies  ║
 ╚══════════════════════════════════════════════════════════╝
@@ -227,7 +227,16 @@ cp completions/pman.zsh ~/.zsh/completions/_pman
 
 ## 📋 Changelog
 
-### 🆕 [v2.11.1](CHANGELOG.md) — 2026-05-04
+### 🆕 [v2.12.0](CHANGELOG.md) — 2026-09-19
+
+| Issue | Change |
+|---|---|
+| [#33](https://github.com/TimInTech/proxmox-manager/issues/33) | TUI frames aligned by visible width; long guest names grow the NAME column (truncated at terminal width); correct PVE version and compact uptime in the header |
+| [#31](https://github.com/TimInTech/proxmox-manager/pull/31) | Security hardening: config files parsed as allowlisted data (no `source`), private log files, atomic root-owned `pman` install, SHA-pinned CI |
+| [#30](https://github.com/TimInTech/proxmox-manager/pull/30) | Snapshot names validated against Proxmox rules; SPICE `.vv` files use the real bind address/port |
+| [#28](https://github.com/TimInTech/proxmox-manager/issues/28) | New **IP info** menu item to show current IPv4 addresses for running VMs and CTs |
+
+### [v2.11.1](CHANGELOG.md) — 2026-05-04
 
 | Issue | Change |
 |---|---|
