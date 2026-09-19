@@ -2,8 +2,12 @@
 # Mock for `pvesh get ... --output-format json`.
 # PMAN_MOCK_RESOURCES / PMAN_MOCK_TASKS: fixture files replacing the inline defaults.
 # The token @NOW@ in a fixture is replaced with the current epoch.
-# PMAN_MOCK_PVESH_FAIL=1 makes every call fail.
+# PMAN_MOCK_PVESH_FAIL=1 makes every call fail; PMAN_MOCK_PVESH_SLEEP=N delays each call.
 set -euo pipefail
+
+if [[ -n "${PMAN_MOCK_PVESH_SLEEP:-}" ]]; then
+  sleep "$PMAN_MOCK_PVESH_SLEEP"
+fi
 
 if [[ "${PMAN_MOCK_PVESH_FAIL:-0}" == "1" ]]; then
   echo "mock pvesh: simulated failure" >&2

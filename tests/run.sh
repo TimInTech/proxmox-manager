@@ -383,7 +383,7 @@ _expect_rc "health config: token file with mode 0644 makes --check exit 3" 3 \
 printf '%s\n' 'NTFY_URL=ftp://ntfy.example.invalid/topic' >"$HOME/.pmanrc"
 _expect_rc "health config: non-http NTFY_URL makes --check exit 3" 3 \
   env HEALTH_STATE_DIR="$(_new_state_dir)" "$SCRIPT" --check
-printf '%s\n' 'HEALTH_MAIL_TO=root@localhost,bad address' >"$HOME/.pmanrc"
+printf '%s\n' 'HEALTH_MAIL_TO="root@localhost,bad address"' >"$HOME/.pmanrc"
 _expect_rc "health config: invalid HEALTH_MAIL_TO makes --check exit 3" 3 \
   env HEALTH_STATE_DIR="$(_new_state_dir)" "$SCRIPT" --check
 rm -f "$HOME/.pmanrc"
@@ -483,6 +483,162 @@ if grep -q 'Health: CPU 12%  MEM 25%  DISK 12%  up 1h 0m  \[OK\]' <<<"$status_ou
   _pass "status action: prints a health line"
 else
   _fail "status action: health line missing"
+fi
+
+# ---------------------------------------------------------------------------
+# Health check engine: --check / --dry-run (notifications are not sent here)
+# ---------------------------------------------------------------------------
+# _chk DIR [ENV=VAL...] [-- ARGS] — run --check with HEALTH_STATE_DIR=DIR; sets chk_out/chk_rc.
+_chk() {
+  local dir="$1"
+  shift
+  local -a envs=() args=()
+  while (($# > 0)) && [[ "$1" != "--" ]]; do
+    envs+=("$1")
+    shift
+  done
+  (($# > 0)) && shift
+  args=("$@")
+  chk_rc=0
+  chk_out="$(env HEALTH_STATE_DIR="$dir" "${envs[@]}" "$SCRIPT" --check "${args[@]}" 2>/dev/null)" || chk_rc=$?
+}
+
+# _expect_chk LABEL RC PATTERN — assert last _chk exit code and a fixed-string match.
+_expect_chk() {
+  local label="$1" rc="$2" pattern="$3"
+  if [[ "$chk_rc" == "$rc" ]] && grep -qF -- "$pattern" <<<"$chk_out"; then
+    _pass "$label"
+  else
+    _fail "$label (exit $chk_rc, expected $rc; output: ${chk_out//$'\n'/ | })"
+  fi
+}
+
+HOT="PMAN_MOCK_RESOURCES=$FIXTURES/resources-hot.json"
+CPU_HOT="PMAN_MOCK_RESOURCES=$FIXTURES/resources-cpu-hot.json"
+STOPPED_200="PMAN_MOCK_RESOURCES=$FIXTURES/resources-200-stopped.json"
+
+sd="$(_new_state_dir)"
+_chk "$sd"
+_expect_chk "--check: all OK exits 0 with Nagios summary" 0 "PMAN OK - 0 critical, 0 warning"
+if [[ "$(stat -c '%a' "$sd/health.state")" == "600" && "$(stat -c '%a' "$sd/check.lock")" == "600" &&
+  "$(head -1 "$sd/health.state")" == "# pman-health-state v1" ]]; then
+  _pass "--check: state and lock files are private (0600) and versioned"
+else
+  _fail "--check: state/lock file mode or header wrong"
+fi
+_chk "$sd" "$HOT"
+_expect_chk "--check: memory CRIT alerts immediately (exit 2)" 2 "[CRIT] CT 100 (ct-one): memory 96% (>= 95%)"
+if ! grep -q 'CPU' <<<"$chk_out"; then
+  _pass "--check: single CPU spike does not alert"
+else
+  _fail "--check: CPU alerted on the first high run"
+fi
+_chk "$sd"
+_expect_chk "--check: recovery reports RESOLVED (exit 0)" 0 "[RESOLVED] CT 100 (ct-one): memory back to normal (25%)"
+
+sd="$(_new_state_dir)"
+_chk "$sd" "$CPU_HOT"
+cpu1="$chk_rc"
+_chk "$sd" "$CPU_HOT"
+cpu2="$chk_rc"
+_chk "$sd" "$CPU_HOT"
+if [[ "$cpu1$cpu2" == "00" ]]; then
+  _expect_chk "--check: CPU alerts after HEALTH_CPU_RUNS=3 consecutive runs" 1 "[WARN] VM 200 (vm-one): CPU 90% (>= 85%)"
+else
+  _fail "--check: CPU alerted before 3 runs (exits $cpu1 $cpu2)"
+fi
+
+sd="$(_new_state_dir)"
+_chk "$sd" PMAN_MOCK_ONBOOT_IDS=101
+_expect_chk "--check: stopped guest with onboot=1 is CRIT" 2 "[CRIT] CT 101 (ct-fallback): stopped although onboot=1"
+
+sd="$(_new_state_dir)"
+_chk "$sd"
+_chk "$sd" "$STOPPED_200"
+_expect_chk "--check: running guest stopped without task is WARN" 1 "[WARN] VM 200 (vm-one): stopped unexpectedly"
+_chk "$sd" "$STOPPED_200"
+_expect_chk "--check: unexpected stop stays latched while stopped" 1 "stopped unexpectedly"
+sd="$(_new_state_dir)"
+_chk "$sd"
+_chk "$sd" "$STOPPED_200" "PMAN_MOCK_TASKS=$FIXTURES/tasks-shutdown-200.json"
+_expect_chk "--check: stop with a successful shutdown task is OK" 0 "PMAN OK"
+
+sd="$(_new_state_dir)"
+_chk "$sd" "PMAN_MOCK_TASKS=$FIXTURES/tasks-failed-old.json"
+_expect_chk "--check: first run is a task baseline (old failures ignored)" 0 "0 task event(s)"
+_chk "$sd" "PMAN_MOCK_TASKS=$FIXTURES/tasks-failed-new.json"
+if [[ "$chk_rc" == "2" ]] && grep -qF '[CRIT] task qmstart 201 failed: start failed' <<<"$chk_out" &&
+  grep -qF '[WARN] task vzdump 100 finished with WARNINGS: 1' <<<"$chk_out" && ! grep -q 'job errors' <<<"$chk_out"; then
+  _pass "--check: new failed tasks alert once (CRIT/WARN), old ones stay silent"
+else
+  _fail "--check: task events wrong (exit $chk_rc)"
+fi
+_chk "$sd" "PMAN_MOCK_TASKS=$FIXTURES/tasks-failed-new.json"
+_expect_chk "--check: task events are deduplicated by watermark" 0 "0 task event(s)"
+
+sd="$(_new_state_dir)"
+_chk "$sd" "$HOT" HEALTH_IGNORE_IDS=100
+_expect_chk "--check: HEALTH_IGNORE_IDS skips a guest" 0 "PMAN OK"
+
+sd="$(_new_state_dir)"
+_chk "$sd" PMAN_MOCK_PVESH_FAIL=1
+_expect_chk "--check: pvesh failure exits 3 (UNKNOWN)" 3 "PMAN UNKNOWN"
+lock_rc=0
+(
+  flock -n 9
+  HEALTH_STATE_DIR="$sd" "$SCRIPT" --check >/dev/null 2>&1
+) 9>"$sd/check.lock" || lock_rc=$?
+if [[ "$lock_rc" == "3" ]]; then
+  _pass "--check: concurrent run (lock held) exits 3"
+else
+  _fail "--check: lock not enforced (exit $lock_rc)"
+fi
+chmod 755 "$sd"
+_chk "$sd"
+_expect_chk "--check: non-private state directory exits 3" 3 "PMAN UNKNOWN"
+
+sd="$(_new_state_dir)"
+_chk "$sd" "$HOT" -- --dry-run
+if [[ "$chk_rc" == "2" ]] && grep -qF 'Title: pman mock-host: CRIT (2 new)' <<<"$chk_out" &&
+  grep -qF 'Priority: urgent' <<<"$chk_out" && [[ ! -e "$sd/health.state" && ! -e "$sd/check.lock" ]]; then
+  _pass "--check --dry-run: prints the message and writes no state"
+else
+  _fail "--check --dry-run: unexpected output or state written (exit $chk_rc)"
+fi
+
+sd="$(_new_state_dir)"
+probe="$TEST_TMP/state-probe"
+printf '%s\n' '# pman-health-state v1' "W	1	1" "C	mem:100	2	1	0" \
+  "X \$(touch $probe)" "C	mem:1;touch $probe	2	1	0" >"$sd/health.state"
+chmod 600 "$sd/health.state"
+_chk "$sd"
+if [[ "$chk_rc" == "0" && ! -e "$probe" ]] && grep -qF '[RESOLVED] CT 100 (ct-one): memory back to normal' <<<"$chk_out" &&
+  ! grep -q 'touch' "$sd/health.state"; then
+  _pass "--check: state file parsed as data, malformed lines dropped"
+else
+  _fail "--check: state file handling unsafe or wrong (exit $chk_rc)"
+fi
+
+sd="$(_new_state_dir)"
+HEALTH_STATE_DIR="$sd" PMAN_MOCK_PVESH_SLEEP=1 "$SCRIPT" --check >/dev/null 2>&1 &
+term_pid=$!
+sleep 0.3
+kill -TERM "$term_pid" 2>/dev/null || true
+term_rc=0
+wait "$term_pid" || term_rc=$?
+if [[ "$term_rc" == "3" ]]; then
+  _pass "--check: SIGTERM exits 3 instead of 0"
+else
+  _fail "--check: SIGTERM exit code $term_rc (expected 3)"
+fi
+
+cap_lines=()
+for i in $(seq 1 200); do cap_lines+=("[WARN] VM $i (some-guest-name): memory 91% (>= 90%)"); done
+_compose_message mock-host 1 200 0 0 "Now: totals" "${cap_lines[@]}"
+if ((${#MSG_BODY} <= 3600)) && [[ "$MSG_BODY" == *"more line(s) omitted"* && "$MSG_TITLE" == "pman mock-host: WARN (200 new)" && "$MSG_PRIORITY" == "high" ]]; then
+  _pass "_compose_message: title, priority and ~3500 byte cap"
+else
+  _fail "_compose_message: cap or title wrong (${#MSG_BODY} bytes, '$MSG_TITLE')"
 fi
 
 # ---------------------------------------------------------------------------

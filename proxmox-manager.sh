@@ -55,6 +55,17 @@ HEALTH_ERR=''           # reason for the last _health_load/_health_load_tasks fa
 HEALTH_ROWS=()          # parsed guest rows (see _health_parse_resources)
 declare -A _HV_LEVEL=() # per-guest max health level (see _health_evaluate)
 declare -A _HV_FIND=()  # per-guest findings (see _health_evaluate)
+HEALTH_TASKS=()         # parsed task rows (see _health_parse_tasks)
+HEALTH_STATE_HEADER='# pman-health-state v1'
+_CHECK_TMP=''                                                      # temp state file removed by the --check EXIT trap
+_CHECK_DONE=0                                                      # set right before --check exits normally
+declare -A _S_LVL=() _S_SINCE=() _S_STREAK=() _S_RUN=() _S_TASK=() # previous --check state
+_S_BASE=0
+_S_RUN_TS=0
+_S_TASK_TS=0
+declare -A _N_LVL=() _N_SINCE=() _N_STREAK=() _N_RUN=() _N_TASK=() # new --check state
+_N_RUN_TS=0
+_N_TASK_TS=0
 
 # =============================================================================
 # COLORS  (active only on a real TTY, or when NO_COLOR is unset)
@@ -1333,6 +1344,26 @@ _health_load() {
   return 0
 }
 
+# _health_load_tasks — fetch and parse recent node tasks into HEALTH_TASKS.
+# Requires HEALTH_NODE (set by _health_load). Returns 1 with HEALTH_ERR on failure.
+_health_load_tasks() {
+  local raw parsed
+  HEALTH_TASKS=()
+  HEALTH_ERR=''
+  if ! raw="$(_health_fetch tasks "$HEALTH_NODE")"; then
+    HEALTH_ERR="pvesh get /nodes/${HEALTH_NODE}/tasks failed or timed out."
+    return 1
+  fi
+  if ! parsed="$(printf '%s' "$raw" | _health_parse_tasks)"; then
+    HEALTH_ERR="Could not parse the pvesh task list."
+    return 1
+  fi
+  if [[ -n "$parsed" ]]; then
+    mapfile -t HEALTH_TASKS <<<"$parsed"
+  fi
+  return 0
+}
+
 # _guest_onboot ID TYPE — true when the guest config has "onboot: 1".
 _guest_onboot() {
   local id="$1" ty="$2" cfg=''
@@ -1703,8 +1734,458 @@ _check_unknown() {
   exit 3
 }
 
+# _check_on_exit — EXIT trap of --check: remove the temp file and map any
+# unexpected exit (e.g. a set -e abort) to 3 instead of a misleading OK/WARN.
+_check_on_exit() {
+  local rc=$?
+  if [[ -n "$_CHECK_TMP" ]]; then
+    rm -f -- "$_CHECK_TMP"
+    _CHECK_TMP=''
+  fi
+  if ((_CHECK_DONE == 0 && rc != 3)); then
+    exit 3
+  fi
+}
+
+# _check_state_dir DIR — create DIR (0700) if needed; require a private, owned directory.
+_check_state_dir() {
+  local dir="$1"
+  if [[ -L "$dir" ]]; then
+    err "HEALTH_STATE_DIR must not be a symlink."
+    return 1
+  fi
+  if [[ ! -d "$dir" ]]; then
+    if ! (umask 077 && mkdir -p -- "$dir") 2>/dev/null; then
+      err "Could not create HEALTH_STATE_DIR ${dir}."
+      return 1
+    fi
+  fi
+  if ! _owner_mode_ok "$dir" 077; then
+    err "HEALTH_STATE_DIR ${dir} must be owned by the current user with mode 0700."
+    return 1
+  fi
+  return 0
+}
+
+# _state_load FILE — read the versioned TSV state into the _S_* globals.
+# The file is parsed as data (never sourced); malformed lines are skipped and an
+# unknown header resets to a fresh baseline. Returns 1 when FILE exists but is unsafe
+# or unreadable.
+#   W  run-epoch  task-watermark   T  upid   R  vmid   C  check:vmid  level  since  streak
+_state_load() {
+  local file="$1" line first=1 bad=0
+  local re_w=$'^W\t([0-9]{1,12})\t([0-9]{1,12})$'
+  local re_t=$'^T\t([A-Za-z0-9:@._!=-]{1,200})$'
+  local re_r=$'^R\t([0-9]{1,6})$'
+  local re_c=$'^C\t((cpu|mem|disk|down):[0-9]{1,6})\t([0-2])\t([0-9]{1,12})\t([0-9]{1,4})$'
+  _S_LVL=()
+  _S_SINCE=()
+  _S_STREAK=()
+  _S_RUN=()
+  _S_TASK=()
+  _S_BASE=0
+  _S_RUN_TS=0
+  _S_TASK_TS=0
+  if [[ ! -e "$file" && ! -L "$file" ]]; then
+    return 0
+  fi
+  if [[ -L "$file" || ! -f "$file" || ! -r "$file" ]]; then
+    err "State file ${file} must be a readable regular file (no symlink)."
+    return 1
+  fi
+  if ! _owner_mode_ok "$file" 077; then
+    err "State file ${file} must be owned by the current user with mode 0600."
+    return 1
+  fi
+  while IFS= read -r line || [[ -n "$line" ]]; do
+    if ((first == 1)); then
+      first=0
+      if [[ "$line" != "$HEALTH_STATE_HEADER" ]]; then
+        _config_warn "Unknown state file format in ${file}; starting a new baseline."
+        return 0
+      fi
+      continue
+    fi
+    if [[ "$line" =~ $re_c ]]; then
+      _S_LVL["${BASH_REMATCH[1]}"]="${BASH_REMATCH[3]}"
+      _S_SINCE["${BASH_REMATCH[1]}"]=$((10#${BASH_REMATCH[4]}))
+      _S_STREAK["${BASH_REMATCH[1]}"]=$((10#${BASH_REMATCH[5]}))
+    elif [[ "$line" =~ $re_r ]]; then
+      _S_RUN["${BASH_REMATCH[1]}"]=1
+    elif [[ "$line" =~ $re_t ]]; then
+      _S_TASK["${BASH_REMATCH[1]}"]=1
+    elif [[ "$line" =~ $re_w ]]; then
+      _S_RUN_TS=$((10#${BASH_REMATCH[1]}))
+      _S_TASK_TS=$((10#${BASH_REMATCH[2]}))
+      _S_BASE=1
+    else
+      bad=$((bad + 1))
+    fi
+  done <"$file"
+  if ((bad > 0)); then
+    _config_warn "Ignored ${bad} malformed line(s) in ${file}."
+  fi
+  return 0
+}
+
+# _state_save DIR FILE — write the _N_* globals atomically (mktemp + mv, mode 0600).
+_state_save() {
+  local dir="$1" file="$2" k
+  _CHECK_TMP="$(umask 077 && mktemp -p "$dir" health.state.XXXXXX)" || return 1
+  {
+    printf '%s\n' "$HEALTH_STATE_HEADER"
+    printf 'W\t%s\t%s\n' "$_N_RUN_TS" "$_N_TASK_TS"
+    for k in "${!_N_TASK[@]}"; do
+      printf 'T\t%s\n' "$k"
+    done
+    for k in "${!_N_RUN[@]}"; do
+      printf 'R\t%s\n' "$k"
+    done
+    for k in "${!_N_LVL[@]}"; do
+      printf 'C\t%s\t%s\t%s\t%s\n' "$k" "${_N_LVL[$k]}" "${_N_SINCE[$k]:-0}" "${_N_STREAK[$k]:-0}"
+    done
+  } >"$_CHECK_TMP" || return 1
+  chmod 600 -- "$_CHECK_TMP" || return 1
+  mv -f -- "$_CHECK_TMP" "$file" || return 1
+  _CHECK_TMP=''
+  return 0
+}
+
+# _check_process_tasks — scan HEALTH_TASKS (uses run_check's "events" and "excused").
+# Advances the task watermark (_N_TASK_TS/_N_TASK), appends failed tasks that finished
+# since the last run to "events" (level TAB text) and marks guests with a successful or
+# running stop/shutdown/destroy/migrate task in "excused". The first run is a baseline.
+_check_process_tasks() {
+  local row t_end t_upid t_type t_id t_status is_new lvl k
+  _N_TASK_TS=$_S_TASK_TS
+  _N_TASK=()
+  for k in "${!_S_TASK[@]}"; do
+    _N_TASK["$k"]=1
+  done
+  for row in "${HEALTH_TASKS[@]}"; do
+    IFS=$'\t' read -r t_end t_upid t_type t_id t_status <<<"$row"
+    [[ "$t_end" =~ ^[0-9]{1,12}$ && -n "$t_upid" ]] || continue
+    t_end=$((10#$t_end))
+    case "$t_type" in
+    qmstop | qmshutdown | vzstop | vzshutdown | qmdestroy | vzdestroy | qmigrate | vzmigrate)
+      if ((t_end == 0)) || { [[ "$t_status" == "OK" ]] && ((t_end >= _S_RUN_TS)); }; then
+        excused["$t_id"]=1
+      fi
+      ;;
+    esac
+    if ((t_end == 0)); then
+      continue # still running
+    fi
+    is_new=0
+    if ((t_end > _S_TASK_TS)) || { ((t_end == _S_TASK_TS)) && [[ -z "${_S_TASK[$t_upid]:-}" ]]; }; then
+      is_new=1
+    fi
+    if ((t_end > _N_TASK_TS)); then
+      _N_TASK_TS=$t_end
+      _N_TASK=()
+    fi
+    if ((t_end == _N_TASK_TS)); then
+      _N_TASK["$t_upid"]=1
+    fi
+    if ((is_new == 1 && _S_BASE == 1)) && [[ "$t_status" != "OK" ]] && ! _health_ignored "$t_id"; then
+      lvl=2
+      [[ "$t_status" == WARNINGS* ]] && lvl=1
+      k="task ${t_type}"
+      [[ "$t_id" != "-" ]] && k+=" ${t_id}"
+      if ((lvl == 2)); then
+        events+=("${lvl}"$'\t'"${k} failed: ${t_status}")
+      else
+        events+=("${lvl}"$'\t'"${k} finished with ${t_status}")
+      fi
+    fi
+  done
+  return 0
+}
+
+# _check_process_states NOW — derive the new check state (_N_LVL/_N_SINCE/_N_STREAK/_N_RUN)
+# from _health_checks and the previous state. Uses run_check's "excused" and fills its
+# "seen", "vals" and "labels" arrays.
+#   cpu: alerts after HEALTH_CPU_RUNS consecutive runs; mem/disk: immediately;
+#   n/a metric: previous state kept; down: onboot CRIT, or WARN (latched in the streak
+#   field) when a guest that was running last time stopped without a matching task.
+_check_process_states() {
+  local now="$1" checks row cid chk clvl cval key prev pstreak psince lvl streak
+  local id ty st nm cpu mem disk up
+  _N_LVL=()
+  _N_SINCE=()
+  _N_STREAK=()
+  _N_RUN=()
+  for row in "${HEALTH_ROWS[@]}"; do
+    IFS=$'\t' read -r id ty st nm cpu mem disk up <<<"$row"
+    [[ -z "$id" ]] && continue
+    labels["$id"]="${ty} ${id} (${nm})"
+    if [[ "$st" == "running" ]] && ! _health_ignored "$id"; then
+      _N_RUN["$id"]=1
+    fi
+  done
+  checks="$(_health_checks)"
+  while IFS=$'\t' read -r cid _ chk clvl cval _; do
+    [[ -z "$cid" ]] && continue
+    key="${chk}:${cid}"
+    seen["$key"]=1
+    vals["$key"]="$cval"
+    prev="${_S_LVL[$key]:-0}"
+    pstreak="${_S_STREAK[$key]:-0}"
+    psince="${_S_SINCE[$key]:-0}"
+    if [[ "$clvl" == "-" ]]; then
+      # Metric not available (guest not running): keep the previous state.
+      if [[ -n "${_S_LVL[$key]:-}" ]]; then
+        _N_LVL["$key"]=$prev
+        _N_SINCE["$key"]=$psince
+        _N_STREAK["$key"]=$pstreak
+      fi
+      continue
+    fi
+    lvl=$clvl
+    streak=0
+    case "$chk" in
+    cpu)
+      if ((clvl > 0)); then
+        streak=$((pstreak + 1))
+        if ((streak > 999)); then
+          streak=999
+        fi
+        if ((streak < HEALTH_CPU_RUNS && prev == 0)); then
+          lvl=0
+        fi
+      fi
+      ;;
+    down)
+      # The streak field latches "stopped unexpectedly" until the guest runs again.
+      if [[ "$cval" == "stopped" ]]; then
+        if ((pstreak > 0)); then
+          streak=1
+        elif ((_S_BASE == 1)) && [[ -n "${_S_RUN[$cid]:-}" && -z "${excused[$cid]:-}" ]]; then
+          streak=1
+        fi
+        if ((streak == 1 && lvl < 1)); then
+          lvl=1
+        fi
+      fi
+      ;;
+    esac
+    if ((lvl > 0 || streak > 0)); then
+      _N_LVL["$key"]=$lvl
+      _N_STREAK["$key"]=$streak
+      _N_SINCE["$key"]=0
+      if ((lvl > 0 && prev > 0 && psince > 0)); then
+        _N_SINCE["$key"]=$psince
+      elif ((lvl > 0)); then
+        _N_SINCE["$key"]=$now
+      fi
+    fi
+  done <<<"$checks"
+  return 0
+}
+
+# _resolved_text CHECK VALUE — description of a check that returned to OK.
+_resolved_text() {
+  local chk="$1" val="$2"
+  case "$chk" in
+  cpu) printf 'CPU back to normal (%s)' "$(_pct_text "$val")" ;;
+  mem) printf 'memory back to normal (%s)' "$(_pct_text "$val")" ;;
+  disk) printf 'disk back to normal (%s)' "$(_pct_text "$val")" ;;
+  down)
+    if [[ "$val" == "running" ]]; then
+      printf 'running again'
+    else
+      printf 'down alert cleared (status %s)' "${val:-unknown}"
+    fi
+    ;;
+  *) printf '%s OK' "$chk" ;;
+  esac
+}
+
+# _compose_message NODE LEVEL N_NEW N_IMPROVED N_RESOLVED TOTALS LINE... — build one
+# combined notification in MSG_TITLE (ASCII), MSG_BODY (<= ~3500 bytes) and MSG_PRIORITY.
+_compose_message() {
+  local node="$1" lvl="$2" n_new="$3" n_imp="$4" n_res="$5" totals="$6"
+  shift 6
+  local word parts='' line body='' dropped=0 max=3500
+  if ((lvl > 0)); then
+    word="$(_level_name "$lvl")"
+  elif ((n_res > 0 && n_imp == 0)); then
+    word="RESOLVED"
+  else
+    word="IMPROVED"
+  fi
+  if ((n_new > 0)); then
+    parts+="${n_new} new, "
+  fi
+  if ((n_imp > 0)); then
+    parts+="${n_imp} improved, "
+  fi
+  if ((n_res > 0)); then
+    parts+="${n_res} resolved, "
+  fi
+  parts="${parts%, }"
+  MSG_TITLE="pman ${node}: ${word}"
+  if [[ -n "$parts" ]]; then
+    MSG_TITLE+=" (${parts})"
+  fi
+  case "$lvl" in
+  2) MSG_PRIORITY="urgent" ;;
+  1) MSG_PRIORITY="high" ;;
+  *) MSG_PRIORITY="low" ;;
+  esac
+  for line in "$@"; do
+    if ((${#body} + ${#line} + 1 > max)); then
+      dropped=$((dropped + 1))
+      continue
+    fi
+    body+="${line}"$'\n'
+  done
+  if ((dropped > 0)); then
+    body+="... ${dropped} more line(s) omitted"$'\n'
+  fi
+  MSG_BODY="${body}"$'\n'"${totals}"
+  return 0
+}
+
+# run_check — --check: evaluate all local guests and recent tasks, alert on changes.
+# Exit code: 0 OK, 1 WARN, 2 CRIT, 3 UNKNOWN (config, lock, state or pvesh failure).
 run_check() {
-  _check_unknown "--check is not implemented yet."
+  local dir="${HEALTH_STATE_DIR%/}" file lock_fd now old_umask
+  local -A excused=() seen=() vals=() labels=()
+  local -a events=() keys=() cur_lines=() new_lines=() imp_lines=() res_lines=() ev_lines=()
+  [[ -z "$dir" ]] && dir="/"
+  file="${dir%/}/health.state"
+  trap 'exit 3' INT TERM
+  trap '_check_on_exit' EXIT
+  now="$(date +%s)"
+
+  if ((DRY_RUN == 0)); then
+    _check_state_dir "$dir" || _check_unknown "State directory ${dir} is not usable."
+    have flock || _check_unknown "'flock' not found (util-linux)."
+    old_umask="$(umask)"
+    umask 077
+    if ! { exec {lock_fd}>"${dir%/}/check.lock"; } 2>/dev/null; then
+      _check_unknown "Could not open the lock file in ${dir}."
+    fi
+    umask "$old_umask"
+    flock -n "$lock_fd" || _check_unknown "Another --check run is still active (lock held)."
+  fi
+  if ! _state_load "$file"; then
+    ((DRY_RUN == 1)) || _check_unknown "Could not read the state file ${file}."
+  fi
+  _health_load || _check_unknown "$HEALTH_ERR"
+  _health_load_tasks || _check_unknown "$HEALTH_ERR"
+
+  _check_process_tasks
+  _check_process_states "$now"
+
+  local key chk id prev new label since dur text ev ev_lvl rc=0 lvl_new=0
+  local n_new=0 n_imp=0 n_res=0 n_warn=0 n_crit=0 n_guests=0
+  n_guests=${#HEALTH_ROWS[@]}
+  mapfile -t keys < <(printf '%s\n' "${!seen[@]}" "${!_S_LVL[@]}" | awk 'NF' | sort -t: -k2,2n -k1,1 -u)
+  for key in "${keys[@]}"; do
+    chk="${key%%:*}"
+    id="${key#*:}"
+    prev="${_S_LVL[$key]:-0}"
+    new="${_N_LVL[$key]:-0}"
+    label="${labels[$id]:-guest ${id}}"
+    if [[ -z "${seen[$key]:-}" ]]; then
+      # Guest vanished or is ignored now: resolve (silently when ignored).
+      if _health_ignored "$id"; then
+        continue
+      fi
+      new=0
+      vals["$key"]="gone"
+    fi
+    text="${label}: $(_health_finding "$chk" "$new" "${vals[$key]:-}")"
+    if ((new > 0)); then
+      cur_lines+=("[$(_level_name "$new")] ${text}")
+      if ((new == 2)); then
+        n_crit=$((n_crit + 1))
+      else
+        n_warn=$((n_warn + 1))
+      fi
+      if ((new > rc)); then
+        rc=$new
+      fi
+    fi
+    if ((new > prev)); then
+      new_lines+=("[$(_level_name "$new")] ${text}")
+      n_new=$((n_new + 1))
+      if ((new > lvl_new)); then
+        lvl_new=$new
+      fi
+    elif ((new > 0 && new < prev)); then
+      imp_lines+=("[$(_level_name "$new")] ${text} (improved from $(_level_name "$prev"))")
+      n_imp=$((n_imp + 1))
+    elif ((new == 0 && prev > 0)); then
+      since="${_S_SINCE[$key]:-0}"
+      dur=''
+      if ((since > 0 && now >= since)); then
+        dur=" after $(_fmt_duration $((now - since)))"
+      fi
+      if [[ "${vals[$key]:-}" == "gone" ]]; then
+        res_lines+=("[RESOLVED] ${label}: no longer present${dur}")
+      else
+        res_lines+=("[RESOLVED] ${label}: $(_resolved_text "$chk" "${vals[$key]:-}")${dur}")
+      fi
+      n_res=$((n_res + 1))
+    fi
+  done
+  for ev in "${events[@]}"; do
+    ev_lvl="${ev%%$'\t'*}"
+    ev_lines+=("[$(_level_name "$ev_lvl")] ${ev#*$'\t'}")
+    if ((ev_lvl > rc)); then
+      rc=$ev_lvl
+    fi
+    if ((ev_lvl > lvl_new)); then
+      lvl_new=$ev_lvl
+    fi
+  done
+
+  local state_word summary changes
+  case "$rc" in
+  2) state_word="CRITICAL" ;;
+  1) state_word="WARNING" ;;
+  *) state_word="OK" ;;
+  esac
+  printf -v summary '%s critical, %s warning, %s task event(s); %s guests on %s' \
+    "$n_crit" "$n_warn" "${#events[@]}" "$n_guests" "$HEALTH_NODE"
+  printf 'PMAN %s - %s\n' "$state_word" "$summary"
+  for text in "${cur_lines[@]}" "${ev_lines[@]}" "${res_lines[@]}"; do
+    printf '%s\n' "$text"
+  done
+  log "INFO" "health check: ${state_word} - ${summary}"
+
+  changes=$((n_new + n_imp + n_res + ${#events[@]}))
+  if ((changes > 0)); then
+    _compose_message "$HEALTH_NODE" "$lvl_new" $((n_new + ${#events[@]})) "$n_imp" "$n_res" \
+      "Now: ${summary}" "${new_lines[@]}" "${ev_lines[@]}" "${imp_lines[@]}" "${res_lines[@]}"
+  fi
+
+  if ((DRY_RUN == 1)); then
+    printf '\n--- notification (dry-run: nothing sent, state unchanged) ---\n'
+    if ((changes > 0)); then
+      printf 'Title: %s\nPriority: %s\n\n%s\n' "$MSG_TITLE" "$MSG_PRIORITY" "$MSG_BODY"
+    else
+      printf 'No changes since the last run; no notification.\n'
+    fi
+    _CHECK_DONE=1
+    exit "$rc"
+  fi
+
+  if ((changes > 0)); then
+    log "INFO" "health alert: ${MSG_TITLE}"
+    if ! _notify_all; then
+      err "All notification channels failed; state not saved so the next run retries."
+      _CHECK_DONE=1
+      exit "$rc"
+    fi
+  fi
+  _N_RUN_TS=$now
+  _state_save "$dir" "$file" || _check_unknown "Could not write the state file ${file}."
+  _CHECK_DONE=1
+  exit "$rc"
 }
 
 # =============================================================================
@@ -1717,14 +2198,17 @@ _notify_channels_configured() {
 }
 
 # _notify_all — deliver MSG_TITLE/MSG_BODY/MSG_PRIORITY through every configured channel.
-# Returns 1 only when channels are configured and all of them failed.
-# Channel senders (ntfy, sendmail) are added in a later work package.
+# Returns 1 only when channels are configured and all of them failed; with no channel
+# configured there is nothing to deliver and it returns 0.
+# Channel senders (ntfy, sendmail) are added in a later work package; until then a
+# configured channel counts as failed so --check keeps its state and retries later.
 _notify_all() {
   if ! _notify_channels_configured; then
     return 0
   fi
-  log "WARN" "Notification delivery not implemented yet; '${MSG_TITLE}' (${MSG_PRIORITY}, ${#MSG_BODY} bytes) not sent."
-  return 0
+  err "Notification delivery is not implemented yet."
+  log "WARN" "Notification not sent: '${MSG_TITLE}' (${MSG_PRIORITY}, ${#MSG_BODY} bytes)."
+  return 1
 }
 
 # run_test_notify — send a test message through all configured channels.
