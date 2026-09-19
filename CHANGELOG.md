@@ -8,6 +8,8 @@ Versions follow [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [2.12.0] - 2026-09-19
+
 ### Security
 - Configuration files are now parsed as allowlisted data instead of being executed with `source`.
 - Log files must be private, owner-controlled regular files; unsafe paths and symlinks are rejected.
@@ -33,6 +35,15 @@ Versions follow [Semantic Versioning](https://semver.org/).
   hardcoding a potentially wrong key sequence.
 
 ### Added
+- New **IP info** menu item: shows current IPv4 addresses for running VMs and CTs. VMs use the
+  QEMU Guest Agent, CTs use `pct exec ... ip -j addr show`, with clear fallback messages when
+  no address is available.
+
+## [2.9.0 – 2.11.1] - 2026-04-09 – 2026-05-04
+
+Consolidated notes for the releases between 2.8.4 and 2.11.1 (tagged `v2.9.0` and `v2026.05.04`).
+
+### Added
 - `--filter STATUS` flag: filter `--list` / `--json` output to `running`, `stopped`, or `paused`
   instances; invalid values exit 1 with a clear error message.
 - `--timeout SECS` flag: set a timeout (default 60 s) for stop operations; on exit code 124
@@ -41,9 +52,6 @@ Versions follow [Semantic Versioning](https://semver.org/).
   logs each bypassed prompt in yellow so the action is always visible.
 - `filtered_instances()` wrapper around `collect_instances()`; used by `print_table` and
   `print_json` so filter logic is in one place.
-- New **IP info** menu item: shows current IPv4 addresses for running VMs and CTs. VMs use the
-  QEMU Guest Agent, CTs use `pct exec ... ip -j addr show`, with clear fallback messages when
-  no address is available.
 - Bash completion script: `completions/pman.bash` — tab-completes all flags; suggests
   `running|stopped|paused` after `--filter` and common timeout values after `--timeout`.
 - Zsh completion script: `completions/pman.zsh` — `_arguments`-based with value specs for
@@ -145,7 +153,8 @@ Early version with basic console and snapshot management. Replaced by the v2.8.0
 
 ---
 
-[Unreleased]: https://github.com/TimInTech/proxmox-manager/compare/v2.8.4...HEAD
+[Unreleased]: https://github.com/TimInTech/proxmox-manager/compare/v2.12.0...HEAD
+[2.12.0]: https://github.com/TimInTech/proxmox-manager/compare/v2026.05.04...v2.12.0
 [2.8.4]: https://github.com/TimInTech/proxmox-manager/compare/v2.8.3...v2.8.4
 [2.8.3]: https://github.com/TimInTech/proxmox-manager/compare/v2.8.2...v2.8.3
 [2.8.2]: https://github.com/TimInTech/proxmox-manager/compare/v2.8.1...v2.8.2

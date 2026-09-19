@@ -1,13 +1,10 @@
 #!/usr/bin/env bash
 # Proxmox VM/CT Management Tool
-# Version 2.11.1 — 2026-05-04
-# - fix: #21 full stderr written to LOG_FILE; only first line shown on stdout
-# - feat: #22 load /etc/pmanrc and ~/.pmanrc before CLI flags; validates STOP_TIMEOUT
-# - feat: #23 numbered snapshot selection for rollback and delete
-# - feat: #24 validate_menu_choice() helper; unified error format for menu input
-# - feat: #25 --name PATTERN (ERE) to filter by VM/CT name; combinable with --filter
-# - feat: #26 virt-viewer auto-launch from spice_info(); fallback hint when not installed
+# Version 2.12.0 — 2026-09-19
+# - fix: #33 TUI frames aligned by visible width; long guest names fit/truncate; PVE version parsed correctly
 # - feat: #28 show current IP addresses for running VMs/CTs
+# - security: #31 config files parsed as allowlisted data; private log files; no %b on user text
+# - fix: #30 snapshot names validated against pve-configid; SPICE uses the real bind address
 
 set -Eeuo pipefail
 IFS=$'\n\t'
