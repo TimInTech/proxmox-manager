@@ -8,6 +8,16 @@ Versions follow [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [2.12.1] - 2026-09-19
+
+### Fixed
+- Action and snapshot menus now draw a closed frame: every row is padded to the box width and gets a right
+  border; long guest names in the menu titles are truncated instead of overflowing.
+
+### Changed
+- README screenshots regenerated from v2.12.1 on a real PVE 9.2 host; the obsolete, unreferenced
+  `docs/screenshots/Screenshot.png` (pre-2.8 UI) was removed.
+
 ## [2.12.0] - 2026-09-19
 
 ### Security
@@ -153,7 +163,8 @@ Early version with basic console and snapshot management. Replaced by the v2.8.0
 
 ---
 
-[Unreleased]: https://github.com/TimInTech/proxmox-manager/compare/v2.12.0...HEAD
+[Unreleased]: https://github.com/TimInTech/proxmox-manager/compare/v2.12.1...HEAD
+[2.12.1]: https://github.com/TimInTech/proxmox-manager/compare/v2.12.0...v2.12.1
 [2.12.0]: https://github.com/TimInTech/proxmox-manager/compare/v2026.05.04...v2.12.0
 [2.8.4]: https://github.com/TimInTech/proxmox-manager/compare/v2.8.3...v2.8.4
 [2.8.3]: https://github.com/TimInTech/proxmox-manager/compare/v2.8.2...v2.8.3
