@@ -16,6 +16,11 @@ Versions follow [Semantic Versioning](https://semver.org/).
 - User-controlled status and message text is no longer interpreted as `printf %b` escape sequences.
 
 ### Fixed
+- Broken TUI frames (#33): header and table rows are now padded by visible width, so right borders line up;
+  the table gained a closing border, the NAME column grows with long guest names (capped at the terminal
+  width, then truncated), and header/data columns are aligned in `--list` output too.
+- The header showed `PVE: (running` instead of the version; it now parses `pveversion` correctly and shows a
+  compact uptime (e.g. `12d 1h 25m`).
 - VM IP lookup now accepts the native QEMU Guest Agent list payload from `qm agent ... network-get-interfaces`
   as well as the earlier wrapped shape, preventing parser errors on hosts that return a bare JSON array.
 - Snapshot name validation now matches Proxmox `pve-configid` rules before calling `pct` / `qm`;

@@ -66,6 +66,7 @@ if [[ "${LANG:-}${LC_ALL:-}" =~ [Uu][Tt][Ff]-?8 || "${TERM:-}" == *256color* ]];
   SYM_STOPPED='○'
   SYM_PAUSED='◐'
   SYM_UNKNOWN='?'
+  TRUNC_MARK='…'
   BOX_TL='╔'
   BOX_TR='╗'
   BOX_BL='╚'
@@ -87,6 +88,7 @@ else
   SYM_STOPPED='[-]'
   SYM_PAUSED='[~]'
   SYM_UNKNOWN='[?]'
+  TRUNC_MARK='~'
   BOX_TL='+'
   BOX_TR='+'
   BOX_BL='+'
@@ -593,6 +595,69 @@ print_json() {
 # UI — HEADER & TABLE
 # =============================================================================
 
+# _vis_width TEXT — visible column count of TEXT.
+# Strips ANSI SGR sequences and counts UTF-8 characters (the script runs
+# with LC_ALL=C, so ${#var} alone would count bytes).
+_vis_width() {
+  local s="$1" re=$'\e''\[[0-9;]*m'
+  while [[ "$s" =~ $re ]]; do s="${s/"${BASH_REMATCH[0]}"/}"; done
+  s="${s//[$'\x80'-$'\xbf']/}"
+  printf '%s' "${#s}"
+}
+
+# _pad_right TEXT WIDTH — print TEXT padded with spaces to WIDTH visible columns.
+_pad_right() {
+  local text="$1" w="$2" vw
+  vw="$(_vis_width "$text")"
+  printf '%s' "$text"
+  ((vw < w)) && printf '%*s' $((w - vw)) ''
+  return 0
+}
+
+# _truncate TEXT MAX — shorten plain TEXT to MAX columns, marking the cut.
+_truncate() {
+  local text="$1" max="$2"
+  if (($(_vis_width "$text") <= max)); then
+    printf '%s' "$text"
+  else
+    printf '%s%s' "${text:0:max-1}" "$TRUNC_MARK"
+  fi
+}
+
+# _term_cols — terminal width (fallback 80).
+_term_cols() {
+  local c="${COLUMNS:-}"
+  if [[ ! "$c" =~ ^[0-9]+$ ]] && [[ -t 1 ]]; then
+    c="$(tput cols 2>/dev/null || true)"
+  fi
+  [[ "$c" =~ ^[0-9]+$ ]] && ((c >= 40)) || c=80
+  printf '%s' "$c"
+}
+
+# _box_content COLOR V WIDTH CONTENT — CONTENT between two V borders,
+# padded so the right border lands at column WIDTH.
+_box_content() {
+  local color="$1" v="$2" w="$3" content="$4"
+  printf '%b%s%b' "$color" "$v" "$NC"
+  _pad_right "$content" $((w - 2))
+  printf '%b%s%b\n' "$color" "$v" "$NC"
+}
+
+# _uptime_short — compact host uptime, e.g. "17d 13h 4m".
+_uptime_short() {
+  local secs
+  secs="$(cut -d. -f1 /proc/uptime 2>/dev/null || true)"
+  [[ "$secs" =~ ^[0-9]+$ ]] || return 0
+  local d=$((secs / 86400)) h=$((secs % 86400 / 3600)) m=$((secs % 3600 / 60))
+  if ((d > 0)); then
+    printf '%sd %sh %sm' "$d" "$h" "$m"
+  elif ((h > 0)); then
+    printf '%sh %sm' "$h" "$m"
+  else
+    printf '%sm' "$m"
+  fi
+}
+
 # _draw_box_top WIDTH — top border of a double-line box.
 _draw_box_top() {
   local w="$1"
@@ -662,50 +727,44 @@ header() {
   # Gather optional host info
   local node_name pve_ver uptime_str
   node_name="$(hostname -s 2>/dev/null || true)"
-  pve_ver="$(pveversion 2>/dev/null | awk '{print $2}' || true)"
-  uptime_str="$(uptime -p 2>/dev/null | sed 's/^up //' || true)"
+  # pveversion prints e.g. "pve-manager/8.4.1/2a5fa54a (running kernel: ...)"
+  pve_ver="$(pveversion 2>/dev/null | awk -F/ 'NR == 1 {print $2}' || true)"
+  uptime_str="$(_uptime_short)"
 
-  local W=53
+  local W=63 inner=59 logo_line
+  local -a logo=(
+    "██████╗ ███╗   ███╗ █████╗ ███╗  ██╗"
+    "██╔══██╗████╗ ████║██╔══██╗████╗ ██║"
+    "██████╔╝██╔████╔██║███████║██╔██╗██║"
+    "██╔═══╝ ██║╚██╔╝██║██╔══██║██║╚████║"
+    "██║     ██║ ╚═╝ ██║██║  ██║██║  ███║"
+  )
 
   _draw_box_top $W
   # ASCII art banner
-  printf '%b%s%b  %b%s%b  %b%s%b\n' \
-    "${BLUE_BRIGHT}" "${BOX_V}" "${NC}" \
-    "${CYAN_BRIGHT}${BOLD}" "██████╗ ███╗   ███╗ █████╗ ███╗  ██╗" "${NC}" \
-    "${BLUE_BRIGHT}" "${BOX_V}" "${NC}"
-  printf '%b%s%b  %b%s%b  %b%s%b\n' \
-    "${BLUE_BRIGHT}" "${BOX_V}" "${NC}" \
-    "${CYAN_BRIGHT}${BOLD}" "██╔══██╗████╗ ████║██╔══██╗████╗ ██║" "${NC}" \
-    "${BLUE_BRIGHT}" "${BOX_V}" "${NC}"
-  printf '%b%s%b  %b%s%b  %b%s%b\n' \
-    "${BLUE_BRIGHT}" "${BOX_V}" "${NC}" \
-    "${CYAN_BRIGHT}${BOLD}" "██████╔╝██╔████╔██║███████║██╔██╗██║" "${NC}" \
-    "${BLUE_BRIGHT}" "${BOX_V}" "${NC}"
-  printf '%b%s%b  %b%s%b  %b%s%b\n' \
-    "${BLUE_BRIGHT}" "${BOX_V}" "${NC}" \
-    "${CYAN_BRIGHT}${BOLD}" "██╔═══╝ ██║╚██╔╝██║██╔══██║██║╚████║" "${NC}" \
-    "${BLUE_BRIGHT}" "${BOX_V}" "${NC}"
-  printf '%b%s%b  %b%s%b  %b%s%b\n' \
-    "${BLUE_BRIGHT}" "${BOX_V}" "${NC}" \
-    "${CYAN_BRIGHT}${BOLD}" "██║     ██║ ╚═╝ ██║██║  ██║██║  ███║" "${NC}" \
-    "${BLUE_BRIGHT}" "${BOX_V}" "${NC}"
+  for logo_line in "${logo[@]}"; do
+    _box_content "${BLUE_BRIGHT}" "${BOX_V}" $W "  ${CYAN_BRIGHT}${BOLD}${logo_line}${NC}"
+  done
   _draw_box_mid $W
   # Version badge
-  local ver_line
-  printf -v ver_line "  Proxmox VM/CT Manager  %bv%s%b" "${MAGENTA_BRIGHT}${BOLD}" "$version" "${NC}"
-  printf '%b%s%b%s  %b%s%b\n' \
-    "${BLUE_BRIGHT}" "${BOX_V}" "${NC}" \
-    "$ver_line" \
-    "${BLUE_BRIGHT}" "${BOX_V}" "${NC}"
-  # Node info badges
+  _box_content "${BLUE_BRIGHT}" "${BOX_V}" $W \
+    "  Proxmox VM/CT Manager  ${MAGENTA_BRIGHT}${BOLD}v${version}${NC}"
+  # Node info badges; drop uptime, then shorten the node name if too wide
   if [[ -n "$node_name" ]]; then
-    local info_line="  ${BOLD}Node:${NC} ${WHITE}${node_name}${NC}"
-    [[ -n "$pve_ver" ]] && info_line+="  ${DIM}|${NC}  ${BOLD}PVE:${NC} ${WHITE}${pve_ver}${NC}"
-    [[ -n "$uptime_str" ]] && info_line+="  ${DIM}|${NC}  ${BOLD}up${NC} ${WHITE}${uptime_str}${NC}"
-    printf '%b%s%b%b%s%b  %b%s%b\n' \
-      "${BLUE_BRIGHT}" "${BOX_V}" "${NC}" \
-      "" "$info_line" "${NC}" \
-      "${BLUE_BRIGHT}" "${BOX_V}" "${NC}"
+    local sep="  ${DIM}|${NC}  " info_line
+    local ver_part="" up_part=""
+    [[ -n "$pve_ver" ]] && ver_part="${sep}${BOLD}PVE:${NC} ${WHITE}${pve_ver}${NC}"
+    [[ -n "$uptime_str" ]] && up_part="${sep}${BOLD}up${NC} ${WHITE}${uptime_str}${NC}"
+    info_line="  ${BOLD}Node:${NC} ${WHITE}${node_name}${NC}${ver_part}${up_part}"
+    if (($(_vis_width "$info_line") > inner)); then
+      info_line="  ${BOLD}Node:${NC} ${WHITE}${node_name}${NC}${ver_part}"
+    fi
+    local overflow=$(($(_vis_width "$info_line") - inner))
+    if ((overflow > 0)); then
+      node_name="$(_truncate "$node_name" $((${#node_name} - overflow)))"
+      info_line="  ${BOLD}Node:${NC} ${WHITE}${node_name}${NC}${ver_part}"
+    fi
+    _box_content "${BLUE_BRIGHT}" "${BOX_V}" $W "$info_line"
   fi
   _draw_box_bot $W
   echo
@@ -749,24 +808,39 @@ print_table() {
   local draw_boxes=0
   [[ "$MODE" == "interactive" ]] && draw_boxes=1
 
-  local W=63
+  local -a rows=()
+  mapfile -t rows < <(filtered_instances | sort -n -t$'\t' -k1,1)
+
+  # NAME column grows with the longest name; boxed output is capped at the
+  # terminal width and longer names are truncated.
+  local name_w=29 row id ty st sym nm
+  for row in "${rows[@]}"; do
+    IFS=$'\t' read -r id ty st sym nm <<<"$row"
+    (($(_vis_width "$nm") > name_w)) && name_w=$(_vis_width "$nm")
+  done
+  if ((draw_boxes)); then
+    local max_name=$(($(_term_cols) - 34))
+    ((name_w > max_name)) && name_w=$max_name
+    ((name_w < 29)) && name_w=29
+  fi
+  # │ + 2 + ID 6 + 1 + TYPE 5 + 1 + STATUS 10 + 1 + SYM 3 + 1 + NAME + 2 + │
+  local W=$((34 + name_w))
+
   if ((draw_boxes)); then
     _draw_line_top $W
-  fi
-  # Header row
-  if ((draw_boxes)); then
-    printf '%b%s%b  %b%-6s %-5s %-10s %-3s %-28s%b  %b%s%b\n' \
-      "${CYAN}" "${LINE_V}" "${NC}" \
-      "${BOLD}${WHITE}" "ID" "TYPE" "STATUS" "" "NAME" "${NC}" \
-      "${CYAN}" "${LINE_V}" "${NC}"
+    local head
+    printf -v head '  %b%-6s %-5s %-10s %-3s %-*s%b' \
+      "${BOLD}${WHITE}" "ID" "TYPE" "STATUS" "" "$name_w" "NAME" "${NC}"
+    _box_content "${CYAN}" "${LINE_V}" $W "$head"
     _draw_line_mid $W
   else
-    printf '%b%-6s %-5s %-10s %-3s %-28s%b\n' \
+    printf '%b%-6s %-5s %-10s %-3s %s%b\n' \
       "${BOLD}${WHITE}" "ID" "TYPE" "STATUS" "" "NAME" "${NC}"
   fi
 
   local any=0 count_run=0 count_stop=0 count_other=0
-  while IFS=$'\t' read -r id ty st sym nm; do
+  for row in "${rows[@]}"; do
+    IFS=$'\t' read -r id ty st sym nm <<<"$row"
     [[ -z "$id" ]] && continue
     any=1
     [[ "$st" == "running" ]] && count_run=$((count_run + 1))
@@ -775,27 +849,23 @@ print_table() {
 
     local ty_col
     case "$ty" in
-    CT) printf -v ty_col '%b%s%b' "${MAGENTA_BRIGHT}" "$ty" "${NC}" ;;
-    VM) printf -v ty_col '%b%s%b' "${BLUE_BRIGHT}" "$ty" "${NC}" ;;
-    *) ty_col="$ty" ;;
+    CT) printf -v ty_col '%b%-5s%b' "${MAGENTA_BRIGHT}" "$ty" "${NC}" ;;
+    VM) printf -v ty_col '%b%-5s%b' "${BLUE_BRIGHT}" "$ty" "${NC}" ;;
+    *) printf -v ty_col '%-5s' "$ty" ;;
     esac
 
+    local line
+    printf -v line '%-6s %s %s %s %s' \
+      "$id" "$ty_col" \
+      "$(_status_color "$st" "$(printf '%-10s' "$st")")" \
+      "$(_pad_right "$(_status_sym_color "$st" "$sym")" 3)" \
+      "$(_truncate "$nm" "$name_w")"
     if ((draw_boxes)); then
-      printf '%b%s%b  ' "${CYAN}" "${LINE_V}" "${NC}"
-    fi
-    printf '%-6s ' "$id"
-    printf '%s ' "$ty_col"
-    printf '     ' # pad after colored ty (color codes don't count as width)
-    _status_color "$st" "$(printf '%-10s' "$st")"
-    printf ' '
-    _status_sym_color "$st" "$sym"
-    printf '  %-28s' "$nm"
-    if ((draw_boxes)); then
-      printf '  %b%s%b\n' "${CYAN}" "${LINE_V}" "${NC}"
+      _box_content "${CYAN}" "${LINE_V}" $W "  ${line}"
     else
-      printf '\n'
+      printf '%s\n' "$line"
     fi
-  done < <(filtered_instances | sort -n -t$'\t' -k1,1)
+  done
 
   if ((any == 0)); then
     if ((draw_boxes)); then
@@ -835,30 +905,23 @@ print_table() {
     _draw_line_mid $W
   fi
   # Legend row
-  if ((draw_boxes)); then
-    printf '%b%s%b  ' "${CYAN}" "${LINE_V}" "${NC}"
-  fi
-  _status_sym_color "running" "$SYM_RUNNING"
-  printf ' running   '
-  _status_sym_color "stopped" "$SYM_STOPPED"
-  printf ' stopped   '
-  _status_sym_color "paused" "$SYM_PAUSED"
-  printf ' paused   '
-  if ((draw_boxes)); then
-    printf '%b%s%b\n' "${CYAN}" "${LINE_V}" "${NC}"
-  else
-    printf '\n'
-  fi
-
+  local legend count
+  legend="$(_status_sym_color "running" "$SYM_RUNNING") running   "
+  legend+="$(_status_sym_color "stopped" "$SYM_STOPPED") stopped   "
+  legend+="$(_status_sym_color "paused" "$SYM_PAUSED") paused"
   # Count row
-  if ((draw_boxes)); then
-    printf '%b%s%b  ' "${CYAN}" "${LINE_V}" "${NC}"
-  fi
-  printf '%bCount:%b  %b%s running%b  %b%s stopped%b' \
+  printf -v count '%bCount:%b  %b%s running%b  %b%s stopped%b' \
     "${BOLD}" "${NC}" \
     "${GREEN_BRIGHT}" "$count_run" "${NC}" \
     "${RED_BRIGHT}" "$count_stop" "${NC}"
-  if ((count_other > 0)); then printf '  %s other' "$count_other"; fi
+  ((count_other > 0)) && count+="  ${count_other} other"
+  if ((draw_boxes)); then
+    _box_content "${CYAN}" "${LINE_V}" $W "  ${legend}"
+    _box_content "${CYAN}" "${LINE_V}" $W "  ${count}"
+    _draw_line_bot $W
+  else
+    printf '%s\n%s\n' "$legend" "$count"
+  fi
   return 0
 }
 
