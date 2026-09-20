@@ -1,0 +1,15 @@
+#!/usr/bin/env bash
+# Mock sendmail: appends argv and the message (stdin) to $PMAN_MOCK_SENDMAIL_LOG;
+# exits ${PMAN_MOCK_SENDMAIL_RC:-0}.
+set -euo pipefail
+if [[ -n "${PMAN_MOCK_FD_LOG:-}" ]]; then
+  for fd in /proc/"$$"/fd/*; do
+    printf 'sendmail %s\n' "$(readlink "$fd" || true)"
+  done >>"$PMAN_MOCK_FD_LOG"
+fi
+log="${PMAN_MOCK_SENDMAIL_LOG:-}"
+msg="$(cat)"
+if [[ -n "$log" ]]; then
+  printf 'ARGV: %s\n%s\n---\n' "$*" "$msg" >>"$log"
+fi
+exit "${PMAN_MOCK_SENDMAIL_RC:-0}"

@@ -1,11 +1,16 @@
 # markdownlint configuration
 # See: https://github.com/DavidAnson/markdownlint/blob/main/doc/Rules.md
 
+# Repeated section names per release (Keep a Changelog)
+MD024:
+  siblings_only: true
+
 # Line length
 MD013:
   line_length: 80
   heading_line_length: 80
   code_blocks: false
+  tables: false
 
 # Inline HTML allowed
 MD033: false

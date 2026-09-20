@@ -51,3 +51,6 @@ jobs:
           printf '%s  %s\n' "${SHFMT_SHA256}" "${shfmt_path}" | sha256sum --check --strict
           chmod 0755 "${shfmt_path}"
           "${shfmt_path}" -d proxmox-manager.sh
+
+      - name: Run tests
+        run: bash tests/run.sh

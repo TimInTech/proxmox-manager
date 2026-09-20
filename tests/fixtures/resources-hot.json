@@ -1,0 +1,6 @@
+[
+{"id": "lxc/100", "type": "lxc", "vmid": 100, "node": "mock-host", "name": "ct-one", "status": "running", "template": 0, "cpu": 0.12, "maxcpu": 2, "mem": 1030792151, "maxmem": 1073741824, "disk": 7730941132, "maxdisk": 8589934592, "uptime": 3600},
+{"id": "lxc/101", "type": "lxc", "vmid": 101, "node": "mock-host", "name": "ct-fallback", "status": "stopped", "template": 0, "cpu": 0, "maxcpu": 1, "mem": 0, "maxmem": 536870912, "disk": 0, "maxdisk": 4294967296, "uptime": 0},
+{"id": "qemu/200", "type": "qemu", "vmid": 200, "node": "mock-host", "name": "vm-one", "status": "running", "template": 0, "cpu": 0.9, "maxcpu": 4, "mem": 536870912, "maxmem": 2147483648, "disk": 0, "maxdisk": 34359738368, "uptime": 90061},
+{"id": "qemu/201", "type": "qemu", "vmid": 201, "node": "mock-host", "name": "vm-fallback", "status": "stopped", "template": 0, "cpu": 0, "maxcpu": 2, "mem": 0, "maxmem": 1073741824, "disk": 0, "maxdisk": 10737418240, "uptime": 0}
+]

@@ -1,0 +1,4 @@
+[
+{"upid": "UPID:mock-host:00001000:00003000:65001000:qmstart:200:root@pam:", "node": "mock-host", "type": "qmstart", "id": "200", "user": "root@pam", "starttime": 1700000000, "endtime": 1700000005, "status": "OK"},
+{"upid": "UPID:mock-host:00001300:00003000:65001000:qmshutdown:201:root@pam:", "node": "mock-host", "type": "qmshutdown", "id": "201", "user": "root@pam", "starttime": 1700000095, "endtime": 1700000100, "status": "OK"}
+]

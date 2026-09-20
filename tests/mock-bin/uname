@@ -1,0 +1,14 @@
+#!/usr/bin/env bash
+# Mock uname: "-n" reports the mock node name (with a domain part, like a FQDN hostname);
+# every other invocation is passed through to the real uname.
+set -euo pipefail
+if [[ "${1:-}" == "-n" ]]; then
+  echo "mock-host.example.invalid"
+  exit 0
+fi
+for real in /usr/bin/uname /bin/uname; do
+  if [[ -x "$real" ]]; then
+    exec "$real" "$@"
+  fi
+done
+exit 1

@@ -1,0 +1,4 @@
+[
+{"upid": "UPID:mock-host:00001000:00002000:65000000:vzdump::root@pam:", "node": "mock-host", "type": "vzdump", "id": "", "user": "root@pam", "starttime": 1700000000, "endtime": 1700000100, "status": "job errors"},
+{"upid": "UPID:mock-host:00001001:00002001:65000001:qmstart:200:root@pam:", "node": "mock-host", "type": "qmstart", "id": "200", "user": "root@pam", "starttime": 1700000200, "endtime": 1700000205, "status": "OK"}
+]

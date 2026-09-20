@@ -1,0 +1,57 @@
+#!/usr/bin/env bash
+# Mock for `pvesh get ... --output-format json`.
+# PMAN_MOCK_RESOURCES / PMAN_MOCK_TASKS: fixture files replacing the inline defaults.
+# The token @NOW@ in a fixture is replaced with the current epoch.
+# PMAN_MOCK_PVESH_FAIL=1 makes every call fail; PMAN_MOCK_PVESH_SLEEP=N delays each call.
+# PMAN_MOCK_PVESH_LOG: append argv; PMAN_MOCK_FD_LOG: append the targets of open fds.
+set -euo pipefail
+
+if [[ -n "${PMAN_MOCK_PVESH_LOG:-}" ]]; then
+  printf '%s\n' "$*" >>"$PMAN_MOCK_PVESH_LOG"
+fi
+if [[ -n "${PMAN_MOCK_FD_LOG:-}" ]]; then
+  for fd in /proc/"$$"/fd/*; do
+    printf 'pvesh %s\n' "$(readlink "$fd" || true)"
+  done >>"$PMAN_MOCK_FD_LOG"
+fi
+
+if [[ -n "${PMAN_MOCK_PVESH_SLEEP:-}" ]]; then
+  sleep "$PMAN_MOCK_PVESH_SLEEP"
+fi
+
+if [[ "${PMAN_MOCK_PVESH_FAIL:-0}" == "1" ]]; then
+  echo "mock pvesh: simulated failure" >&2
+  exit 1
+fi
+
+emit() {
+  local file="$1" default="$2"
+  if [[ -n "$file" ]]; then
+    sed "s/@NOW@/$(date +%s)/g" "$file"
+  else
+    printf '%s\n' "$default"
+  fi
+}
+
+[[ "${1:-}" == "get" ]] || exit 2
+case "${2:-}" in
+  /cluster/resources)
+    emit "${PMAN_MOCK_RESOURCES:-}" '[
+{"id":"lxc/100","type":"lxc","vmid":100,"node":"mock-host","name":"ct-one","status":"running","template":0,"cpu":0.12,"maxcpu":2,"mem":268435456,"maxmem":1073741824,"disk":1073741824,"maxdisk":8589934592,"uptime":3600},
+{"id":"lxc/101","type":"lxc","vmid":101,"node":"mock-host","name":"ct-fallback","status":"stopped","template":0,"cpu":0,"maxcpu":1,"mem":0,"maxmem":536870912,"disk":0,"maxdisk":4294967296,"uptime":0},
+{"id":"qemu/200","type":"qemu","vmid":200,"node":"mock-host","name":"vm-one","status":"running","template":0,"cpu":0.05,"maxcpu":4,"mem":536870912,"maxmem":2147483648,"disk":0,"maxdisk":34359738368,"uptime":90061},
+{"id":"qemu/201","type":"qemu","vmid":201,"node":"mock-host","name":"vm-fallback","status":"stopped","template":0,"cpu":0,"maxcpu":2,"mem":0,"maxmem":1073741824,"disk":0,"maxdisk":10737418240,"uptime":0},
+{"id":"qemu/9000","type":"qemu","vmid":9000,"node":"mock-host","name":"tpl-debian","status":"stopped","template":1,"cpu":0,"maxcpu":1,"mem":0,"maxmem":1073741824,"disk":0,"maxdisk":10737418240,"uptime":0},
+{"id":"qemu/300","type":"qemu","vmid":300,"node":"other-node","name":"vm-elsewhere","status":"running","template":0,"cpu":0.99,"maxcpu":2,"mem":1073741824,"maxmem":1073741824,"disk":0,"maxdisk":10737418240,"uptime":100}
+]'
+    ;;
+  /nodes/*/tasks)
+    emit "${PMAN_MOCK_TASKS:-}" '[
+{"upid":"UPID:mock-host:00001000:00002000:65000000:qmstart:200:root@pam:","node":"mock-host","type":"qmstart","id":"200","user":"root@pam","starttime":1700000000,"endtime":1700000005,"status":"OK"}
+]'
+    ;;
+  *)
+    echo "mock pvesh: unsupported path ${2:-}" >&2
+    exit 2
+    ;;
+esac
