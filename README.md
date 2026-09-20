@@ -99,6 +99,8 @@ EOF
 
 Anyone who knows a public ntfy.sh topic can read it — treat the name like a
 password, or use a [protected topic](#health-monitoring--alerts) with a token.
+For e-mail, most home servers need a smarthost first — see
+[relaying through an external SMTP provider](#relaying-through-an-external-smtp-provider).
 
 ### 2 — Send a test message
 
@@ -347,8 +349,75 @@ auto-generated`):
        width="720">
 </p>
 
-If postfix cannot deliver directly, point it at a smarthost (`relayhost` in
-`/etc/postfix/main.cf`); `mailq` lists mail that is stuck in the queue.
+#### Relaying through an external SMTP provider
+
+Most home servers cannot deliver mail themselves: the provider blocks port 25
+or the receiving side rejects a dynamic IP. Postfix then needs a smarthost. The
+example below uses Gmail submission; any provider works the same way, only host
+and port change.
+
+**1 — Authentication.** Providers with two-factor authentication do not accept
+the account password over SMTP. Create an *app password* instead (Google:
+Account → Security → App passwords) and write it to a private file — enter it
+yourself, so it never ends up in a shell history or a script:
+
+```bash
+apt install libsasl2-modules                      # SASL client, not installed by default
+umask 077
+read -rsp "app password: " P; echo
+printf '[smtp.gmail.com]:587 you@example.com:%s\n' "$P" >/etc/postfix/sasl_passwd
+unset P
+postmap /etc/postfix/sasl_passwd
+chmod 600 /etc/postfix/sasl_passwd /etc/postfix/sasl_passwd.db
+```
+
+App passwords are shown in groups of four — enter them **without the spaces**.
+
+**2 — Postfix.** `sender_canonical` rewrites the envelope sender, because
+providers only accept mail from the authenticated account:
+
+```bash
+postconf -e "relayhost = [smtp.gmail.com]:587" \
+  "smtp_sasl_auth_enable = yes" \
+  "smtp_sasl_password_maps = hash:/etc/postfix/sasl_passwd" \
+  "smtp_sasl_security_options = noanonymous" \
+  "smtp_sasl_tls_security_options = noanonymous" \
+  "smtp_tls_security_level = encrypt" \
+  "smtp_tls_CAfile = /etc/ssl/certs/ca-certificates.crt" \
+  "sender_canonical_classes = envelope_sender" \
+  "sender_canonical_maps = regexp:/etc/postfix/sender_canonical" \
+  "inet_protocols = ipv4"
+echo '/.+/  you@example.com' >/etc/postfix/sender_canonical
+echo 'root: you@example.com' >>/etc/aliases && newaliases
+systemctl restart postfix
+```
+
+`inet_protocols = ipv4` matters on hosts without a working IPv6 route:
+otherwise every delivery first fails with `Network is unreachable` and the mail
+sits in the queue. The `root` alias makes sure Proxmox's own notifications
+reach the same mailbox.
+
+**3 — Verify.** Send a test message and read the log; Debian 13 has no
+`/var/log/mail.log`, postfix logs to the journal:
+
+```bash
+pman --test-notify
+journalctl -t postfix/smtp -n 5 --no-pager   # look for status=sent
+mailq                                        # should be empty
+```
+
+<p align="center">
+  <img src="docs/screenshots/screenshot-mail-relay.png"
+       alt="pman --test-notify followed by a postfix log line with status=sent"
+       width="720">
+</p>
+
+Common failures: `535 5.7.8` or `534 5.7.9 Application-specific password
+required` means the password is not an app password; `status=deferred` with
+`Network is unreachable` is the IPv6 case above. Gmail always replaces the
+`From` header with the authenticated account, so identify alerts by their
+subject, or send them to a plus address such as `you+pman@example.com` and
+filter on the recipient.
 
 Test the channels, then add the cron job (set `PATH`, cron's default lacks
 `/usr/sbin`):
