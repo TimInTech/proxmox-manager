@@ -8,6 +8,8 @@ Versions follow [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [2.13.2] - 2026-10-21
+
 ### Fixed
 
 - Stop action (menu key 2) now runs `qm shutdown` / `pct shutdown` with
@@ -19,6 +21,18 @@ Versions follow [Semantic Versioning](https://semver.org/).
 - Tests: `qm`/`pct` mocks log their calls (`PMAN_MOCK_GUEST_LOG`) and can fail
   on demand (`PMAN_MOCK_GUEST_FAIL`); new tests cover stop, its failure path,
   a declined confirmation and restart for VM and CT.
+
+### Changed
+
+- CI: `actions/upload-artifact` 7.0.1 → 7.0.2.
+
+## [2.13.1] - 2026-09-26
+
+### Changed
+
+- README: health monitoring and alerts documented with screenshots; SMTP relay
+  setup for e-mail alerts.
+- CI: GitHub Actions dependency group bumped. No change to `proxmox-manager.sh`.
 
 ## [2.13.0] - 2026-09-19
 
@@ -280,7 +294,10 @@ rewrite.
 
 ---
 
-[Unreleased]: https://github.com/TimInTech/proxmox-manager/compare/v2.12.1...HEAD
+[Unreleased]: https://github.com/TimInTech/proxmox-manager/compare/v2.13.2...HEAD
+[2.13.2]: https://github.com/TimInTech/proxmox-manager/compare/v2.13.1...v2.13.2
+[2.13.1]: https://github.com/TimInTech/proxmox-manager/compare/v2.13.0...v2.13.1
+[2.13.0]: https://github.com/TimInTech/proxmox-manager/compare/v2.12.1...v2.13.0
 [2.12.1]: https://github.com/TimInTech/proxmox-manager/compare/v2.12.0...v2.12.1
 [2.12.0]: https://github.com/TimInTech/proxmox-manager/compare/v2026.05.04...v2.12.0
 [2.8.4]: https://github.com/TimInTech/proxmox-manager/compare/v2.8.3...v2.8.4

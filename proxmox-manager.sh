@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # Proxmox VM/CT Management Tool
-# Version 2.13.0 — 2026-09-19
+# Version 2.13.2 — 2026-10-21
+# - fix: stop action runs qm/pct shutdown --timeout --forceStop 1 (clean shutdown, force stop only after the timeout) instead of qm/pct stop, which pulled the plug
 # - feat: health view (--health, menu key h) and cron checks (--check) with ntfy/e-mail alerts
 # - fix: action and snapshot menus draw a closed frame (right border, padded rows)
 # - fix: #33 TUI frames aligned by visible width; long guest names fit/truncate; PVE version parsed correctly
