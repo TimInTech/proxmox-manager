@@ -487,6 +487,62 @@ else
 fi
 
 # ---------------------------------------------------------------------------
+# Lifecycle actions: stop is a graceful shutdown with force-stop fallback
+# ---------------------------------------------------------------------------
+guest_log="$TEST_TMP/guest.log"
+# _act INPUT ID TYPE ACTION [VAR=VAL...] — run do_action in a subshell with a fresh guest log; sets act_out.
+_act() {
+  local input="$1" id="$2" ty="$3" act="$4"
+  shift 4
+  : >"$guest_log"
+  act_out="$(
+    export PMAN_MOCK_GUEST_LOG="$guest_log"
+    for kv in "$@"; do export "${kv?}"; done
+    STOP_TIMEOUT="${STOP_TIMEOUT:-60}"
+    printf '%s\n' "$input" | do_action "$id" "$ty" "$act" "name-$id" 2>&1
+  )" || true
+}
+
+for g in VM:qm:200 CT:pct:100; do
+  IFS=: read -r gty gcmd gid <<<"$g"
+  _act y "$gid" "$gty" stop
+  if grep -qx "$gcmd shutdown $gid --timeout 60 --forceStop 1" "$guest_log" &&
+    ! grep -q "^$gcmd stop" "$guest_log" && grep -q "$gty $gid stopped." <<<"$act_out"; then
+    _pass "stop action ($gty): graceful shutdown with --forceStop, never '$gcmd stop'"
+  else
+    _fail "stop action ($gty): unexpected calls: $(tr '\n' ';' <"$guest_log")"
+  fi
+
+  _act y "$gid" "$gty" stop STOP_TIMEOUT=17
+  if grep -qx "$gcmd shutdown $gid --timeout 17 --forceStop 1" "$guest_log"; then
+    _pass "stop action ($gty): STOP_TIMEOUT is passed to $gcmd shutdown"
+  else
+    _fail "stop action ($gty): STOP_TIMEOUT not passed: $(tr '\n' ';' <"$guest_log")"
+  fi
+
+  _act y "$gid" "$gty" stop PMAN_MOCK_GUEST_FAIL=shutdown
+  if grep -q "Failed to stop $gty $gid." <<<"$act_out" && grep -q "mock: shutdown failed for $gid" <<<"$act_out"; then
+    _pass "stop action ($gty): shutdown failure shows the Proxmox error"
+  else
+    _fail "stop action ($gty): shutdown failure not reported"
+  fi
+
+  _act n "$gid" "$gty" stop
+  if ! grep -qE "^$gcmd (shutdown|stop) " "$guest_log" && grep -q "Aborted." <<<"$act_out"; then
+    _pass "stop action ($gty): declined confirmation sends nothing"
+  else
+    _fail "stop action ($gty): declined confirmation still acted"
+  fi
+
+  _act y "$gid" "$gty" restart
+  if grep -qx "$gcmd reboot $gid" "$guest_log" && ! grep -qE "^$gcmd (stop|shutdown) " "$guest_log"; then
+    _pass "restart action ($gty): uses $gcmd reboot"
+  else
+    _fail "restart action ($gty): unexpected calls: $(tr '\n' ';' <"$guest_log")"
+  fi
+done
+
+# ---------------------------------------------------------------------------
 # Health check engine: --check / --dry-run (notifications are not sent here)
 # ---------------------------------------------------------------------------
 # _chk DIR [ENV=VAL...] [-- ARGS] — run --check with HEALTH_STATE_DIR=DIR; sets chk_out/chk_rc.
