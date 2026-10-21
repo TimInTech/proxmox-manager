@@ -1,6 +1,15 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+# PMAN_MOCK_GUEST_LOG: append argv; PMAN_MOCK_GUEST_FAIL: exit 1 for that subcommand.
+if [[ -n "${PMAN_MOCK_GUEST_LOG:-}" ]]; then
+  printf '%s %s\n' "$(basename "$0")" "$*" >>"$PMAN_MOCK_GUEST_LOG"
+fi
+if [[ -n "${PMAN_MOCK_GUEST_FAIL:-}" && "${1:-}" == "$PMAN_MOCK_GUEST_FAIL" ]]; then
+  echo "mock: $1 failed for ${2:-}" >&2
+  exit 1
+fi
+
 cmd="${1:-}"
 shift || true
 

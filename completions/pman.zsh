@@ -18,7 +18,7 @@ _pman() {
     '--filter[Filter output by status]:status:(running stopped paused)' \
     '--no-clear[Do not clear the screen in interactive mode]' \
     '--once[Run a single interactive refresh cycle]' \
-    '--timeout[Timeout in seconds for stop operations]:seconds:(10 30 60 120 300)' \
+    '--timeout[Shutdown timeout in seconds before force stop]:seconds:(10 30 60 120 300)' \
     '--name[Filter by VM/CT name (ERE substring-match)]:pattern:' \
     '--force[Skip all confirmation prompts]' \
     '--health[Show CPU/memory/disk health of local VMs/CTs]' \
