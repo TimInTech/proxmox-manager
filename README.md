@@ -8,7 +8,7 @@
 ║  ██████╔╝ ██╔████╔██║ ███████║ ██╔██╗ ██║                ║
 ║  ██╔═══╝  ██║╚██╔╝██║ ██╔══██║ ██║╚██╗██║                ║
 ║  ██║      ██║ ╚═╝ ██║ ██║  ██║ ██║ ╚████║                ║
-║  ╚═╝      ╚═╝     ╚═╝ ╚═╝  ╚═╝ ╚═╝  ╚═══╝  v2.13.0       ║
+║  ╚═╝      ╚═╝     ╚═╝ ╚═╝  ╚═╝ ╚═╝  ╚═══╝  v2.13.2       ║
 ║                                                          ║
 ║  Proxmox VM/CT Manager · Single Bash · No Dependencies   ║
 ╚══════════════════════════════════════════════════════════╝
@@ -17,7 +17,9 @@
 **Single-file Bash tool for managing Proxmox VMs and containers.**
 No daemons. No agents. No dependencies beyond what ships with Proxmox VE.
 
-**New in v2.13.0:** 🩺 health view per guest and 🔔 ntfy / e-mail alerts from a
+**New in v2.13.2:** ⚡ **Stop** now shuts guests down cleanly (`qm|pct shutdown`,
+force stop only after the timeout) instead of pulling the plug.
+**v2.13.0:** 🩺 health view per guest and 🔔 ntfy / e-mail alerts from a
 cron check — [set up alerts in 3 steps](#-quick-start-alerts-in-3-steps).
 
 [![CI](https://img.shields.io/github/actions/workflow/status/TimInTech/proxmox-manager/ci.yml?branch=main&style=for-the-badge&logo=github&label=CI)](https://github.com/TimInTech/proxmox-manager/actions)
@@ -498,7 +500,17 @@ cp completions/pman.zsh ~/.zsh/completions/_pman
 
 ## 📋 Changelog
 
-### 🆕 [v2.13.0](CHANGELOG.md) — 2026-09-19
+### 🆕 [v2.13.2](CHANGELOG.md) — 2026-10-21
+
+> **Stop** is a graceful shutdown (`qm|pct shutdown --timeout --forceStop 1`);
+> Proxmox force-stops only after `--timeout`. Previously `qm|pct stop` cut the
+> power immediately. Tests now cover stop and restart.
+
+### [v2.13.1](CHANGELOG.md) — 2026-09-26
+
+> README: health monitoring and alerts with screenshots · SMTP relay setup
+
+### [v2.13.0](CHANGELOG.md) — 2026-09-19
 
 > Health view (`--health`, key `h`) · `--check` for cron with ntfy / e-mail
 > alerts on changes · exit codes 0/1/2/3 · `--test-notify`
