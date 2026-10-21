@@ -22,7 +22,7 @@ LIST_FLAG=0
 JSON_FLAG=0
 LOG_FILE="${LOG_FILE:-}"           # Set LOG_FILE=/path/to/file to enable file logging
 FILTER_STATUS=""                   # Filter output by status: running|stopped|paused (empty = no filter)
-STOP_TIMEOUT="${STOP_TIMEOUT:-60}" # Timeout in seconds for stop operations; env-overridable
+STOP_TIMEOUT="${STOP_TIMEOUT:-60}" # Graceful shutdown timeout before force stop; env-overridable
 PROXMOX_MANAGER_SPICE_ADDR="${PROXMOX_MANAGER_SPICE_ADDR:-}"
 FORCE_MODE=0              # Set to 1 via --force to skip all confirm() prompts
 FILTER_NAME=""            # ERE substring-match against VM/CT name (empty = no filter)
@@ -535,7 +535,7 @@ Options:
   --name PATTERN    Filter by VM/CT name (ERE substring-match; combinable with --filter)
   --no-clear        Do not clear the screen in interactive mode
   --once            Run a single interactive refresh (useful for TTY recording)
-  --timeout SECS    Timeout for stop operations in seconds (default: 60)
+  --timeout SECS    Shutdown timeout before force stop in seconds (default: 60)
   --force           Skip all confirmation prompts (use with care)
   --health          Show CPU/memory/disk health of local VMs/CTs
                     (combine with --list for plain text or --json; --filter/--name apply)
@@ -2781,41 +2781,24 @@ do_action() {
       note "Aborted."
       return
     }
-    note "Stopping $ty $id ($name) (timeout: ${STOP_TIMEOUT}s)..."
-    local _timeout_out='' _timeout_exit=0 _force_out='' _force_exit=0
+    # Graceful shutdown (ACPI / guest agent); Proxmox itself hard-stops the guest
+    # once STOP_TIMEOUT expires (--forceStop 1). A plain "qm/pct stop" would
+    # kill the guest immediately, like pulling the power plug.
+    note "Shutting down $ty $id ($name) (force stop after ${STOP_TIMEOUT}s)..."
+    local _pve_out
     if [[ "$ty" == "CT" ]]; then
-      _timeout_out=$(timeout "${STOP_TIMEOUT}" pct stop "$id" 2>&1) || _timeout_exit=$?
-      if ((_timeout_exit == 0)); then
+      if _pve_out=$(pct shutdown "$id" --timeout "$STOP_TIMEOUT" --forceStop 1 2>&1); then
         ok "$ty $id stopped."
-      elif ((_timeout_exit == 124)); then
-        note "Timeout after ${STOP_TIMEOUT}s. Forcing stop with --overrule-shutdown..."
-        _force_out=$(pct stop "$id" --overrule-shutdown 1 2>&1) || _force_exit=$?
-        if ((_force_exit == 0)); then
-          ok "$ty $id force-stopped."
-        else
-          err "Force stop failed for CT $id."
-          _log_pve_err "$_force_out"
-        fi
       else
         err "Failed to stop CT $id."
-        _log_pve_err "$_timeout_out"
+        _log_pve_err "$_pve_out"
       fi
     else
-      _timeout_out=$(timeout "${STOP_TIMEOUT}" qm stop "$id" 2>&1) || _timeout_exit=$?
-      if ((_timeout_exit == 0)); then
+      if _pve_out=$(qm shutdown "$id" --timeout "$STOP_TIMEOUT" --forceStop 1 2>&1); then
         ok "$ty $id stopped."
-      elif ((_timeout_exit == 124)); then
-        note "Timeout after ${STOP_TIMEOUT}s. Forcing stop with --overrule-shutdown..."
-        _force_out=$(qm stop "$id" --overrule-shutdown 1 2>&1) || _force_exit=$?
-        if ((_force_exit == 0)); then
-          ok "$ty $id force-stopped."
-        else
-          err "Force stop failed for VM $id."
-          _log_pve_err "$_force_out"
-        fi
       else
         err "Failed to stop VM $id."
-        _log_pve_err "$_timeout_out"
+        _log_pve_err "$_pve_out"
       fi
     fi
     ;;

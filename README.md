@@ -73,7 +73,7 @@ Check out how others are using `proxmox-manager`:
 | 🩺 | **Health Monitoring** | CPU / RAM / disk per guest, uptime and OK / WARN / CRIT — `pman --health`, key `h` in the TUI, `Health:` line in the status action |
 | 🔔 | **Alerts** | `pman --check` for cron: thresholds, stopped `onboot` guests, unexpected stops and failed tasks; ntfy / e-mail only when something changes (opt-in) |
 | 📋 | **List & Status** | All VMs and containers with live status — `[+]` running · `[-]` stopped · `[~]` paused · `[?]` unknown |
-| ⚡ | **Start / Stop / Restart** | Confirmation prompt for destructive actions. Proxmox error details on failure. Configurable timeout with force-stop fallback |
+| ⚡ | **Start / Stop / Restart** | Confirmation prompt for destructive actions. Proxmox error details on failure. Stop is a graceful shutdown (ACPI / guest agent); Proxmox force-stops the guest after the configurable timeout |
 | 🖥️ | **Console Access** | LXC shell via `pct enter` or QEMU terminal via `qm terminal`. Verifies running state before entering |
 | 🌐 | **IP Address Lookup** | Shows current IPv4 addresses for running VMs and CTs — VM via QEMU Guest Agent, CT via `pct exec` |
 | 📦 | **Snapshot Management** | List, create, rollback, delete — with name validation and snapshot preview before destructive actions |
@@ -214,7 +214,7 @@ the checkout cannot change the privileged executable.
 | `pman --filter running` | Filter output by status: `running` \| `stopped` \| `paused` |
 | `pman --name web` | Filter by VM/CT name (ERE substring-match; combinable with `--filter`) |
 | `pman --force` | Skip all confirmation prompts (for unattended scripts) |
-| `pman --timeout 30` | Custom stop timeout in seconds (default: 60) |
+| `pman --timeout 30` | Graceful shutdown timeout before force stop, in seconds (default: 60) |
 | `pman --no-clear` | Don't clear screen in interactive mode |
 | `pman --once` | Run a single interactive refresh cycle (useful for TTY recording) |
 | `pman --health` | Health overview: CPU / MEM / DISK %, uptime and level per guest (`--list`, `--json` combinable) |
@@ -451,7 +451,7 @@ CLI flags are applied last and always win over config file values.
 
 ```bash
 # ~/.pmanrc — example
-STOP_TIMEOUT=120                          # stop timeout in seconds (default: 60)
+STOP_TIMEOUT=120                          # shutdown timeout before force stop (default: 60)
 LOG_FILE="/var/log/proxmox-manager.log"   # structured log file (empty = disabled)
 PROXMOX_MANAGER_SPICE_ADDR="spice.example.invalid" # SPICE bind address
 HEALTH_MEM_WARN=80                        # health thresholds, see "Health monitoring & alerts"
@@ -547,7 +547,7 @@ shellcheck proxmox-manager.sh
 tests/run.sh
 ```
 
-131 tests covering `validate_vmid`, `validate_snapshot_name`, `ip_info`,
+141 tests covering `validate_vmid`, `validate_snapshot_name`, `ip_info`,
 `--filter`, CLI flags, config parsing, the health view, the `--check` engine and
 notifications (mocked `pvesh`, `curl`, `sendmail`; no network, no root).
 

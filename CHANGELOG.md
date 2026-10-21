@@ -8,6 +8,18 @@ Versions follow [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Fixed
+
+- Stop action (menu key 2) now runs `qm shutdown` / `pct shutdown` with
+  `--timeout STOP_TIMEOUT --forceStop 1`: the guest is shut down cleanly and
+  only hard-stopped by Proxmox once the timeout expires. Previously it called
+  `qm stop` / `pct stop`, which kills the guest immediately (like pulling the
+  power plug); the `--overrule-shutdown 1` retry did not force anything either,
+  it only aborts running shutdown tasks.
+- Tests: `qm`/`pct` mocks log their calls (`PMAN_MOCK_GUEST_LOG`) and can fail
+  on demand (`PMAN_MOCK_GUEST_FAIL`); new tests cover stop, its failure path,
+  a declined confirmation and restart for VM and CT.
+
 ## [2.13.0] - 2026-09-19
 
 ### Added
