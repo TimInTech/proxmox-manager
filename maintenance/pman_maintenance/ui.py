@@ -11,6 +11,7 @@ from .actions import Context, execute, prepare, registry
 from .runner import Runner
 from .sources import source_report
 from .state import STATE, private_dir
+from . import community
 
 
 def clean_text(value):
@@ -72,9 +73,12 @@ def _screen(screen, ctx):
     selected = 0
     scroll = 0
     output = ['Diagnosen ändern keine Gastdaten. Änderungen erfordern eine eigene Bestätigung.',
-              'Quelle: eigene Adapter; Community Scripts dienen als gekennzeichnete Referenz.',
+              'Community PVE-Werkzeuge sind separat im Host-Menü verfügbar; Start nur nach Bestätigung.',
               'CT-Scanpfad mit Tab umschalten: /var, /home, /opt, /srv.']
     pending = None
+    pending_community = None
+    community_mode = False
+    community_selected = 0
     busy = False
     cancel = threading.Event()
     messages = queue.Queue()
@@ -133,14 +137,22 @@ def _screen(screen, ctx):
                 put(1, 'Vergrößern oder q zum Beenden.')
             else:
                 actions = registry(ctx)
-                menu = [a.title + (' [Änderung]' if a.mutation else '') for a in actions]
-                menu.append('Herkunft und Aktualitätsstatus')
+                if community_mode:
+                    menu = [tool['title'] for tool in community.TOOLS] + ['← Zurück zum Wartungsmenü']
+                    active_selected = community_selected
+                else:
+                    menu = [a.title + (' [Änderung]' if a.mutation else '') for a in actions]
+                    if ctx.scope == 'host':
+                        menu.append('Community PVE-Werkzeuge ({})'.format(len(community.TOOLS)))
+                    menu.append('Herkunft und Aktualitätsstatus')
+                    active_selected = selected
                 menu_height = min(len(menu), max(3, height // 3))
-                first = max(0, selected - menu_height + 1)
-                put(0, 'pman Wartung | {} {} | Scan: {}'.format(ctx.scope.upper(), ctx.id or '', ctx.mount), color | curses.A_BOLD)
+                first = max(0, active_selected - menu_height + 1)
+                title = 'pman Wartung | COMMUNITY PVE-WERKZEUGE' if community_mode else 'pman Wartung | {} {} | Scan: {}'.format(ctx.scope.upper(), ctx.id or '', ctx.mount)
+                put(0, title, color | curses.A_BOLD)
                 for row, index in enumerate(range(first, min(len(menu), first + menu_height)), 2):
-                    put(row, ('> ' if index == selected else '  ') + menu[index],
-                        curses.A_REVERSE if index == selected else 0)
+                    put(row, ('> ' if index == active_selected else '  ') + menu[index],
+                        curses.A_REVERSE if index == active_selected else 0)
                 start_y = menu_height + 3
                 put(start_y, '─' * (width - 1), color)
                 page = max(1, height - start_y - 4)
@@ -152,8 +164,12 @@ def _screen(screen, ctx):
                 last_line = min(len(wrapped), scroll + page)
                 put(height - 3, 'Ausgabe Zeilen {}–{} von {}'.format(first_line, last_line, len(wrapped)), color)
                 help_text = '↑↓ Menü | Enter öffnen | Bild↑↓ blättern | Tab Pfad | Esc zurück | q Ende'
+                if community_mode:
+                    help_text = '↑↓ Werkzeug | Enter Details/Start | Esc zurück | q Ende'
                 if width < 74:
                     help_text = '↑↓ Menü | Enter | PgUp/PgDn | Esc | q Ende'
+                    if community_mode:
+                        help_text = '↑↓ Werkzeug | Enter | Esc zurück | q Ende'
                 put(height - 2, help_text, color)
                 put(height - 1, status, color)
             screen.refresh()
@@ -164,6 +180,35 @@ def _screen(screen, ctx):
                 if key in (27, ord('q')):
                     cancel.set()
                     status = 'Abbruch angefordert; CT-Scan kann bis zum Gast-Zeitlimit (55 s) weiterlaufen.'
+                continue
+            if pending_community:
+                if key in (ord('j'), ord('J')):
+                    tool = pending_community
+                    pending_community = None
+                    status = 'Prüfe Quellstand und starte Helper Script …'
+                    put(height - 1, status, color)
+                    screen.refresh()
+                    try:
+                        curses.endwin()
+                        exit_code = community.run_tool(tool['id'])
+                        output = ['Community Script beendet.', 'Exit-Code: {}'.format(exit_code),
+                                  'Quelle: community-scripts/ProxmoxVE @ {}'.format(community.REVIEWED_COMMIT[:12])]
+                        status = 'Abgeschlossen' if exit_code == 0 else 'Helper Script mit Fehler beendet'
+                    except Exception as exc:
+                        output = ['Start abgebrochen:', clean_text(exc)]
+                        status = 'Quelle geändert, nicht verfügbar oder Start fehlgeschlagen'
+                    finally:
+                        try:
+                            curses.reset_prog_mode()
+                            screen.keypad(True)
+                            screen.refresh()
+                        except curses.error:
+                            pass
+                    continue
+                if key in (27, ord('n'), ord('N'), ord('q')):
+                    pending_community = None
+                    output = ['Start abgebrochen; es wurde kein Helper Script ausgeführt.']
+                    status = 'Bereit'
                 continue
             if pending:
                 if key in (ord('j'), ord('J')):
@@ -176,9 +221,25 @@ def _screen(screen, ctx):
                     status = 'Bereit'
                 continue
             if key in (ord('q'), 27):
+                if community_mode:
+                    community_mode = False
+                    selected = len(registry(ctx))
+                    output = ['Community-Werkzeugmenü geschlossen.']
+                    status = 'Bereit'
+                    continue
                 return
             if key in (curses.KEY_UP, curses.KEY_DOWN):
-                selected = navigate(selected, -1 if key == curses.KEY_UP else 1, len(registry(ctx)) + 1)
+                if community_mode:
+                    community_selected = navigate(community_selected, -1 if key == curses.KEY_UP else 1,
+                                                   len(community.TOOLS) + 1)
+                    if community_selected < len(community.TOOLS):
+                        tool = community.TOOLS[community_selected]
+                        output = [tool['summary'], '', 'Risiko / Auswirkung:', tool['impact'], '',
+                                  'Quelle: {} @ {}'.format(tool['path'], community.REVIEWED_COMMIT[:12]),
+                                  'Lizenz: MIT; Helper wird als Community-Code ausgeführt.']
+                else:
+                    selected = navigate(selected, -1 if key == curses.KEY_UP else 1,
+                                        len(registry(ctx)) + (2 if ctx.scope == 'host' else 1))
             elif key in (curses.KEY_PPAGE, curses.KEY_NPAGE):
                 if height >= 12 and width >= 45:
                     scroll = page_offset(scroll, -1 if key == curses.KEY_PPAGE else 1, page, len(wrapped))
@@ -187,7 +248,30 @@ def _screen(screen, ctx):
                 ctx = Context(ctx.scope, ctx.id, mounts[(mounts.index(ctx.mount) + 1) % len(mounts)])
             elif key in (10, 13, curses.KEY_ENTER):
                 actions = registry(ctx)
-                if selected == len(actions):
+                if community_mode:
+                    if community_selected == len(community.TOOLS):
+                        community_mode = False
+                        selected = len(actions)
+                        output = ['Zurück im Wartungsmenü.']
+                        status = 'Bereit'
+                    else:
+                        tool = community.TOOLS[community_selected]
+                        pending_community = tool
+                        output = ['Werkzeug: ' + tool['title'], tool['summary'], '',
+                                  'Auswirkung: ' + tool['impact'],
+                                  'Geprüfte Quelle: {} @ {}'.format(tool['path'], community.REVIEWED_COMMIT),
+                                  'Der Live-Upstream muss weiterhin exakt diesem Stand entsprechen.', '',
+                                  'Mit j starten; Esc bricht ab.']
+                        status = 'Community-Code ausführen?'
+                elif ctx.scope == 'host' and selected == len(actions):
+                    community_mode = True
+                    community_selected = 0
+                    tool = community.TOOLS[0]
+                    output = [tool['summary'], '', 'Risiko / Auswirkung:', tool['impact'], '',
+                              'Jeder Start prüft den aktuellen Upstream und die Skript-Prüfsumme.',
+                              'Die optionale Upstream-Telemetrie wird nicht geladen.']
+                    status = 'Community Scripts: {} geprüfte Host-Werkzeuge'.format(len(community.TOOLS))
+                elif selected == len(actions) + (1 if ctx.scope == 'host' else 0):
                     start('sources')
                 else:
                     action = actions[selected]

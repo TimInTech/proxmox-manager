@@ -63,6 +63,18 @@ change is not a rollback. A cancelled CT directory scan may continue inside the
 guest until its independent 55-second timeout; the outer command is also bounded.
 Changes are serialized by a private lock. There is no unattended mutation CLI.
 
+The host menu also has **Community PVE-Werkzeuge** with eight selected Host
+Management tools: Disk Health, LXC Filesystem Trim, LXC Cleaner, Kernel Clean,
+Clean Orphaned LVM, Host Backup, CPU Scaling Governor and LXC Updater. These are
+the upstream scripts, clearly marked as Community Scripts; their own interactive
+prompts and target selection remain intact. Before launch, pman checks the live
+GitHub metadata and downloads only the reviewed commit, then verifies the Git
+blob SHA-1. A changed, missing or unreachable upstream source blocks launch.
+The core runtime library is also pinned and checked. Its optional telemetry API
+is intentionally omitted. A helper can still install packages, delete selected
+logs/volumes, change host settings or update guests as described in its impact
+text; pman asks for a separate confirmation before starting it.
+
 TRIM reports unused blocks to lower storage layers. Its reported byte count is
 not a guarantee of newly available pool space. Guest filesystem use, thin-volume
 allocation and pool data/metadata use are displayed separately. Volume names
@@ -73,17 +85,17 @@ reconfiguration is provided in this first version.
 
 ## Community Scripts provenance and freshness
 
-All adapters are independent local implementations using native commands.
-Community Scripts are declared as reviewed functional references where relevant;
-no upstream script, runtime library or telemetry is downloaded or executed.
-`maintenance/sources.json` records each adapter's origin and reference sources,
-reviewed commits, Git blob checksums and upstream licence. The UI's provenance
-view exposes these details and the last source-check result.
+The standard maintenance actions are independent local implementations using
+native commands. `maintenance/sources.json` records their references and the
+reviewed Community tools, commits, Git blob checksums and upstream licence. The
+UI's provenance view exposes these details and the last source-check result.
+Only the eight tools listed above are launchable; other category entries are not
+exposed as arbitrary shell commands.
 
 The installed `pman-maintenance-sources.timer` runs daily with random delay.
 It requests public GitHub **directory listings containing file metadata**, not
-script contents. It compares relevant file blob hashes with the reviewed
-manifest, including referenced Core dependencies. ETag requests reduce traffic.
+script contents. It compares file blob hashes with the reviewed manifest,
+including launchable tools and their pinned Core dependency. ETag requests reduce traffic.
 No credentials, guest data or SMART history are sent. Results include timestamps
 and one of: `geprüfter Stand`, `Upstream geändert`, `Quelle fehlt`, or
 `Prüfung fehlgeschlagen`. A failed network/API request never means "up to date".

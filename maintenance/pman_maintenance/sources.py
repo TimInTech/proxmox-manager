@@ -84,7 +84,7 @@ def source_report():
              '{} Quellen | geprüft: {} | geändert: {} | fehlen: {} | Fehler: {} | offen: {}'.format(
                  len(rows), counts['geprüfter Stand'], counts['Upstream geändert'], counts['Quelle fehlt'],
                  counts['Prüfung fehlgeschlagen'], counts['Noch nicht geprüft']),
-             'Eigene Adapter; Community-Code und Telemetrie werden nicht ausgeführt.',
+             'Eigene Adapter; geprüfte Community-Tools nur auf Auswahl und mit Versionsprüfung.',
              '', 'Referenzen:']
     for reference in manifest['references']:
         row = checked.get((reference['repository'], reference['path']), {})
