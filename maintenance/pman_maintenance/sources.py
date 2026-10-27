@@ -1,6 +1,7 @@
 """Public GitHub metadata checks. No source downloads, imports or execution."""
 import datetime
 import json
+from collections import Counter
 import urllib.error
 import urllib.parse
 import urllib.request
@@ -76,19 +77,27 @@ def source_report():
     manifest = json.loads(MANIFEST.read_text())
     status = read_json(STATE / 'source-status.json', {}) or {}
     checked = {(r['repository'], r['path']): r for r in status.get('references', [])}
-    lines = ['Quellenprüfung: ' + status.get('checked_at', 'Noch nicht geprüft'),
-             manifest['notice'], '', 'Referenzquellen (keine ausführbaren Downloads):']
+    rows = [checked.get((reference['repository'], reference['path']), {})
+            for reference in manifest['references']]
+    counts = Counter(row.get('status', 'Noch nicht geprüft') for row in rows)
+    lines = ['Zuletzt geprüft: ' + status.get('checked_at', 'Noch nicht geprüft'),
+             '{} Quellen | geprüft: {} | geändert: {} | fehlen: {} | Fehler: {} | offen: {}'.format(
+                 len(rows), counts['geprüfter Stand'], counts['Upstream geändert'], counts['Quelle fehlt'],
+                 counts['Prüfung fehlgeschlagen'], counts['Noch nicht geprüft']),
+             'Eigene Adapter; Community-Code und Telemetrie werden nicht ausgeführt.',
+             '', 'Referenzen:']
     for reference in manifest['references']:
         row = checked.get((reference['repository'], reference['path']), {})
-        lines.extend([
-            '{} / {}: {}'.format(reference['repository'], reference['path'], row.get('status', 'Noch nicht geprüft')),
-            '  Prüfzeitpunkt: ' + row.get('checked_at', '—'),
-            '  Geprüfter Commit: ' + reference['reviewed_commit'],
-            '  Git-Blob SHA-1: ' + reference['blob_sha'],
-        ])
+        status_text = row.get('status', 'Noch nicht geprüft')
+        reviewed = reference['reviewed_commit'][:8]
+        observed = row.get('observed_sha')
+        if status_text == 'geprüfter Stand':
+            detail = 'geprüft: {}'.format(reviewed)
+        elif status_text == 'Upstream geändert' and observed:
+            detail = 'Referenz {} → aktuell {}'.format(reviewed, observed[:8])
+        else:
+            detail = status_text
+        lines.append('{} / {} | {}'.format(reference['repository'], reference['path'], detail))
         if row.get('error'):
             lines.append('  Fehler: ' + row['error'])
-    lines.extend(['', 'Adapter-Herkunft:'])
-    for name, adapter in manifest['adapters'].items():
-        lines.append('{}: {} | Referenz: {}'.format(name, adapter['origin'], adapter.get('reference') or 'keine'))
     return '\n'.join(lines)

@@ -31,8 +31,9 @@ pman-maintenance --scope host --report storage
 pman-maintenance --scope ct --id 101 --report volumes --json
 ```
 
-Use arrow keys to select, Enter to open, Page Up/Down to scroll, and Esc to
-cancel/back. `q` exits. CT directory scans use Tab to select `/var`, `/home`,
+Use arrow keys to select, Enter to open, Page Up/Down to move by one visible
+page, and Esc to cancel/back. The output pane shows its current line range.
+`q` exits on a fresh shell line. CT directory scans use Tab to select `/var`, `/home`,
 `/opt`, or `/srv`; the scan stays within the selected filesystem. Resizing and
 `NO_COLOR=1` are supported. A UTF-8 terminal is required; the module restores a
 UTF-8 locale even when the Bash core runs with `LC_ALL=C`.
@@ -50,6 +51,11 @@ execution. Guests are never automatically started. Missing commands, an inactive
 QEMU Guest Agent and unsupported guest operating systems are reported as
 unavailable. VM filesystem output can include read-only filesystems at 100%; it
 is diagnostic information and is not automatically interpreted as an alarm.
+
+SMART output presents the overall health, temperature and power-on hours, plus
+common error counters. Vendor-specific raw fields are not presented as
+standardized measurements. The provenance view summarizes source status and
+shows abbreviated reviewed/upstream commits.
 
 The UI shows the target, exact command and impact before a change. Only `j`
 confirms it; the core's `--force` does not bypass this. Cancelling a running

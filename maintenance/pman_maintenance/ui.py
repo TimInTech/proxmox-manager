@@ -22,6 +22,12 @@ def navigate(index, direction, count):
     return (index + direction) % count if count else 0
 
 
+def page_offset(offset, direction, page_size, line_count):
+    last = max(0, line_count - max(1, page_size))
+    target = offset + (1 if direction > 0 else -1) * max(1, page_size)
+    return min(last, max(0, target))
+
+
 def mutate(key, ctx, runner):
     private_dir(STATE)
     flags = os.O_CREAT | os.O_RDWR | os.O_NOFOLLOW
@@ -48,6 +54,9 @@ def run_tui(ctx):
         curses.wrapper(_screen, ctx)
     except curses.error as exc:
         raise RuntimeError('Terminal unterstützt die Oberfläche nicht; TERM und Fenstergröße prüfen.') from exc
+    finally:
+        # curses restores terminal mode but leaves the cursor at the last status row.
+        print()
 
 
 def _screen(screen, ctx):
@@ -139,7 +148,13 @@ def _screen(screen, ctx):
                 scroll = min(scroll, max(0, len(wrapped) - page))
                 for row, line in enumerate(wrapped[scroll:scroll + page], start_y + 1):
                     put(row, line)
-                put(height - 2, '↑↓ Menü | Enter öffnen | Bild↑↓ Ausgabe | Tab Scanpfad | Esc zurück/Abbruch | q Ende', color)
+                first_line = scroll + 1 if wrapped else 0
+                last_line = min(len(wrapped), scroll + page)
+                put(height - 3, 'Ausgabe Zeilen {}–{} von {}'.format(first_line, last_line, len(wrapped)), color)
+                help_text = '↑↓ Menü | Enter öffnen | Bild↑↓ blättern | Tab Pfad | Esc zurück | q Ende'
+                if width < 74:
+                    help_text = '↑↓ Menü | Enter | PgUp/PgDn | Esc | q Ende'
+                put(height - 2, help_text, color)
                 put(height - 1, status, color)
             screen.refresh()
             key = screen.getch()
@@ -165,7 +180,8 @@ def _screen(screen, ctx):
             if key in (curses.KEY_UP, curses.KEY_DOWN):
                 selected = navigate(selected, -1 if key == curses.KEY_UP else 1, len(registry(ctx)) + 1)
             elif key in (curses.KEY_PPAGE, curses.KEY_NPAGE):
-                scroll = max(0, scroll + (-5 if key == curses.KEY_PPAGE else 5))
+                if height >= 12 and width >= 45:
+                    scroll = page_offset(scroll, -1 if key == curses.KEY_PPAGE else 1, page, len(wrapped))
             elif key == 9 and ctx.scope == 'ct':
                 mounts = ['/var', '/home', '/opt', '/srv']
                 ctx = Context(ctx.scope, ctx.id, mounts[(mounts.index(ctx.mount) + 1) % len(mounts)])

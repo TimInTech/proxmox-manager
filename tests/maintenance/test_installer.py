@@ -66,7 +66,7 @@ class RollbackTest(unittest.TestCase):
             package = stage / 'usr/local/lib/pman/maintenance'
             old = os.readlink(package/'current')
             version = source/'maintenance/pman_maintenance/__init__.py'
-            version.write_text(version.read_text().replace('1.0.0','1.0.1'))
+            version.write_text(version.read_text().replace("VERSION = '1.0.1'", "VERSION = '1.0.2'"))
             install('--with-maintenance')
             new = os.readlink(package/'current')
             self.assertNotEqual(new, old)

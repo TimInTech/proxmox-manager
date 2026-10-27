@@ -212,7 +212,15 @@ def do_smart(ctx, runner):
     disks = json.loads(runner.run(['lsblk', '-J', '-d', '-o', 'NAME,TYPE,MODEL,SIZE']).text)
     previous = read_json(STATE / 'smart.json', {})
     current = {}
-    lines = ['SMART-Rohattribute sind herstellerspezifisch; PASSED ist keine Ausfallgarantie.']
+    lines = ['SMART ist herstellerspezifisch; PASSED ist keine Ausfallgarantie.']
+    metric_groups = [
+        ('Reallocation-Attribut (herstellerspezifisch)', ('Reallocated_Sector_Ct', 'Reallocate_NAND_Blk_Cnt', 'Reallocated_Event_Count')),
+        ('Pending-Attribut (herstellerspezifisch)', ('Current_Pending_Sector', 'Current_Pending_ECC_Cnt')),
+        ('Nicht korrigierbare Fehler', ('Offline_Uncorrectable', 'Reported_Uncorrect', 'Uncorrectable_Error_Cnt')),
+        ('CRC-Fehler', ('UDMA_CRC_Error_Count',)),
+        ('Verschleißattribut', ('Wear_Leveling_Count', 'Percent_Lifetime_Remain', 'Percent_Lifetime_Used',
+                                'Media_Wearout_Indicator', 'SSD_Life_Left')),
+    ]
     for disk in disks.get('blockdevices', []):
         if disk.get('type') != 'disk' or not re.fullmatch(r'[A-Za-z0-9_-]+', disk.get('name', '')):
             continue
@@ -220,22 +228,75 @@ def do_smart(ctx, runner):
         data = json.loads(runner.run(['smartctl', '-a', '-j', dev], allowed=None).text)
         # Identify history by serial internally, never display or transmit it.
         identity = data.get('serial_number') or dev
-        values = {}
+        attributes = {}
         for row in data.get('ata_smart_attributes', {}).get('table', []):
-            values[row.get('name', str(row.get('id')))] = row.get('raw', {}).get('value')
-        lines.extend(['', '{} {} {}'.format(dev, disk.get('model', ''), disk.get('size', '')),
-                      'Health: {}'.format(data.get('smart_status', {}).get('passed', 'nicht verfügbar')),
-                      'Temperatur: {}'.format(data.get('temperature', {}).get('current', 'nicht verfügbar')),
-                      'Betriebsstunden: {}'.format(data.get('power_on_time', {}).get('hours', 'nicht verfügbar'))])
-        for name, value in values.items():
-            if any(word in name.lower() for word in ('realloc', 'pending', 'uncorrect', 'crc', 'wear', 'temperature', 'power_on')):
-                old = previous.get(identity, {}).get(name)
-                delta = ' (vorher {})'.format(old) if old is not None else ' (erste Messung)'
-                lines.append('{}: {}{}'.format(name, value, delta))
-        nvme = data.get('nvme_smart_health_information_log')
+            attributes[row.get('name', str(row.get('id')))] = row.get('raw', {})
+        passed = data.get('smart_status', {}).get('passed')
+        health = 'PASSED' if passed is True else ('FEHLER' if passed is False else 'nicht verfügbar')
+        temperature = data.get('temperature', {}).get('current')
+        if temperature is None:
+            raw_temperature = attributes.get('Temperature_Celsius', {}).get('string', '')
+            match = re.match(r'\s*(-?\d+)', str(raw_temperature))
+            temperature = match.group(1) if match else None
+        temp_text = '{} °C'.format(temperature) if temperature is not None else 'nicht verfügbar'
+        hours = data.get('power_on_time', {}).get('hours')
+        hours_text = '{} h'.format(hours) if hours is not None else 'nicht verfügbar'
+        lines.extend(['', '{} {} ({})'.format(dev, disk.get('model') or 'unbekanntes Modell', disk.get('size', '?')),
+                      'SMART-Status: {} | Temperatur: {} | Betriebsstunden: {}'.format(health, temp_text, hours_text)])
+        current_values = {}
+        counters = []
+        for label, names in metric_groups[:4]:
+            found = next(((name, attributes[name]) for name in names if name in attributes), None)
+            if found is None:
+                counters.append('{}: nicht gemeldet'.format(label))
+                continue
+            name, raw = found
+            value = raw.get('string') or raw.get('value')
+            current_values[name] = value
+            display = str(value).split(' (', 1)[0] if value is not None else 'nicht verfügbar'
+            old = previous.get(identity, {}).get(name)
+            try:
+                delta = int(display) - int(str(old).split(' (', 1)[0]) if old is not None else 0
+            except ValueError:
+                delta = 0
+            change = ' (+{} seit letzter Messung)'.format(delta) if delta > 0 else ''
+            counters.append('{}: {}{}'.format(label, display, change))
+        lines.extend(counters)
+        wear = next(((name, attributes[name]) for name in metric_groups[4][1] if name in attributes), None)
+        if wear:
+            name, raw = wear
+            value = raw.get('string') or raw.get('value')
+            current_values[name] = value
+            display = str(value).split(' (', 1)[0] if value is not None else 'nicht verfügbar'
+            lines.append('Verschleißattribut {}: {} (herstellerspezifisch)'.format(name, display))
+        else:
+            lines.append('Verschleißattribut: nicht gemeldet')
+        for name, raw in attributes.items():
+            if name not in current_values and name in {item for _, names in metric_groups for item in names}:
+                current_values[name] = raw.get('string') or raw.get('value')
+        nvme = data.get('nvme_smart_health_information_log') or {}
         if nvme:
-            lines.append('NVMe: ' + json.dumps(nvme, ensure_ascii=False))
-        current[identity] = values
+            lines.append('NVMe-Gesundheit:')
+            nvme_fields = (
+                ('critical_warning', 'Kritische Warnung'),
+                ('temperature', 'Temperatur'),
+                ('percentage_used', 'Verschleiß'),
+                ('available_spare', 'Reserve'),
+                ('media_errors', 'Medienfehler'),
+                ('num_err_log_entries', 'Fehlerprotokolleinträge'),
+            )
+            for key, label in nvme_fields:
+                value = nvme.get(key)
+                if value is None:
+                    continue
+                suffix = ' °C' if key == 'temperature' else ('%' if key in ('percentage_used', 'available_spare') else '')
+                lines.append('{}: {}{}'.format(label, value, suffix))
+            warning = nvme.get('critical_warning')
+            if warning is not None and warning != 0:
+                lines.append('NVMe meldet kritische Warnungsbits: {}'.format(warning))
+            if not any(nvme.get(key) is not None for key, _ in nvme_fields):
+                lines.append('Keine bekannten NVMe-Gesundheitswerte gemeldet.')
+        current[identity] = current_values
     write_json(STATE / 'smart.json', current)
     return '\n'.join(lines)
 
