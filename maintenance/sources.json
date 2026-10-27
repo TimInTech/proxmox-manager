@@ -1,0 +1,129 @@
+{
+  "format": 1,
+  "reviewed_at": "2026-10-27",
+  "notice": "Alle Adapter sind eigene Implementierungen mit nativen Proxmox-/Linux-Befehlen. Community Scripts dienen als fachliche Referenz. Kein Community-Code und keine Telemetrie werden ausgeführt.",
+  "adapters": {
+    "storage": {
+      "origin": "own",
+      "reference": null,
+      "modifications": "Independent implementation; no upstream code copied"
+    },
+    "smart": {
+      "origin": "own",
+      "reference": "tools/pve/disk-health.sh",
+      "modifications": "Independent implementation; no upstream code copied"
+    },
+    "maintenance": {
+      "origin": "own",
+      "reference": "tools/pve/kernel-clean.sh",
+      "modifications": "Independent implementation; no upstream code copied"
+    },
+    "volumes": {
+      "origin": "own",
+      "reference": null,
+      "modifications": "Independent implementation; no upstream code copied"
+    },
+    "filesystems": {
+      "origin": "own",
+      "reference": null,
+      "modifications": "Independent implementation; no upstream code copied"
+    },
+    "scan": {
+      "origin": "own",
+      "reference": null,
+      "modifications": "Independent implementation; no upstream code copied"
+    },
+    "trim": {
+      "origin": "own",
+      "reference": "tools/pve/fstrim.sh",
+      "modifications": "Independent implementation; no upstream code copied"
+    },
+    "cache-clean": {
+      "origin": "own",
+      "reference": "tools/pve/clean-lxcs.sh",
+      "modifications": "Independent implementation; no upstream code copied"
+    }
+  },
+  "references": [
+    {
+      "repository": "community-scripts/ProxmoxVE",
+      "path": "tools/pve/fstrim.sh",
+      "reviewed_commit": "28fd647e6aed3db6d771cade4fb7c8c5deb48af3",
+      "blob_sha": "b63b4267c97ce3c62df4ad26c5e85131562f5950",
+      "license": "MIT",
+      "role": "upstream reference; not executed"
+    },
+    {
+      "repository": "community-scripts/ProxmoxVE",
+      "path": "tools/pve/disk-health.sh",
+      "reviewed_commit": "28fd647e6aed3db6d771cade4fb7c8c5deb48af3",
+      "blob_sha": "fa12746aedce484fe760bcccf4d1bcb3de58501b",
+      "license": "MIT",
+      "role": "upstream reference; not executed"
+    },
+    {
+      "repository": "community-scripts/ProxmoxVE",
+      "path": "tools/pve/clean-lxcs.sh",
+      "reviewed_commit": "28fd647e6aed3db6d771cade4fb7c8c5deb48af3",
+      "blob_sha": "e54a307a980130c43134c68d28a8c7cfcdf6b260",
+      "license": "MIT",
+      "role": "upstream reference; not executed"
+    },
+    {
+      "repository": "community-scripts/ProxmoxVE",
+      "path": "tools/pve/kernel-clean.sh",
+      "reviewed_commit": "28fd647e6aed3db6d771cade4fb7c8c5deb48af3",
+      "blob_sha": "98351a487f14ed77df99f8945a9f45bf0b1870c0",
+      "license": "MIT",
+      "role": "upstream reference; not executed"
+    },
+    {
+      "repository": "community-scripts/core",
+      "path": "api/api.func",
+      "reviewed_commit": "e889c3a6a56201fd47d500954cc44b88fccebf94",
+      "blob_sha": "c160e52ffc417187fc818e58572f1df23f3b7703",
+      "license": "MIT",
+      "role": "upstream reference; not executed"
+    },
+    {
+      "repository": "community-scripts/core",
+      "path": "core/core.func",
+      "reviewed_commit": "e889c3a6a56201fd47d500954cc44b88fccebf94",
+      "blob_sha": "14c9ae0cc6ebce5a105b5c6e180f26ce1b2ed190",
+      "license": "MIT",
+      "role": "upstream reference; not executed"
+    },
+    {
+      "repository": "community-scripts/core",
+      "path": "api/exitcodes.func",
+      "reviewed_commit": "e889c3a6a56201fd47d500954cc44b88fccebf94",
+      "blob_sha": "ad83c87885f34339f6f6808852ede750cc91587e",
+      "license": "MIT",
+      "role": "upstream reference; not executed"
+    },
+    {
+      "repository": "community-scripts/core",
+      "path": "api/errorlog.func",
+      "reviewed_commit": "e889c3a6a56201fd47d500954cc44b88fccebf94",
+      "blob_sha": "c894d3be3a85fbbf5956ee5d2b40aa5f659847d3",
+      "license": "MIT",
+      "role": "upstream reference; not executed"
+    },
+    {
+      "repository": "community-scripts/core",
+      "path": "api/sysinfo.func",
+      "reviewed_commit": "e889c3a6a56201fd47d500954cc44b88fccebf94",
+      "blob_sha": "9256905983d5a94722755959591345d1136bcc82",
+      "license": "MIT",
+      "role": "upstream reference; not executed"
+    },
+    {
+      "repository": "community-scripts/core",
+      "path": "api/telemetry.func",
+      "reviewed_commit": "e889c3a6a56201fd47d500954cc44b88fccebf94",
+      "blob_sha": "899149cabf680abe5d1dcd60fa6cd425ab71459c",
+      "license": "MIT",
+      "role": "upstream reference; not executed"
+    }
+  ]
+}

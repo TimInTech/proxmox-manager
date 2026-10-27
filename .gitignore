@@ -50,3 +50,8 @@ CLAUDE.md
 # Misc local artifacts
 *.bak
 *.tmp
+
+# Optional maintenance Python caches and release assets
+__pycache__/
+*.py[cod]
+dist/

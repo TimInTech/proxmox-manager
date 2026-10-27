@@ -34,7 +34,7 @@ jobs:
             echo "No shell scripts found."
             exit 0
           fi
-          shellcheck -x "${files[@]}"
+          shellcheck -x "${files[@]}" maintenance/pman-maintenance
 
       - name: Download, verify, and run shfmt
         env:
@@ -50,7 +50,28 @@ jobs:
             --output "${shfmt_path}"
           printf '%s  %s\n' "${SHFMT_SHA256}" "${shfmt_path}" | sha256sum --check --strict
           chmod 0755 "${shfmt_path}"
-          "${shfmt_path}" -d proxmox-manager.sh
+          "${shfmt_path}" -d proxmox-manager.sh install_dependencies.sh maintenance/pman-maintenance tools/build-release.sh
 
       - name: Run tests
         run: bash tests/run.sh
+
+  maintenance:
+    name: Maintenance Python ${{ matrix.python }}
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python: ['3.9', '3.13']
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
+        with:
+          python-version: ${{ matrix.python }}
+      - name: Native adapter, source-check and installer tests
+        run: python3 -B -m unittest discover -s tests/maintenance -v
+      - name: Build and verify release bundle
+        run: |
+          bash tools/build-release.sh dist
+          cd dist
+          sha256sum -c SHA256SUMS

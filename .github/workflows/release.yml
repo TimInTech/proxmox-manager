@@ -23,11 +23,14 @@ jobs:
         with:
           persist-credentials: false
 
+      - name: Build core and optional module assets
+        run: bash tools/build-release.sh dist
+
       - name: Create GitHub Release
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          gh release create "$GITHUB_REF_NAME" proxmox-manager.sh \
+          gh release create "$GITHUB_REF_NAME" dist/* \
             --verify-tag \
             --title "$GITHUB_REF_NAME" \
             --notes ""
