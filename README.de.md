@@ -38,6 +38,14 @@ ab, und `q` beendet die
 Ansicht. `Tab` wechselt beim CT den Scanpfad. Die Anzeige passt sich dem Terminal
 an und berücksichtigt `NO_COLOR`.
 
+**Host-Wartungsmenü**
+
+<p align="center">
+  <img src="docs/screenshots/screenshot-maintenance-menu.png"
+       alt="Host-Wartungsmenü des Proxmox Managers mit Speicher-, SMART- und TRIM-Diagnosen"
+       width="720">
+</p>
+
 Die eigenen Adapter zeigen unter anderem Storage, Dateisysteme und SMART-Daten.
 CT und VM bieten ausschließlich auf den gewählten Gast bezogene Diagnosen und
 bestätigungspflichtiges TRIM; für Debian-/Ubuntu-CTs ist auch eine Bereinigung

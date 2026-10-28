@@ -73,6 +73,14 @@ Check out how others are using `proxmox-manager`:
 
 </div>
 
+**Optional maintenance interface — host storage and maintenance menu**
+
+<p align="center">
+  <img src="docs/screenshots/screenshot-maintenance-menu.png"
+       alt="Proxmox Manager host maintenance TUI with storage, SMART, TRIM, community tools, and source status"
+       width="720">
+</p>
+
 ---
 
 ## 🎯 Features
@@ -554,7 +562,7 @@ cp completions/pman.zsh ~/.zsh/completions/_pman
 
 ## 📋 Changelog
 
-### 🆕 [v2.14.0](CHANGELOG.md) — 2026-10-27
+### 🆕 [v2.14.0](CHANGELOG.md) — 2026-10-28
 
 > Optional arrow-key storage and maintenance module, scoped CT/VM actions,
 > explicit confirmations, source provenance and daily metadata-only checks.

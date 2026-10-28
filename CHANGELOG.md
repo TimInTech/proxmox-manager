@@ -6,7 +6,7 @@ Versions follow [Semantic Versioning](https://semver.org/).
 
 ---
 
-## [2.14.0] - 2026-10-27
+## [2.14.0] - 2026-10-28
 
 ### Maintenance module 1.0.3
 
