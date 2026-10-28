@@ -1,3 +1,5 @@
+**Language: English | [Deutsch](README.de.md)**
+
 <!-- markdownlint-disable MD033 MD041 -->
 <div align="center">
 
@@ -229,7 +231,7 @@ the checkout cannot change the privileged executable.
 | `pman --json` | Machine-readable JSON array for automation & `jq` |
 | `pman --filter running` | Filter output by status: `running` \| `stopped` \| `paused` |
 | `pman --name web` | Filter by VM/CT name (ERE substring-match; combinable with `--filter`) |
-| `pman --force` | Skip all confirmation prompts (for unattended scripts) |
+| `pman --force` | Skip supported core confirmation prompts; maintenance confirmations remain mandatory |
 | `pman --timeout 30` | Graceful shutdown timeout before force stop, in seconds (default: 60) |
 | `pman --no-clear` | Don't clear screen in interactive mode |
 | `pman --once` | Run a single interactive refresh cycle (useful for TTY recording) |
@@ -254,6 +256,42 @@ Displays a table of all VMs/containers. Enter a VMID to open the action menu.
 ```
 
 Press `h` for the health overview · `r` to refresh · `q` to quit
+
+### Optional maintenance interface
+
+Press `M` or `m` in the main menu for host maintenance, or in a guest action
+menu for that selected CT or VM. Arrow keys select an action, Enter opens it,
+Page Up/Down scrolls output, Esc goes back or cancels a confirmation, and `q`
+exits. `Tab` switches the CT scan directory. The display adapts to terminal
+size and honors `NO_COLOR`; a UTF-8 terminal is required.
+
+Native diagnostics use the selected scope; native guest changes require explicit
+confirmation and never start stopped guests. `--force` cannot bypass confirmation.
+The host-only Community Scripts menu launches selected upstream tools, which may
+change host settings or guests chosen inside the helper. Before confirmation it
+checks the live source; it repeats the check and verifies pinned Git blob hashes
+before launch. Changed, missing or unreachable sources block execution. The
+optional upstream telemetry component is omitted. Review the shown impact before
+confirming. See [maintenance documentation](docs/maintenance.md) for limits,
+source checks, rollback and removal.
+
+To remove only the optional module, run:
+
+```bash
+./install_dependencies.sh --uninstall-maintenance
+```
+
+To switch back to the previous installed module release, run:
+
+```bash
+./install_dependencies.sh --rollback-maintenance
+```
+
+Both operations retain the Bash core. The module may need a UTF-8 terminal. A
+cancelled CT scan can continue in the guest until its 55-second timeout, and
+community source checks may block the UI for up to about one minute while the
+live checks and pinned source downloads wait for their network timeouts.
+Cancelling a running change is not a rollback; see [maintenance documentation](docs/maintenance.md).
 
 ### JSON output
 
@@ -505,9 +543,10 @@ cp completions/pman.zsh ~/.zsh/completions/_pman
 - **Root required:** `qm` and `pct` need elevated privileges — there's no
   workaround.
 - **No credentials stored:** Relies entirely on Proxmox host authentication.
-- **No outbound traffic unless notifications are configured:** alerts via ntfy /
-  e-mail are opt-in; the ntfy token is read from a `0600` file, passed to `curl`
-  via stdin and never sent over plain http.
+- **Network access:** notifications are opt-in. The optional maintenance module
+  also checks public source metadata and fetches pinned community scripts on
+  request. The ntfy token is read from a `0600` file, passed to `curl` via stdin
+  and never sent over plain http.
 - **CI hardening:** ShellCheck on every push · Gitleaks scan for accidental
   secrets.
 

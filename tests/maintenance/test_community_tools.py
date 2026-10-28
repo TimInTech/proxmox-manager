@@ -1,4 +1,5 @@
 import sys
+import time
 import unittest
 from pathlib import Path
 from unittest.mock import patch
@@ -63,11 +64,14 @@ class CommunityToolsTest(unittest.TestCase):
             def getmaxyx(self): return (24, 80)
             def addnstr(self, row, col, value, *args): self.rows.append(value)
             def refresh(self): pass
-            def getch(self): return self.keys.pop(0)
+            def getch(self):
+                time.sleep(0.01)
+                return self.keys.pop(0)
 
         screen = Screen()
         with patch.object(ui.curses, 'wrapper', side_effect=lambda fn, ctx: fn(screen, ctx)), \
              patch.object(ui.curses, 'curs_set'), \
+             patch.object(ui.curses, 'flushinp'), \
              patch.object(ui.curses, 'has_colors', return_value=False), \
              patch.object(ui.locale, 'setlocale'), \
              patch.object(ui.locale, 'getpreferredencoding', return_value='UTF-8'), \
@@ -75,6 +79,30 @@ class CommunityToolsTest(unittest.TestCase):
             ui.run_tui(Context('host'))
         self.assertTrue(any('COMMUNITY PVE-WERKZEUGE' in row for row in screen.rows))
         run.assert_not_called()
+
+    def test_back_entry_updates_community_detail(self):
+        class Screen:
+            def __init__(self):
+                self.keys = [ui.curses.KEY_DOWN] * 3 + [10] + [ui.curses.KEY_DOWN] * len(community.TOOLS) + [ord('q')]
+                self.rows = []
+            def keypad(self, enabled): pass
+            def timeout(self, value): pass
+            def erase(self): pass
+            def getmaxyx(self): return (24, 80)
+            def addnstr(self, row, col, value, *args): self.rows.append(value)
+            def refresh(self): pass
+            def getch(self):
+                time.sleep(.01)
+                return self.keys.pop(0)
+        screen = Screen()
+        with patch.object(ui.curses, 'wrapper', side_effect=lambda fn, ctx: fn(screen, ctx)), \
+             patch.object(ui.curses, 'curs_set'), \
+             patch.object(ui.curses, 'flushinp'), \
+             patch.object(ui.curses, 'has_colors', return_value=False), \
+             patch.object(ui.locale, 'setlocale'), \
+             patch.object(ui.locale, 'getpreferredencoding', return_value='UTF-8'):
+            ui.run_tui(Context('host'))
+        self.assertTrue(any('Community-Menü schließen' in row for row in screen.rows))
 
     def test_declining_helper_start_never_calls_runner(self):
         class Screen:
@@ -87,17 +115,88 @@ class CommunityToolsTest(unittest.TestCase):
             def getmaxyx(self): return (24, 80)
             def addnstr(self, row, col, value, *args): self.rows.append(value)
             def refresh(self): pass
-            def getch(self): return self.keys.pop(0)
+            def getch(self):
+                time.sleep(0.01)
+                return self.keys.pop(0)
 
         screen = Screen()
         with patch.object(ui.curses, 'wrapper', side_effect=lambda fn, ctx: fn(screen, ctx)), \
              patch.object(ui.curses, 'curs_set'), \
+             patch.object(ui.curses, 'flushinp'), \
              patch.object(ui.curses, 'has_colors', return_value=False), \
              patch.object(ui.locale, 'setlocale'), \
              patch.object(ui.locale, 'getpreferredencoding', return_value='UTF-8'), \
+             patch.object(community, 'preflight', side_effect=lambda tool_id: next(t for t in community.TOOLS if t['id'] == tool_id)), \
              patch.object(community, 'run_tool') as run:
             ui.run_tui(Context('host'))
         run.assert_not_called()
+
+
+
+class CommunityPreflightTest(unittest.TestCase):
+    def test_preflight_checks_tool_and_core_without_download(self):
+        with patch.object(community, '_check_current') as check, \
+             patch.object(community, '_download_pinned') as download:
+            community.preflight('fstrim')
+        self.assertEqual(check.call_count, 2)
+        download.assert_not_called()
+
+    def test_checksum_mismatch_blocks_execution(self):
+        with patch.object(community, '_check_current'), \
+             patch.object(community, '_fetch', return_value=b'changed'), \
+             patch.object(community.subprocess, 'run') as run:
+            with self.assertRaisesRegex(RuntimeError, 'Prüfsumme'):
+                community.run_tool('fstrim')
+        run.assert_not_called()
+
+class CommunityFailureTest(unittest.TestCase):
+    def test_missing_or_unreachable_source_blocks_start(self):
+        for state in ('Quelle fehlt', 'Prüfung fehlgeschlagen'):
+            with self.subTest(state=state), \
+                 patch.object(community, '_reference', return_value={'blob_sha': next(t['sha'] for t in community.TOOLS if t['id'] == 'fstrim')}), \
+                 patch.object(community.sources, 'check_reference', return_value={'status': state}), \
+                 patch.object(community, '_download_pinned') as download, \
+                 patch.object(community.subprocess, 'run') as run:
+                with self.assertRaises(RuntimeError):
+                    community.run_tool('fstrim')
+                download.assert_not_called()
+                run.assert_not_called()
+
+    def test_core_checksum_mismatch_blocks_execution(self):
+        expected = next(t['sha'] for t in community.TOOLS if t['id'] == 'fstrim')
+        with patch.object(community, '_check_current'), \
+             patch.object(community, '_fetch', side_effect=[b'tool', b'bad core']), \
+             patch.object(community, 'git_blob_sha', side_effect=[expected, 'wrong']), \
+             patch.object(community.subprocess, 'run') as run:
+            with self.assertRaisesRegex(RuntimeError, 'Prüfsumme'):
+                community.run_tool('fstrim')
+        run.assert_not_called()
+
+class CommunityTerminalTest(unittest.TestCase):
+    def test_helper_exception_restores_curses_state(self):
+        class Screen:
+            def __init__(self):
+                self.keys = [ui.curses.KEY_DOWN] * 3 + [10, 10, ord('j'), ord('q')]
+            def keypad(self, enabled): pass
+            def timeout(self, value): pass
+            def erase(self): pass
+            def getmaxyx(self): return (24, 80)
+            def addnstr(self, *args): pass
+            def refresh(self): pass
+            def getch(self):
+                time.sleep(.02)
+                return self.keys.pop(0)
+        tool = community.TOOLS[0]
+        with patch.object(ui.curses, 'curs_set'), \
+             patch.object(ui.curses, 'has_colors', return_value=False), \
+             patch.object(ui.curses, 'flushinp'), \
+             patch.object(ui.curses, 'endwin') as endwin, \
+             patch.object(ui.curses, 'reset_prog_mode') as reset, \
+             patch.object(community, 'preflight', return_value=tool), \
+             patch.object(community, 'run_tool', side_effect=RuntimeError('failure')):
+            ui._screen(Screen(), Context('host'))
+        endwin.assert_called_once()
+        reset.assert_called_once()
 
 
 if __name__ == '__main__':

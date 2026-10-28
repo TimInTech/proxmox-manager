@@ -63,13 +63,21 @@ change is not a rollback. A cancelled CT directory scan may continue inside the
 guest until its independent 55-second timeout; the outer command is also bounded.
 Changes are serialized by a private lock. There is no unattended mutation CLI.
 
+The interface separates the action list from its detail or confirmation view.
+At smaller widths the list is stacked; below the minimum size, actions are
+blocked until the terminal is resized. While a job runs, Esc or `q` requests
+cancellation and other input is ignored; after cancellation, `q` exits.
+
 The host menu also has **Community PVE-Werkzeuge** with eight selected Host
 Management tools: Disk Health, LXC Filesystem Trim, LXC Cleaner, Kernel Clean,
 Clean Orphaned LVM, Host Backup, CPU Scaling Governor and LXC Updater. These are
 the upstream scripts, clearly marked as Community Scripts; their own interactive
-prompts and target selection remain intact. Before launch, pman checks the live
-GitHub metadata and downloads only the reviewed commit, then verifies the Git
-blob SHA-1. A changed, missing or unreachable upstream source blocks launch.
+prompts and target selection remain intact. Before confirmation, pman checks
+the live GitHub metadata for the tool and its core library. Before launch it
+checks both again, downloads only the reviewed commit, and verifies the Git
+blob SHA-1. With network timeouts, those repeated checks and downloads can
+block the interface for up to about one minute before the helper starts. A
+changed, missing or unreachable upstream source blocks launch.
 The core runtime library is also pinned and checked. Its optional telemetry API
 is intentionally omitted. A helper can still install packages, delete selected
 logs/volumes, change host settings or update guests as described in its impact
@@ -80,8 +88,9 @@ not a guarantee of newly available pool space. Guest filesystem use, thin-volume
 allocation and pool data/metadata use are displayed separately. Volume names
 are read from the actual guest configuration, not guessed from the VMID.
 
-No broad log deletion, kernel removal, backup deletion or filesystem/partition
-reconfiguration is provided in this first version.
+The native adapters do not offer broad log deletion, kernel removal, backup
+deletion or filesystem/partition reconfiguration. Some community helpers do
+offer log or kernel removal and other changes, as described above.
 
 ## Community Scripts provenance and freshness
 

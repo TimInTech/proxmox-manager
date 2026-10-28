@@ -95,14 +95,19 @@ def _download_pinned(repository, commit, path, expected):
     return data
 
 
-def run_tool(tool_id):
+def preflight(tool_id):
     tool = next((item for item in TOOLS if item['id'] == tool_id), None)
     if not tool:
         raise ValueError('Unbekanntes Community-Werkzeug.')
-    # Check live upstream metadata immediately before fetching/running pinned bytes.
     _check_current(REPOSITORY, tool['path'], tool['sha'])
+    _check_current(CORE_REPOSITORY, 'core/core.func', CORE_SHA)
+    return tool
+
+
+def run_tool(tool_id):
+    # Recheck immediately before fetching and executing pinned bytes.
+    tool = preflight(tool_id)
     core_path = 'core/core.func'
-    _check_current(CORE_REPOSITORY, core_path, CORE_SHA)
     script = _download_pinned(REPOSITORY, REVIEWED_COMMIT, tool['path'], tool['sha'])
     core = _download_pinned(CORE_REPOSITORY, CORE_COMMIT, core_path, CORE_SHA)
     with tempfile.TemporaryDirectory(prefix='pman-community-') as directory:
