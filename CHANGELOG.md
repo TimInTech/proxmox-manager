@@ -6,6 +6,27 @@ Versions follow [Semantic Versioning](https://semver.org/).
 
 ---
 
+## [2.14.0] - 2026-10-27
+
+### Maintenance module 1.0.3
+
+- Refine the optional maintenance TUI with responsive action/detail views,
+  clearer status and contextual keys, safe confirmation paging, and terminal
+  restoration coverage.
+- Check community source metadata before confirmation; pinned hashes and a
+  second live check remain required immediately before launch.
+- Fix community back-entry details and discard keys queued while a worker runs.
+
+- Add an optional Python/curses storage and maintenance module with a small Bash
+  dispatcher (`--maintenance`, main-menu `m`, and guest-menu `m`).
+- Add host storage/SMART diagnostics, scoped CT/VM adapters, confirmed TRIM and
+  Debian/Ubuntu CT package-cache cleanup. No automatic guest starts or broad cleanup.
+- Install the module independently with versioned atomic deployment and rollback;
+  base installation no longer installs unrelated optional packages automatically.
+- Track declared Community Scripts reference revisions with a daily metadata-only
+  checker. Execute native local adapters, never downloaded upstream code.
+- Add independent module bundles/checksums and Python/installer regression tests.
+
 ## [Unreleased]
 
 ## [2.13.2] - 2026-10-21

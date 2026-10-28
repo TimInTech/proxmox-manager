@@ -21,6 +21,7 @@ _pman() {
     '--timeout[Shutdown timeout in seconds before force stop]:seconds:(10 30 60 120 300)' \
     '--name[Filter by VM/CT name (ERE substring-match)]:pattern:' \
     '--force[Skip all confirmation prompts]' \
+    '--maintenance[Open optional host maintenance module]' \
     '--health[Show CPU/memory/disk health of local VMs/CTs]' \
     '--check[Run health checks for cron (exit 0/1/2/3)]' \
     '--dry-run[With --check: print result and message, send nothing]' \

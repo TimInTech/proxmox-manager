@@ -1,3 +1,5 @@
+**Language: English | [Deutsch](README.de.md)**
+
 <!-- markdownlint-disable MD033 MD041 -->
 <div align="center">
 
@@ -8,16 +10,21 @@
 ║  ██████╔╝ ██╔████╔██║ ███████║ ██╔██╗ ██║                ║
 ║  ██╔═══╝  ██║╚██╔╝██║ ██╔══██║ ██║╚██╗██║                ║
 ║  ██║      ██║ ╚═╝ ██║ ██║  ██║ ██║ ╚████║                ║
-║  ╚═╝      ╚═╝     ╚═╝ ╚═╝  ╚═╝ ╚═╝  ╚═══╝  v2.13.2       ║
+║  ╚═╝      ╚═╝     ╚═╝ ╚═╝  ╚═╝ ╚═╝  ╚═══╝  v2.14.0       ║
 ║                                                          ║
 ║  Proxmox VM/CT Manager · Single Bash · No Dependencies   ║
 ╚══════════════════════════════════════════════════════════╝
 ```
 
 **Single-file Bash tool for managing Proxmox VMs and containers.**
-No daemons. No agents. No dependencies beyond what ships with Proxmox VE.
+The core needs no daemon or guest agent installation and no dependencies beyond
+what ships with Proxmox VE. The optional maintenance module adds a daily, disableable
+public source-metadata check; its diagnostic and maintenance actions use local commands.
 
-**New in v2.13.2:** ⚡ **Stop** now shuts guests down cleanly (`qm|pct shutdown`,
+**New in v2.14.0:** optional storage and maintenance TUI (Python standard library),
+installed separately with `--with-maintenance`. See [maintenance module](docs/maintenance.md).
+
+**v2.13.2:** ⚡ **Stop** now shuts guests down cleanly (`qm|pct shutdown`,
 force stop only after the timeout) instead of pulling the plug.
 **v2.13.0:** 🩺 health view per guest and 🔔 ntfy / e-mail alerts from a
 cron check — [set up alerts in 3 steps](#-quick-start-alerts-in-3-steps).
@@ -170,7 +177,7 @@ from cron.
   └───────────────────────────────────────────────────────┘
 ```
 
-> ✅ No network calls (unless alerts are configured) · ✅ No background process ·
+> ✅ Core: no network calls (unless alerts are configured) · ✅ No background process ·
 > ✅ Bash ≥ 4.0 · ✅ PVE 7.x / 8.x / 9.x
 
 ---
@@ -201,6 +208,15 @@ chmod +x proxmox-manager.sh
 ./install_dependencies.sh
 ```
 
+The installer defaults to the core in noninteractive mode and asks whether to add
+the maintenance module in a terminal. It does not automatically install optional
+packages such as `virt-viewer`, `jq` or development tools.
+
+```bash
+./install_dependencies.sh --with-maintenance
+pman --maintenance
+```
+
 Installs an atomic, root-owned copy at `/usr/local/bin/pman` so later edits to
 the checkout cannot change the privileged executable.
 
@@ -215,10 +231,11 @@ the checkout cannot change the privileged executable.
 | `pman --json` | Machine-readable JSON array for automation & `jq` |
 | `pman --filter running` | Filter output by status: `running` \| `stopped` \| `paused` |
 | `pman --name web` | Filter by VM/CT name (ERE substring-match; combinable with `--filter`) |
-| `pman --force` | Skip all confirmation prompts (for unattended scripts) |
+| `pman --force` | Skip supported core confirmation prompts; maintenance confirmations remain mandatory |
 | `pman --timeout 30` | Graceful shutdown timeout before force stop, in seconds (default: 60) |
 | `pman --no-clear` | Don't clear screen in interactive mode |
 | `pman --once` | Run a single interactive refresh cycle (useful for TTY recording) |
+| `pman --maintenance` | Optional arrow-key storage/maintenance TUI for the host; guest menus open the selected CT/VM |
 | `pman --health` | Health overview: CPU / MEM / DISK %, uptime and level per guest (`--list`, `--json` combinable) |
 | `pman --check` | Health check for cron: alerts on changes, exit `0` OK · `1` WARN · `2` CRIT · `3` UNKNOWN |
 | `pman --check --dry-run` | Show the check result and the message that would be sent; nothing is sent or saved |
@@ -239,6 +256,42 @@ Displays a table of all VMs/containers. Enter a VMID to open the action menu.
 ```
 
 Press `h` for the health overview · `r` to refresh · `q` to quit
+
+### Optional maintenance interface
+
+Press `M` or `m` in the main menu for host maintenance, or in a guest action
+menu for that selected CT or VM. Arrow keys select an action, Enter opens it,
+Page Up/Down scrolls output, Esc goes back or cancels a confirmation, and `q`
+exits. `Tab` switches the CT scan directory. The display adapts to terminal
+size and honors `NO_COLOR`; a UTF-8 terminal is required.
+
+Native diagnostics use the selected scope; native guest changes require explicit
+confirmation and never start stopped guests. `--force` cannot bypass confirmation.
+The host-only Community Scripts menu launches selected upstream tools, which may
+change host settings or guests chosen inside the helper. Before confirmation it
+checks the live source; it repeats the check and verifies pinned Git blob hashes
+before launch. Changed, missing or unreachable sources block execution. The
+optional upstream telemetry component is omitted. Review the shown impact before
+confirming. See [maintenance documentation](docs/maintenance.md) for limits,
+source checks, rollback and removal.
+
+To remove only the optional module, run:
+
+```bash
+./install_dependencies.sh --uninstall-maintenance
+```
+
+To switch back to the previous installed module release, run:
+
+```bash
+./install_dependencies.sh --rollback-maintenance
+```
+
+Both operations retain the Bash core. The module may need a UTF-8 terminal. A
+cancelled CT scan can continue in the guest until its 55-second timeout, and
+community source checks may block the UI for up to about one minute while the
+live checks and pinned source downloads wait for their network timeouts.
+Cancelling a running change is not a rollback; see [maintenance documentation](docs/maintenance.md).
 
 ### JSON output
 
@@ -490,9 +543,10 @@ cp completions/pman.zsh ~/.zsh/completions/_pman
 - **Root required:** `qm` and `pct` need elevated privileges — there's no
   workaround.
 - **No credentials stored:** Relies entirely on Proxmox host authentication.
-- **No outbound traffic unless notifications are configured:** alerts via ntfy /
-  e-mail are opt-in; the ntfy token is read from a `0600` file, passed to `curl`
-  via stdin and never sent over plain http.
+- **Network access:** notifications are opt-in. The optional maintenance module
+  also checks public source metadata and fetches pinned community scripts on
+  request. The ntfy token is read from a `0600` file, passed to `curl` via stdin
+  and never sent over plain http.
 - **CI hardening:** ShellCheck on every push · Gitleaks scan for accidental
   secrets.
 
@@ -500,7 +554,12 @@ cp completions/pman.zsh ~/.zsh/completions/_pman
 
 ## 📋 Changelog
 
-### 🆕 [v2.13.2](CHANGELOG.md) — 2026-10-21
+### 🆕 [v2.14.0](CHANGELOG.md) — 2026-10-27
+
+> Optional arrow-key storage and maintenance module, scoped CT/VM actions,
+> explicit confirmations, source provenance and daily metadata-only checks.
+
+### [v2.13.2](CHANGELOG.md) — 2026-10-21
 
 > **Stop** is a graceful shutdown (`qm|pct shutdown --timeout --forceStop 1`);
 > Proxmox force-stops only after `--timeout`. Previously `qm|pct stop` cut the

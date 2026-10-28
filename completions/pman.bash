@@ -11,7 +11,7 @@ _pman() {
     prev="${COMP_WORDS[COMP_CWORD-1]}"
   }
 
-  local all_flags="--list --json --filter --name --no-clear --once --timeout --force --health --check --dry-run --test-notify --version --help"
+  local all_flags="--list --json --filter --name --no-clear --once --timeout --force --maintenance --health --check --dry-run --test-notify --version --help"
 
   case "$prev" in
     --filter)

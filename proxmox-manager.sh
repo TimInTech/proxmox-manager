@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Proxmox VM/CT Management Tool
-# Version 2.13.2 — 2026-10-21
+# Version 2.14.0 — 2026-10-27
 # - fix: stop action runs qm/pct shutdown --timeout --forceStop 1 (clean shutdown, force stop only after the timeout) instead of qm/pct stop, which pulled the plug
 # - feat: health view (--health, menu key h) and cron checks (--check) with ntfy/e-mail alerts
 # - fix: action and snapshot menus draw a closed frame (right border, padded rows)
@@ -18,6 +18,8 @@ export LC_ALL=C
 # =============================================================================
 CLEAR_SCREEN=1
 MODE="interactive"
+MAINTENANCE_FLAG=0
+_MAINTENANCE_EXEC=/usr/local/bin/pman-maintenance
 RUN_ONCE=0
 LIST_FLAG=0
 JSON_FLAG=0
@@ -538,6 +540,7 @@ Options:
   --once            Run a single interactive refresh (useful for TTY recording)
   --timeout SECS    Shutdown timeout before force stop in seconds (default: 60)
   --force           Skip all confirmation prompts (use with care)
+  --maintenance     Open the optional host maintenance module
   --health          Show CPU/memory/disk health of local VMs/CTs
                     (combine with --list for plain text or --json; --filter/--name apply)
   --check           Run health checks for cron; alert on changes; exit 0/1/2/3
@@ -611,6 +614,9 @@ parse_args() {
     --force)
       FORCE_MODE=1
       ;;
+    --maintenance)
+      MAINTENANCE_FLAG=1
+      ;;
     --health)
       HEALTH_FLAG=1
       ;;
@@ -657,6 +663,14 @@ parse_args() {
 
 # _resolve_mode — derive MODE from the health flags and reject invalid combinations.
 _resolve_mode() {
+  if ((MAINTENANCE_FLAG == 1)); then
+    if ((LIST_FLAG || JSON_FLAG || HEALTH_FLAG || CHECK_FLAG || TEST_NOTIFY_FLAG || DRY_RUN)) || [[ -n "$FILTER_STATUS$FILTER_NAME" ]]; then
+      err "--maintenance cannot be combined with other output modes or filters."
+      exit "$FATAL_EXIT"
+    fi
+    MODE="maintenance"
+    return 0
+  fi
   if ((DRY_RUN == 1 && CHECK_FLAG == 0)); then
     err "Option --dry-run requires --check."
     exit "$FATAL_EXIT"
@@ -2609,12 +2623,44 @@ confirm() {
   [[ "$ans" =~ ^[yY]$ ]]
 }
 
+# The optional package has its own confirmation flow; never forward --force.
+maintenance_open() {
+  local scope="${1:-host}" id="${2:-}" info
+  if [[ ! -f "$_MAINTENANCE_EXEC" || -L "$_MAINTENANCE_EXEC" || ! -x "$_MAINTENANCE_EXEC" ]]; then
+    err "Maintenance module missing. Install with ./install_dependencies.sh --with-maintenance"
+    return 1
+  fi
+  local path="$_MAINTENANCE_EXEC" owner mode
+  while [[ "$path" != / ]]; do
+    owner=$(stat -Lc %u -- "$path") || return 1
+    mode=$(stat -Lc %a -- "$path") || return 1
+    if [[ -L "$path" || "$owner" != 0 || ! "$mode" =~ ^[0-7]{3,4}$ ]] || (((8#$mode & 8#022) != 0)); then
+      err "Unsafe maintenance executable or parent directory."
+      return 1
+    fi
+    path=$(dirname -- "$path")
+  done
+  info=$("$_MAINTENANCE_EXEC" --interface) || return 1
+  if ! printf '%s' "$info" | python3 -I -B -c 'import json,re,sys; d=json.load(sys.stdin); sys.exit(0 if d.get("interface")==1 and re.fullmatch(r"1\.\d+\.\d+", str(d.get("version",""))) else 1)' 2>/dev/null; then
+    err "Incompatible maintenance module; reinstall a matching release."
+    return 1
+  fi
+  case "$scope" in
+  host) "$_MAINTENANCE_EXEC" --scope host ;;
+  ct | vm)
+    validate_vmid "$id" || return 1
+    "$_MAINTENANCE_EXEC" --scope "$scope" --id "$id"
+    ;;
+  *) return 1 ;;
+  esac
+}
+
 main_menu() {
   header
   if ! print_table; then return 1; fi
   echo
   printf '  %b%s%b  %s\n' "${BOLD}" "Keys:" "${NC}" \
-    "<VMID> = open action menu   ${BOLD}h${NC} = health   ${BOLD}r${NC} = refresh   ${BOLD}q${NC} = quit"
+    "<VMID> = open action menu   ${BOLD}h${NC} = health   ${BOLD}m${NC} = host maintenance   ${BOLD}r${NC} = refresh   ${BOLD}q${NC} = quit"
   printf '  %b→%b ' "${CYAN_BRIGHT}" "${NC}"
   local choice
   read_line choice
@@ -2622,6 +2668,7 @@ main_menu() {
   q | Q) exit 0 ;;
   r | R | '') return 0 ;;
   h | H) health_overview ;;
+  m | M) maintenance_open host ;;
   *)
     if [[ "$choice" =~ ^[0-9]+$ ]]; then
       if ! validate_vmid "$choice"; then
@@ -2696,6 +2743,7 @@ action_menu() {
   fi
   _box_content "${CYAN}" "${LINE_V}" $W "$row"
 
+  _box_content "${CYAN}" "${LINE_V}" $W "  m) Storage & maintenance (optional)"
   _draw_line_bot $W
   echo
   if [[ "$ty" == "VM" ]]; then
@@ -2706,6 +2754,7 @@ action_menu() {
   local opt
   read_line opt
   case "$opt" in
+  m | M) maintenance_open "${ty,,}" "$id" ;;
   1) do_action "$id" "$ty" start "$name" ;;
   2) do_action "$id" "$ty" stop "$name" ;;
   3) do_action "$id" "$ty" restart "$name" ;;
@@ -3343,7 +3392,7 @@ main() {
     err "PROXMOX_MANAGER_SPICE_ADDR contains unsupported characters."
     exit "$FATAL_EXIT"
   fi
-  if ((FORCE_MODE == 1)); then
+  if ((FORCE_MODE == 1)) && [[ "$MODE" != maintenance ]]; then
     case "$MODE" in
     json | health_json | check) warn "--force active: all confirmation prompts will be skipped automatically." >&2 ;;
     *) warn "--force active: all confirmation prompts will be skipped automatically." ;;
@@ -3366,6 +3415,9 @@ main() {
     ;;
   esac
   case "$MODE" in
+  maintenance)
+    maintenance_open host
+    ;;
   list)
     if print_table; then
       exit 0

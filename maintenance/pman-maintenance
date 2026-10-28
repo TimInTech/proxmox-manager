@@ -1,0 +1,27 @@
+#!/usr/bin/env bash
+# Load only a trusted, installed package with an isolated Python interpreter.
+set -euo pipefail
+root=/usr/local/lib/pman/maintenance
+trusted() {
+	local path="$1" uid mode
+	while [[ "$path" != / ]]; do
+		uid=$(stat -Lc %u -- "$path") || return 1
+		mode=$(stat -Lc %a -- "$path") || return 1
+		[[ ! -L "$path" && "$uid" == 0 && "$mode" =~ ^[0-7]{3,4}$ ]] || return 1
+		(((8#$mode & 8#022) == 0)) || return 1
+		path=$(dirname -- "$path")
+	done
+}
+package=$(readlink -e -- "$root/current") || exit 1
+[[ "$package" == "$root"/releases/* && -d "$package" ]] || exit 1
+if ! trusted "$root" || ! trusted "$package"; then
+	echo 'Unsafe maintenance installation.' >&2
+	exit 1
+fi
+while IFS= read -r -d '' file; do
+	if [[ -L "$file" ]] || ! trusted "$file"; then
+		echo 'Unsafe maintenance package.' >&2
+		exit 1
+	fi
+done < <(find "$package" -mindepth 1 -print0)
+exec /usr/bin/python3 -I -B "$package/launcher.py" "$@"

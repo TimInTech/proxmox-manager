@@ -1,0 +1,121 @@
+{
+  "format": 1,
+  "reviewed_at": "2026-10-27",
+  "notice": "Wartungsadapter sind eigenständig. Ausgewählte Community-Host-Tools können im Menü ausdrücklich gestartet werden; der aktuelle Upstream und der geprüfte Git-Blob werden unmittelbar davor geprüft. Der optionale Telemetrie-Baustein wird nicht geladen.",
+  "adapters": {
+    "storage": {
+      "origin": "own",
+      "reference": null,
+      "modifications": "Independent implementation; no upstream code copied"
+    },
+    "smart": {
+      "origin": "own",
+      "reference": "tools/pve/disk-health.sh",
+      "modifications": "Independent implementation; no upstream code copied"
+    },
+    "maintenance": {
+      "origin": "own",
+      "reference": "tools/pve/kernel-clean.sh",
+      "modifications": "Independent implementation; no upstream code copied"
+    },
+    "volumes": {
+      "origin": "own",
+      "reference": null,
+      "modifications": "Independent implementation; no upstream code copied"
+    },
+    "filesystems": {
+      "origin": "own",
+      "reference": null,
+      "modifications": "Independent implementation; no upstream code copied"
+    },
+    "scan": {
+      "origin": "own",
+      "reference": null,
+      "modifications": "Independent implementation; no upstream code copied"
+    },
+    "trim": {
+      "origin": "own",
+      "reference": "tools/pve/fstrim.sh",
+      "modifications": "Independent implementation; no upstream code copied"
+    },
+    "cache-clean": {
+      "origin": "own",
+      "reference": "tools/pve/clean-lxcs.sh",
+      "modifications": "Independent implementation; no upstream code copied"
+    }
+  },
+  "references": [
+    {
+      "repository": "community-scripts/ProxmoxVE",
+      "path": "tools/pve/fstrim.sh",
+      "reviewed_commit": "28fd647e6aed3db6d771cade4fb7c8c5deb48af3",
+      "blob_sha": "b63b4267c97ce3c62df4ad26c5e85131562f5950",
+      "license": "MIT",
+      "role": "verified launchable helper; only starts after live hash verification"
+    },
+    {
+      "repository": "community-scripts/ProxmoxVE",
+      "path": "tools/pve/disk-health.sh",
+      "reviewed_commit": "28fd647e6aed3db6d771cade4fb7c8c5deb48af3",
+      "blob_sha": "fa12746aedce484fe760bcccf4d1bcb3de58501b",
+      "license": "MIT",
+      "role": "verified launchable helper; only starts after live hash verification"
+    },
+    {
+      "repository": "community-scripts/ProxmoxVE",
+      "path": "tools/pve/clean-lxcs.sh",
+      "reviewed_commit": "28fd647e6aed3db6d771cade4fb7c8c5deb48af3",
+      "blob_sha": "e54a307a980130c43134c68d28a8c7cfcdf6b260",
+      "license": "MIT",
+      "role": "verified launchable helper; only starts after live hash verification"
+    },
+    {
+      "repository": "community-scripts/ProxmoxVE",
+      "path": "tools/pve/kernel-clean.sh",
+      "reviewed_commit": "28fd647e6aed3db6d771cade4fb7c8c5deb48af3",
+      "blob_sha": "98351a487f14ed77df99f8945a9f45bf0b1870c0",
+      "license": "MIT",
+      "role": "verified launchable helper; only starts after live hash verification"
+    },
+    {
+      "repository": "community-scripts/ProxmoxVE",
+      "path": "tools/pve/clean-orphaned-lvm.sh",
+      "reviewed_commit": "28fd647e6aed3db6d771cade4fb7c8c5deb48af3",
+      "blob_sha": "18548a37a27a74a0bd7510b58efc0205618b2f64",
+      "license": "MIT",
+      "role": "verified launchable helper; interactive LVM deletion"
+    },
+    {
+      "repository": "community-scripts/ProxmoxVE",
+      "path": "tools/pve/host-backup.sh",
+      "reviewed_commit": "28fd647e6aed3db6d771cade4fb7c8c5deb48af3",
+      "blob_sha": "4a579cd1cb14dbe0623608bd238ea92e3bc84b07",
+      "license": "MIT",
+      "role": "verified launchable helper; writes a user-selected archive"
+    },
+    {
+      "repository": "community-scripts/ProxmoxVE",
+      "path": "tools/pve/scaling-governor.sh",
+      "reviewed_commit": "28fd647e6aed3db6d771cade4fb7c8c5deb48af3",
+      "blob_sha": "79622844c5051349a05acdd46490a5242cfb656c",
+      "license": "MIT",
+      "role": "verified launchable helper; changes host CPU policy"
+    },
+    {
+      "repository": "community-scripts/ProxmoxVE",
+      "path": "tools/pve/update-lxcs.sh",
+      "reviewed_commit": "28fd647e6aed3db6d771cade4fb7c8c5deb48af3",
+      "blob_sha": "ec3dd34f2ff1b1df3c4ce7e664aab5958f9dfca5",
+      "license": "MIT",
+      "role": "verified launchable helper; updates selected containers"
+    },
+    {
+      "repository": "community-scripts/core",
+      "path": "core/core.func",
+      "reviewed_commit": "af0fe772dd02bed10fd0124e3aacc86f2bc900d7",
+      "blob_sha": "0e18236d58a4aec4b200c231c8a4a2387e378bbb",
+      "license": "MIT",
+      "role": "pinned runtime dependency; optional telemetry API intentionally omitted"
+    }
+  ]
+}
