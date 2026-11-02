@@ -33,14 +33,22 @@ cron check — [set up alerts in 3 steps](#-quick-start-alerts-in-3-steps).
 [![Gitleaks](https://img.shields.io/github/actions/workflow/status/TimInTech/proxmox-manager/gitleaks.yml?branch=main&style=for-the-badge&logo=security&label=Gitleaks)](https://github.com/TimInTech/proxmox-manager/actions)
 [![License](https://img.shields.io/github/license/TimInTech/proxmox-manager?style=for-the-badge&color=blue)](LICENSE)
 [![Shell](https://img.shields.io/badge/Shell-Bash-4EAA25?style=for-the-badge&logo=gnu-bash)](https://www.gnu.org/software/bash/)
-[![Proxmox
-VE](https://img.shields.io/badge/Proxmox-VE%207%2F8%2F9-orange?style=for-the-badge)](https://www.proxmox.com/)
+[![Proxmox VE](https://img.shields.io/badge/Proxmox-VE%207%2F8%2F9-orange?style=for-the-badge)](https://www.proxmox.com/)
+
+<p align="center">
+  <img src="docs/demo/out/proxmox-manager-demo.gif" alt="Proxmox Manager Live Demo" width="820">
+</p>
+
+<p align="center">
+  <em>Deterministic read-only demo: VM/CT overview, health diagnostics, host maintenance & community PVE tools.</em><br>
+  <small>Recorded via headless PTY pipeline with in-stream pseudonymization · <a href="docs/demo/index.html">Interactive Web Vector Player ▶</a> · <a href="docs/demo/README.md">Pipeline Details →</a></small>
+</p>
 
 ![Tech Stack](https://skillicons.dev/icons?i=linux,bash,debian)
 
 <a href="https://buymeacoffee.com/timintech" target="_blank" rel="noopener noreferrer">
   <img src="https://cdn.buymeacoffee.com/buttons/v2/default-yellow.png"
-       alt="Buy Me A Coffee" height="60" width="217">
+       alt="Buy Me A Coffee" height="50" width="180">
 </a>
 
 </div>

@@ -50,6 +50,7 @@ CLAUDE.md
 # Misc local artifacts
 *.bak
 *.tmp
+docs/demo/out/frame_*.png
 
 # Optional maintenance Python caches and release assets
 __pycache__/

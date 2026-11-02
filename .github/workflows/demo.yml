@@ -1,0 +1,47 @@
+name: Demo Verification
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - 'docs/demo/**'
+      - '.github/workflows/demo.yml'
+  pull_request:
+    paths:
+      - 'docs/demo/**'
+      - '.github/workflows/demo.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: demo-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  verify-demo:
+    name: Verify Demo Assets & Privacy
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Set up Python
+        uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
+        with:
+          python-version: '3.11'
+
+      - name: Install verification dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y ffmpeg tesseract-ocr tesseract-ocr-eng tesseract-ocr-deu
+
+      - name: Run automated evidence verification
+        run: python3 docs/demo/verify_demo.py
+
+      - name: Verify Web Vector Player build
+        run: python3 docs/demo/build_player.py

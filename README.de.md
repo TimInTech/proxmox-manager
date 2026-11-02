@@ -7,6 +7,15 @@ Bash-Skript. Die optionale Speicher- und Wartungsoberfläche verwendet Python 3
 und die Standardbibliothek; der Bash-Kern kann ohne sie installiert werden. Die
 vollständige Befehls- und Konfigurationsreferenz steht im [englischen README](README.md).
 
+<p align="center">
+  <img src="docs/demo/out/proxmox-manager-demo.gif" alt="Proxmox Manager Live Demo" width="820">
+</p>
+
+<p align="center">
+  <em>Deterministische, lesende Konsolen-Demo: VM/CT-Übersicht, Health-Diagnose, Host-Wartung & Community PVE-Werkzeuge.</em><br>
+  <small>Headless PTY-Pipeline mit In-Stream-Pseudonymisierung · <a href="docs/demo/index.html">Interaktiver Web-Vektor-Player ▶</a> · <a href="docs/demo/README.md">Pipeline-Details →</a></small>
+</p>
+
 ## Installation
 
 Auf einem Proxmox-Host als Administrator aus einem passenden Checkout:
