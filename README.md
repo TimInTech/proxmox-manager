@@ -3,37 +3,18 @@
 <!-- markdownlint-disable MD033 MD041 -->
 <div align="center">
 
-```text
-╔══════════════════════════════════════════════════════════╗
-║  ██████╗  ███╗   ███╗  █████╗  ███╗   ██╗                ║
-║  ██╔══██╗ ████╗ ████║ ██╔══██╗ ████╗  ██║                ║
-║  ██████╔╝ ██╔████╔██║ ███████║ ██╔██╗ ██║                ║
-║  ██╔═══╝  ██║╚██╔╝██║ ██╔══██║ ██║╚██╗██║                ║
-║  ██║      ██║ ╚═╝ ██║ ██║  ██║ ██║ ╚████║                ║
-║  ╚═╝      ╚═╝     ╚═╝ ╚═╝  ╚═╝ ╚═╝  ╚═══╝  v2.14.0       ║
-║                                                          ║
-║  Proxmox VM/CT Manager · Single Bash · No Dependencies   ║
-╚══════════════════════════════════════════════════════════╝
-```
+# Proxmox Manager
 
-**Single-file Bash tool for managing Proxmox VMs and containers.**
-The core needs no daemon or guest agent installation and no dependencies beyond
-what ships with Proxmox VE. The optional maintenance module adds a daily, disableable
-public source-metadata check; its diagnostic and maintenance actions use local commands.
+**Single-file Bash tool for managing Proxmox VMs and containers · Zero Dependencies**<br>
+The core needs no daemon or guest agent installation and no dependencies beyond what ships with Proxmox VE.
 
-**New in v2.14.0:** optional storage and maintenance TUI (Python standard library),
-installed separately with `--with-maintenance`. See [maintenance module](docs/maintenance.md).
-
-**v2.13.2:** ⚡ **Stop** now shuts guests down cleanly (`qm|pct shutdown`,
-force stop only after the timeout) instead of pulling the plug.
-**v2.13.0:** 🩺 health view per guest and 🔔 ntfy / e-mail alerts from a
-cron check — [set up alerts in 3 steps](#-quick-start-alerts-in-3-steps).
-
-[![CI](https://img.shields.io/github/actions/workflow/status/TimInTech/proxmox-manager/ci.yml?branch=main&style=for-the-badge&logo=github&label=CI)](https://github.com/TimInTech/proxmox-manager/actions)
-[![Gitleaks](https://img.shields.io/github/actions/workflow/status/TimInTech/proxmox-manager/gitleaks.yml?branch=main&style=for-the-badge&logo=security&label=Gitleaks)](https://github.com/TimInTech/proxmox-manager/actions)
-[![License](https://img.shields.io/github/license/TimInTech/proxmox-manager?style=for-the-badge&color=blue)](LICENSE)
-[![Shell](https://img.shields.io/badge/Shell-Bash-4EAA25?style=for-the-badge&logo=gnu-bash)](https://www.gnu.org/software/bash/)
-[![Proxmox VE](https://img.shields.io/badge/Proxmox-VE%207%2F8%2F9-orange?style=for-the-badge)](https://www.proxmox.com/)
+<p>
+  <a href="https://github.com/TimInTech/proxmox-manager/actions"><img src="https://img.shields.io/github/actions/workflow/status/TimInTech/proxmox-manager/ci.yml?branch=main&style=for-the-badge&logo=github&label=CI" alt="CI"></a>
+  <a href="https://github.com/TimInTech/proxmox-manager/actions"><img src="https://img.shields.io/github/actions/workflow/status/TimInTech/proxmox-manager/gitleaks.yml?branch=main&style=for-the-badge&logo=security&label=Gitleaks" alt="Gitleaks"></a>
+  <a href="LICENSE"><img src="https://img.shields.io/github/license/TimInTech/proxmox-manager?style=for-the-badge&color=blue" alt="License"></a>
+  <a href="https://www.gnu.org/software/bash/"><img src="https://img.shields.io/badge/Shell-Bash-4EAA25?style=for-the-badge&logo=gnu-bash" alt="Shell"></a>
+  <a href="https://www.proxmox.com/"><img src="https://img.shields.io/badge/Proxmox-VE%207%2F8%2F9-orange?style=for-the-badge" alt="Proxmox VE"></a>
+</p>
 
 <p align="center">
   <img src="docs/demo/out/proxmox-manager-demo.gif" alt="Proxmox Manager Live Demo" width="820">
@@ -52,6 +33,14 @@ cron check — [set up alerts in 3 steps](#-quick-start-alerts-in-3-steps).
 </a>
 
 </div>
+
+**New in v2.14.0:** optional storage and maintenance TUI (Python standard library),
+installed separately with `--with-maintenance`. See [maintenance module](docs/maintenance.md).
+
+**v2.13.2:** ⚡ **Stop** now shuts guests down cleanly (`qm|pct shutdown`,
+force stop only after the timeout) instead of pulling the plug.
+**v2.13.0:** 🩺 health view per guest and 🔔 ntfy / e-mail alerts from a
+cron check — [set up alerts in 3 steps](#-quick-start-alerts-in-3-steps).
 
 ---
 
