@@ -1,0 +1,17 @@
+{
+  "name": "proxmox-manager-site",
+  "version": "1.0.0",
+  "scripts": {
+    "build": "astro build",
+    "dev": "astro dev",
+    "preview": "astro preview"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "MIT",
+  "type": "module",
+  "dependencies": {
+    "astro": "^7.4.5",
+    "markdown-it": "^14.3.3"
+  }
+}

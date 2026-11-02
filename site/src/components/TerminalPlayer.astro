@@ -1,0 +1,19 @@
+---
+const base = import.meta.env.BASE_URL.replace(/\/$/, '');
+const chapters = [['0:00',0,'Startansicht'],['0:03',3.2,'Health Check'],['0:10',9.5,'Hauptmenü'],['0:12',12,'Wartungsmenü'],['0:15',15,'Community-Werkzeuge'],['0:22',22,'Beenden']];
+---
+<link rel="stylesheet" href={`${base}/vendor/asciinema-player.css`} />
+<div class="terminal" data-cast={`${base}/demo/proxmox-manager-demo.cast`}><div class="terminal-bar"><span>pman · interaktive Aufzeichnung</span><span>80 × 24</span></div><div class="player" aria-label="Abspielbare Proxmox-Manager-Terminaldemo"><p class="muted">Terminaldemo wird geladen. <a href={`${base}/demo/proxmox-manager-demo.cast`}>Aufzeichnung herunterladen</a></p></div><div class="chapters" aria-label="Kapitel wählen">{chapters.map(([clock,time,label]) => <button type="button" data-seek={time} aria-label={`${label} bei ${clock}`}><span>{clock}</span> {label}</button>)}</div></div>
+<p class="caption">Pausieren und im Zeitstrahl springen. Terminaltext lässt sich markieren und kopieren. Auf Mobilgeräten horizontal scrollen.</p>
+<script src={`${base}/vendor/asciinema-player.min.js`} is:inline></script>
+<script is:inline>
+  document.querySelectorAll('.terminal').forEach(async (root) => {
+    const target = root.querySelector('.player');
+    try {
+      if (!window.AsciinemaPlayer) throw Error('Player nicht verfügbar');
+      target.textContent = '';
+      const player = window.AsciinemaPlayer.create(root.dataset.cast, target, {autoPlay: true, loop: true, theme: 'monokai', fit: 'width', terminalFontFamily: '"DejaVu Sans Mono", monospace'});
+      root.querySelectorAll('[data-seek]').forEach(button => button.addEventListener('click', () => player.seek(Number(button.dataset.seek))));
+    } catch (error) { target.textContent = 'Demo konnte nicht geladen werden. Die Aufzeichnung steht als Download bereit.'; }
+  });
+</script>

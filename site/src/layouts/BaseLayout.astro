@@ -1,0 +1,7 @@
+---
+import '../styles/global.css';
+const { title, description = 'Proxmox Manager: VM- und Containerverwaltung direkt auf dem Proxmox-Host.' } = Astro.props;
+const base = import.meta.env.BASE_URL.replace(/\/$/, '');
+---
+<!doctype html><html lang="de"><head><meta charset="utf-8"/><meta name="viewport" content="width=device-width, initial-scale=1"/><meta name="description" content={description}/><meta name="google" content="notranslate"/><link rel="canonical" href={new URL(Astro.url.pathname, Astro.site)}/><title>{title} | Proxmox Manager</title></head>
+<body><a class="skip" href="#inhalt">Zum Inhalt springen</a><header class="top"><div class="wrap nav"><a class="brand" href={`${base}/`}>PM<span> / </span>Proxmox Manager</a><nav aria-label="Hauptnavigation"><a href={`${base}/anleitung/`}>Anleitung</a><a href={`${base}/health/`}>Health</a><a href={`${base}/wartung/`}>Wartung</a><a href="https://github.com/TimInTech/proxmox-manager">GitHub ↗</a></nav></div></header><main id="inhalt"><slot/></main><footer><div class="wrap foot"><span>Proxmox Manager · MIT-lizenziert</span><div><a href={`${base}/datenschutz/`}>Datenschutz</a><a href="https://github.com/TimInTech/proxmox-manager/issues">Support über GitHub Issues</a></div></div></footer></body></html>
