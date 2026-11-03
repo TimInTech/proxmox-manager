@@ -77,6 +77,32 @@ class SmartReportRegressionTest(unittest.TestCase):
         self.assertNotIn('must-not-be-displayed', report)
         self.assertIn('Verschleißattribut', report)
 
+    def test_broken_disk_does_not_abort_report_for_remaining_disks(self):
+        devices = {'blockdevices': [
+            {'name': 'sda', 'type': 'disk', 'model': 'Failing', 'size': '1G'},
+            {'name': 'sdb', 'type': 'disk', 'model': 'Healthy', 'size': '1G'},
+        ]}
+        runner = FakeRunner({
+            ('lsblk', '-J', '-d', '-o', 'NAME,TYPE,MODEL,SIZE'): json.dumps(devices),
+            ('smartctl', '-a', '-j', '/dev/sda'): 'Smartctl open device: /dev/sda failed: Operation not permitted',
+            ('smartctl', '-a', '-j', '/dev/sdb'): json.dumps({
+                'smart_status': {'passed': True},
+                'temperature': {'current': 33},
+                'power_on_time': {'hours': 10},
+            }),
+        })
+        written = {}
+        with patch('pman_maintenance.actions.shutil.which', return_value='/usr/sbin/smartctl'), \
+             patch('pman_maintenance.actions.read_json', return_value={}), \
+             patch('pman_maintenance.actions.write_json', side_effect=lambda path, data: written.update(data)):
+            report = do_smart(Context('host'), runner)
+
+        self.assertIn('/dev/sda', report)
+        self.assertIn('nicht auswertbar', report)
+        self.assertIn('/dev/sdb', report)
+        self.assertIn('PASSED', report)
+        self.assertTrue(written, 'SMART state must still be written for readable disks')
+
     def test_nvme_health_values_are_curated_and_visible(self):
         report = self.run_report({
             'serial_number': 'private', 'smart_status': {'passed': True},

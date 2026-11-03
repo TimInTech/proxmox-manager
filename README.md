@@ -107,7 +107,7 @@ Run as root on the Proxmox node after [installing `pman`](#-installation).
 touch /etc/pmanrc && chmod 600 /etc/pmanrc
 cat >>/etc/pmanrc <<'EOF'
 NTFY_URL="https://ntfy.sh/pman-alerts-CHANGE-ME"   # hard-to-guess topic name
-HEALTH_MAIL_TO="admin@example.com"                 # optional, needs sendmail
+# HEALTH_MAIL_TO="admin@example.com"               # optional, uncomment once sendmail works
 EOF
 ```
 
@@ -117,6 +117,10 @@ For e-mail, most home servers need a smarthost first — see
 [relaying through an external SMTP provider](#relaying-through-an-external-smtp-provider).
 
 ### 2 — Send a test message
+
+`--test-notify` uses every channel configured in `/etc/pmanrc`. Leave the
+e-mail line commented out until sendmail delivers, otherwise the test fails on
+the mail step instead of proving ntfy works.
 
 ```bash
 pman --test-notify
