@@ -6,14 +6,44 @@ import { resolve } from 'node:path';
 const english = readFileSync(resolve(process.cwd(), '../README.md'), 'utf8');
 const german = readFileSync(resolve(process.cwd(), '../README.de.md'), 'utf8');
 // Keep the complete upstream reference while omitting embedded third-party images and raw HTML.
+// Repository-relative files have no counterpart on Pages, so they are pointed at the repository.
 function prepare(source) {
-  return source.replace(/\]\((README(?:\.de)?\.md|docs\/[^)]+|LICENSE)\)/g, (_, path) => `](https://github.com/TimInTech/proxmox-manager/blob/main/${path})`);
+  return source.replace(/\]\((?!https?:|#|mailto:|\/)([^)\s]+\.(?:md|png|jpe?g|svg|gif|webp|pdf))\)/g,
+    (_, path) => `](https://github.com/TimInTech/proxmox-manager/blob/main/${path})`);
+}
+// Reproduce GitHub's heading anchors so upstream links like #-installation keep working.
+const slug = text => text.toLowerCase().replace(/[^\p{L}\p{N} _-]/gu, '').replace(/ /g, '-');
+const seen = new Map();
+function uniqueSlug(text) {
+  const base = slug(text);
+  const count = seen.get(base) || 0;
+  seen.set(base, count + 1);
+  return count ? `${base}-${count}` : base;
 }
 const md = new MarkdownIt({ html: true, linkify: false, typographer: false });
 md.renderer.rules.image = () => '';
 md.renderer.rules.html_block = () => '';
 md.renderer.rules.html_inline = () => '';
-const render = text => md.render(prepare(text));
-const sections = [...english.matchAll(/^## (.+)$/gm)].map((match, i, all) => ({title: match[1], id: `ref-${i + 1}`, content: english.slice(match.index, all[i + 1]?.index ?? english.length)}));
+// Plain text for slugs: strip markdown links and emphasis so entities never leak in.
+const plain = raw => raw
+  .replace(/!\[[^\]]*\]\([^)]*\)/g, '')
+  .replace(/\[([^\]]*)\]\([^)]*\)/g, '$1')
+  .replace(/[`*_]/g, '');
+const renderToken = md.renderer.rules.heading_open;
+md.renderer.rules.heading_open = (tokens, idx, options, env, self) => {
+  const level = Number(tokens[idx].tag.slice(1));
+  const inline = tokens[idx + 1];
+  // The German block is prefixed so its headings never collide with the English reference.
+  if (inline && inline.type === 'inline' && (env.prefix || level > 2)) {
+    tokens[idx].attrSet('id', (env.prefix || '') + slug(plain(inline.content)));
+  }
+  return renderToken ? renderToken(tokens, idx, options, env, self) : self.renderToken(tokens, idx, options);
+};
+const render = (text, prefix = '') => md.render(prepare(text), { prefix });
+const sections = [...english.matchAll(/^## (.+)$/gm)].map((match, i, all) => ({
+  title: match[1],
+  id: uniqueSlug(match[1]),
+  content: english.slice(match.index, all[i + 1]?.index ?? english.length),
+}));
 ---
-<BaseLayout title="Anleitung und Befehlsreferenz"><div class="wrap"><section class="hero"><p class="eyebrow">Dokumentation</p><h1>Installieren. Bedienen. Prüfen.</h1><p class="lead">Deutscher Einstieg und vollständige Befehls- und Konfigurationsreferenz aus den Repository-READMEs.</p></section><div class="docs"><aside class="toc" aria-label="Inhaltsverzeichnis"><a href="#deutsch">Deutsch</a>{sections.map(section => <a href={`#${section.id}`}>{section.title}</a>)}</aside><div class="prose"><section id="deutsch" set:html={render(german)}></section>{sections.map(section => <section id={section.id} set:html={render(section.content)}></section>)}</div></div></div></BaseLayout>
+<BaseLayout title="Anleitung und Befehlsreferenz"><div class="wrap"><section class="hero"><p class="eyebrow">Dokumentation</p><h1>Installieren. Bedienen. Prüfen.</h1><p class="lead">Deutscher Einstieg und vollständige Befehls- und Konfigurationsreferenz aus den Repository-READMEs.</p></section><div class="docs"><aside class="toc" aria-label="Inhaltsverzeichnis"><a href="#deutsch">Deutsch</a>{sections.map(section => <a href={`#${section.id}`}>{section.title}</a>)}</aside><div class="prose"><section id="deutsch" set:html={render(german, 'de-')}></section>{sections.map(section => <section id={section.id} set:html={render(section.content)}></section>)}</div></div></div></BaseLayout>

@@ -225,7 +225,17 @@ def do_smart(ctx, runner):
         if disk.get('type') != 'disk' or not re.fullmatch(r'[A-Za-z0-9_-]+', disk.get('name', '')):
             continue
         dev = '/dev/' + disk['name']
-        data = json.loads(runner.run(['smartctl', '-a', '-j', dev], allowed=None).text)
+        try:
+            data = json.loads(runner.run(['smartctl', '-a', '-j', dev], allowed=None).text)
+        except (ValueError, CommandError):
+            # One unreadable disk must never hide the health of the remaining ones.
+            lines.extend(['', '{} ({})'.format(dev, disk.get('model') or 'unbekanntes Modell'),
+                          'SMART-Abfrage fehlgeschlagen: Gerät nicht auswertbar, übersprungen.'])
+            continue
+        if not isinstance(data, dict):
+            lines.extend(['', '{} ({})'.format(dev, disk.get('model') or 'unbekanntes Modell'),
+                          'SMART-Abfrage fehlgeschlagen: Gerät nicht auswertbar, übersprungen.'])
+            continue
         # Identify history by serial internally, never display or transmit it.
         identity = data.get('serial_number') or dev
         attributes = {}

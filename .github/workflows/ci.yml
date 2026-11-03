@@ -75,3 +75,57 @@ jobs:
           bash tools/build-release.sh dist
           cd dist
           sha256sum -c SHA256SUMS
+
+  website:
+    name: Documentation site
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: '24'
+          cache: npm
+          cache-dependency-path: site/package-lock.json
+      - name: Install dependencies
+        working-directory: site
+        run: npm ci
+      - name: Build site
+        working-directory: site
+        run: npm run build
+      - name: Verify build output
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import html
+          import sys
+          from pathlib import Path
+
+          dist = Path('site/dist')
+          pages = sorted(dist.rglob('*.html'))
+          expected = {'index.html', 'anleitung/index.html', 'health/index.html',
+                      'wartung/index.html', 'datenschutz/index.html'}
+          found = {p.relative_to(dist).as_posix() for p in pages}
+          missing = expected - found
+          if missing:
+              sys.exit(f'missing pages in build: {sorted(missing)}')
+          for page in pages:
+              text = html.unescape(page.read_text(encoding='utf-8'))
+              if '[PLATZHALTER]' in text:
+                  sys.exit(f'placeholder left in {page}')
+          guide = html.unescape((dist / 'anleitung' / 'index.html').read_text(encoding='utf-8'))
+          for needle in ('HEALTH_CPU_RUNS', 'cat >/etc/cron.d/pman-health', '--filter running'):
+              if needle not in guide:
+                  sys.exit(f'guide lost command: {needle}')
+          for anchor in ('id="-installation"', 'id="health-monitoring--alerts"',
+                         'id="relaying-through-an-external-smtp-provider"'):
+              if anchor not in guide:
+                  sys.exit(f'guide lost anchor: {anchor}')
+          if 'CHANGELOG.md)' in guide:
+              sys.exit('guide still links CHANGELOG.md relatively')
+          print(f'{len(pages)} pages verified')
+          PY
+      - name: Audit dependencies
+        working-directory: site
+        run: npm audit --omit=dev
