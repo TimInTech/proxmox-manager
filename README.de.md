@@ -12,7 +12,7 @@ vollständige Befehls- und Konfigurationsreferenz steht im [englischen README](R
 </p>
 
 <p align="center">
-  <em>Deterministische, lesende Konsolen-Demo: VM/CT-Übersicht, Health-Diagnose, Host-Wartung & Community PVE-Werkzeuge.</em><br>
+  <em>Deterministische, lesende Konsolen-Demo: VM/CT-Übersicht, Health-Diagnose, Host-Wartung & Helper-Scripts (Community).</em><br>
   <small>Headless PTY-Pipeline mit In-Stream-Pseudonymisierung · <a href="docs/demo/index.html">Interaktiver Web-Vektor-Player ▶</a> · <a href="docs/demo/README.md">Pipeline-Details →</a></small>
 </p>
 
@@ -62,15 +62,30 @@ des APT-Paketcache verfügbar. Gestoppte Gäste werden nicht automatisch gestart
 Jede Änderung verlangt eine eigene Bestätigung; `--force` umgeht sie nicht.
 Ein Abbruch laufender Änderungen ist kein Rollback.
 
-Das Host-Menü enthält außerdem ausgewählte **Community Scripts**. Sie laufen als
-Upstream-Code mit eigenen interaktiven Dialogen und können Host-Einstellungen
-oder dort ausgewählte Gäste ändern. Vor der Bestätigung prüft das Modul den
-aktuellen Upstream; vor dem Start prüft es erneut und kontrolliert die Git-Blob-Prüfsummen der festgelegten
-Revisionen. Geänderte, fehlende oder nicht erreichbare
-Quellen verhindern den Start. Die erneute Prüfung und Downloads können bei
-Zeitlimits im ungünstigsten Fall etwa eine Minute dauern; die Oberfläche ist
-währenddessen blockiert. Die optionale Upstream-Telemetrie wird nicht
-bereitgestellt. Auswirkungen vor der Bestätigung sorgfältig prüfen.
+Das Host-Menü enthält außerdem die **Proxmox VE Helper-Scripts (Community)**
+(<https://community-scripts.org>, MIT-Lizenz, Repository
+`community-scripts/ProxmoxVE`). Acht ausgewählte Werkzeuge laufen als fremder
+Code, der weder von pman noch von Proxmox stammt, mit eigenen interaktiven
+Dialogen; sie können Host-Einstellungen oder dort ausgewählte Gäste ändern. Die
+Werkzeuge sind nach Absicht gruppiert, und jedes trägt seine Gefahrenstufe als
+Text: `[LESEN]` (nur lesend), `[ÄNDERT]` (verändert Host oder Gäste) oder
+`[LÖSCHT]` (entfernt Daten oder Pakete, kein Papierkorb); Farbe ist nur ein
+zusätzlicher Hinweis. Vor dem Bestätigungsschirm prüft das Modul den aktuellen
+Upstream und lädt die festgelegte Revision herunter. Der Schirm zeigt die genaue
+Quell-URL, den Befehl, den Hinweis „läuft als root auf diesem Host“ sowie
+Revision und Prüfsumme. Mit `v` lässt sich das geprüfte Skript ansehen; nach `j`
+werden genau diese Bytes gestartet. Die Prüfung wird unmittelbar vor dem Start
+wiederholt. Geänderte, fehlende oder nicht erreichbare Quellen verhindern den
+Start; die Meldung nennt dann die Datei sowie geprüfte und aktuelle Revision.
+Die Prüfung und die Downloads können bei Zeitlimits im ungünstigsten Fall etwa
+eine Minute dauern; die Oberfläche ist währenddessen blockiert. Die optionale
+Upstream-Telemetrie wird nicht bereitgestellt. Auswirkungen vor der Bestätigung
+sorgfältig prüfen.
+
+Darstellung: `NO_COLOR=1` schaltet jede Farbe ab, `PMAN_ASCII=1` ersetzt Linien-
+und Pfeilzeichen durch ASCII (automatisch auch bei `TERM=linux`), und
+`PMAN_HYPERLINKS=1|0` erzwingt klickbare OSC-8-Links oder schaltet sie ab (die
+URL steht immer auch als Klartext da).
 
 Bekannte Grenzen: Ein UTF-8-Terminal wird benötigt. Ein laufender CT-Scan kann
 bis zu 55 Sekunden weiterlaufen, auch wenn die Oberfläche den Abbruch angefordert

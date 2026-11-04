@@ -276,13 +276,26 @@ size and honors `NO_COLOR`; a UTF-8 terminal is required.
 
 Native diagnostics use the selected scope; native guest changes require explicit
 confirmation and never start stopped guests. `--force` cannot bypass confirmation.
-The host-only Community Scripts menu launches selected upstream tools, which may
-change host settings or guests chosen inside the helper. Before confirmation it
-checks the live source; it repeats the check and verifies pinned Git blob hashes
-before launch. Changed, missing or unreachable sources block execution. The
-optional upstream telemetry component is omitted. Review the shown impact before
-confirming. See [maintenance documentation](docs/maintenance.md) for limits,
-source checks, rollback and removal.
+The host-only **Proxmox VE Helper-Scripts (Community)** menu
+(<https://community-scripts.org>, MIT licence, repository
+`community-scripts/ProxmoxVE`) launches eight selected third-party tools. They
+are not written by pman or Proxmox and can change host settings or guests chosen
+inside the helper. Tools are grouped by intent and each carries a hazard level
+as text: `[LESEN]` (read only), `[ÄNDERT]` (changes the host or guests) or
+`[LÖSCHT]` (removes data or packages, no recycle bin); colour is only an extra
+cue. Before the confirmation screen pman checks the live source and downloads the
+pinned revision; the screen shows the exact source URL, the command, the notice
+that the script runs as root on this host and the pinned revision and checksum.
+`v` shows the verified script, and exactly those bytes are started after `j`.
+The check is repeated right before launch; changed, missing or unreachable
+sources block execution and the message names the file and the reviewed and
+current revision. The optional upstream telemetry component is omitted. See
+[maintenance documentation](docs/maintenance.md) for limits, source checks,
+rollback and removal.
+
+Display options: `NO_COLOR=1` removes all colour, `PMAN_ASCII=1` replaces box and
+arrow glyphs with ASCII (also automatic on `TERM=linux`), and `PMAN_HYPERLINKS=1|0`
+forces OSC 8 clickable links on or off (the URL is always printed as plain text).
 
 To remove only the optional module, run:
 
