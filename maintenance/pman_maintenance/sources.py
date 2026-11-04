@@ -81,7 +81,7 @@ def source_report():
     rows = [checked.get((reference['repository'], reference['path']), {})
             for reference in manifest['references']]
     counts = Counter(row.get('status', 'Noch nicht geprüft') for row in rows)
-    lines = [_('Zuletzt geprüft: ') + status.get('checked_at') or _('Noch nicht geprüft'),
+    lines = [_('Zuletzt geprüft: ') + (status.get('checked_at') or _('Noch nicht geprüft')),
              _('{} Quellen | geprüft: {} | geändert: {} | fehlen: {} | Fehler: {} | offen: {}').format(
                  len(rows), counts['geprüfter Stand'], counts['Upstream geändert'], counts['Quelle fehlt'],
                  counts['Prüfung fehlgeschlagen'], counts['Noch nicht geprüft']),

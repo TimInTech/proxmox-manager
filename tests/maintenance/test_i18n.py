@@ -57,6 +57,20 @@ class CatalogTest(unittest.TestCase):
             self.assertFalse(any(word in english for word in german_words), (german, english))
 
 
+class ReportTest(unittest.TestCase):
+    def setUp(self):
+        self.addCleanup(i18n.set_language, None)
+
+    def test_source_report_without_stored_check_in_both_languages(self):
+        from pman_maintenance import sources
+        for language, expected in (('de', 'Zuletzt geprüft: Noch nicht geprüft'),
+                                   ('en', 'Last checked: not checked yet')):
+            i18n.set_language(language)
+            with patch.object(sources, 'read_json', return_value={}):
+                first_line = sources.source_report().splitlines()[0]
+            self.assertEqual(first_line, expected)
+
+
 class LanguageSelectionTest(unittest.TestCase):
     def setUp(self):
         i18n.set_language(None)
