@@ -3,7 +3,7 @@
 
 Validates:
 1. Stream geometry, duration, framerate, and size via ffprobe.
-2. OCR keyword extraction at seconds 2, 8, and 18 via tesseract.
+2. OCR keyword extraction at seconds 2, 8, 18 and inside the confirmation screen via tesseract.
 3. Privacy validation (zero real IPs, zero real node names) across OCR & PTY stream.
 """
 
@@ -53,6 +53,34 @@ def ocr_image(img_path: str) -> str:
     return run_cmd(cmd)
 
 
+ANSI_RE = re.compile(r"\x1b\[[0-?]*[ -/]*[@-~]|\x1b\([A-Z0-9]|\x1b[=>78]")
+
+
+def strip_ansi(text: str) -> str:
+    """Remove terminal control sequences so a name split by colour codes is still found."""
+    return ANSI_RE.sub("", text)
+
+
+def cast_output(cast_path: str) -> str:
+    """Concatenated output events of an asciinema cast, escapes removed."""
+    parts: list[str] = []
+    with open(cast_path, "r", encoding="utf-8", errors="replace") as handle:
+        for line in handle:
+            try:
+                event = json.loads(line)
+            except ValueError:
+                continue
+            if isinstance(event, list) and len(event) == 3 and event[1] == "o":
+                parts.append(event[2])
+    return strip_ansi("".join(parts))
+
+
+def confirmation_time(marker_path: str) -> float:
+    """Seconds into the session when the confirmation screen appeared (recorded by the driver)."""
+    with open(marker_path, "r", encoding="utf-8") as handle:
+        return float(json.load(handle)["confirm"])
+
+
 def main() -> int:
     base_dir = os.path.dirname(os.path.abspath(__file__))
     out_dir = os.path.join(base_dir, "out")
@@ -86,7 +114,7 @@ def main() -> int:
     v_fps_parts = [int(p) for p in v_stream["r_frame_rate"].split("/")]
     v_fps = v_fps_parts[0] / v_fps_parts[1] if len(v_fps_parts) == 2 else float(v_fps_parts[0])
 
-    # Check Raw constraints: 1280x720, 30fps, 20-28s duration
+    # Check Raw constraints: 1280x720, 30fps, 20-60s duration
     ok_res = (v_width == 1280 and v_height == 720)
     checks.append(("Raw Video Resolution", f"{v_width}x{v_height} (expected 1280x720)", ok_res))
     if not ok_res:
@@ -97,8 +125,8 @@ def main() -> int:
     if not ok_fps:
         errors.append(f"Raw framerate mismatch: {v_fps}")
 
-    ok_dur = (20.0 <= v_duration <= 28.0)
-    checks.append(("Raw Video Duration", f"{v_duration:.2f}s (expected 20.0s - 28.0s)", ok_dur))
+    ok_dur = (20.0 <= v_duration <= 60.0)
+    checks.append(("Raw Video Duration", f"{v_duration:.2f}s (expected 20.0s - 60.0s)", ok_dur))
     if not ok_dur:
         errors.append(f"Raw duration out of bounds: {v_duration:.2f}s")
 
@@ -138,6 +166,10 @@ def main() -> int:
         extract_frame(raw_video, 2.0, f2_path)
         extract_frame(raw_video, 8.0, f8_path)
         extract_frame(raw_video, 18.0, f18_path)
+        f_conf_path = os.path.join(tmp_dir, "frame_confirm.png")
+        conf_t = confirmation_time(os.path.join(out_dir, "demo_markers.json"))
+        extract_frame(raw_video, conf_t + 2.5, f_conf_path)
+        ocr_conf = ocr_image(f_conf_path)
 
         ocr_2 = ocr_image(f2_path)
         ocr_8 = ocr_image(f8_path)
@@ -155,26 +187,32 @@ def main() -> int:
     if not ok_ocr8:
         errors.append("Keyword 'Health' missing in frame at 8.0s")
 
-    # Check keyword 3: "Community PVE" at second 18
-    ok_ocr18 = bool(re.search(r"Community\s+PVE", ocr_18, re.IGNORECASE))
-    checks.append(("OCR @ 18.0s: 'Community PVE'", "Found in frame" if ok_ocr18 else "MISSING", ok_ocr18))
+    # Check keyword 3: "Helper-Scripts" (named source of the community tools) at second 18
+    ok_ocr18 = bool(re.search(r"Helper[-\s]?Scripts", ocr_18, re.IGNORECASE))
+    checks.append(("OCR @ 18.0s: 'Helper-Scripts'", "Found in frame" if ok_ocr18 else "MISSING", ok_ocr18))
     if not ok_ocr18:
-        errors.append("Keyword 'Community PVE' missing in frame at 18.0s")
+        errors.append("Keyword 'Helper-Scripts' missing in frame at 18.0s")
+
+    # Check keyword 4: the confirmation names the foreign code and the root privilege
+    ok_conf = bool(re.search(r"FREMDER\s+CODE", ocr_conf, re.IGNORECASE)) and bool(
+        re.search(r"\broot\b", ocr_conf, re.IGNORECASE))
+    checks.append(("OCR @ confirmation: 'FREMDER CODE'+root", "Found in frame" if ok_conf else "MISSING", ok_conf))
+    if not ok_conf:
+        errors.append("Confirmation screen text (FREMDER CODE / root) missing")
 
     # -------------------------------------------------------------------------
     # 3. PRIVACY CHECK (Regex Scan across OCR, PTY Stream, and Cast)
     # -------------------------------------------------------------------------
-    ocr_combined = f"{ocr_2}\n{ocr_8}\n{ocr_18}"
+    ocr_combined = f"{ocr_2}\n{ocr_8}\n{ocr_18}\n{ocr_conf}"
     pty_text = ""
     if os.path.isfile(pty_log):
         with open(pty_log, "rb") as f:
-            pty_text = f.read().decode("utf-8", errors="replace")
+            pty_text = strip_ansi(f.read().decode("utf-8", errors="replace"))
 
     cast_file = os.path.join(out_dir, "proxmox-manager-demo.cast")
     cast_text = ""
     if os.path.isfile(cast_file):
-        with open(cast_file, "r", encoding="utf-8", errors="replace") as f:
-            cast_text = f.read()
+        cast_text = cast_output(cast_file)
 
     sensitive_patterns = [
         (r"\b192\.168\.\d{1,3}\.\d{1,3}\b", "RFC1918 Private IP (192.168.*)"),
@@ -182,6 +220,7 @@ def main() -> int:
         (r"\b172\.(1[6-9]|2\d|3[01])\.\d{1,3}\.\d{1,3}\b", "RFC1918 Private IP (172.16-31.*)"),
         (r"\bNode:\s*pve(?!\w|-)", "Real node identifier ('Node: pve')"),
         (r"\bpve\.fritz\.box\b", "Real FQDN ('pve.fritz.box')"),
+        (r"Host \(pve\)", "Real host name on the confirmation screen"),
         (r"\bfritz\.box\b", "Local FritzBox domain"),
     ]
 

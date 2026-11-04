@@ -45,8 +45,18 @@ class StreamAnonymizer:
         self.buf += text
         self._process(flush_all=False)
 
+    def _header_incomplete(self) -> bool:
+        """True while the 'Node:' header line is only partly received.
+
+        A read can end between the colour codes around the node name; replacing
+        such a fragment on its own would miss it and leak the real host name.
+        """
+        tail = self.buf.rsplit("\n", 1)[-1]
+        return "Node:" in tail and "║" not in tail.split("Node:", 1)[1]
+
     def flush(self) -> None:
-        self._process(flush_all=True)
+        if not self._header_incomplete():
+            self._process(flush_all=True)
         self.target.flush()
         if self.log_file:
             self.log_file.flush()
@@ -54,7 +64,8 @@ class StreamAnonymizer:
             self.cast_file.flush()
 
     def close(self) -> None:
-        self.flush()
+        self._process(flush_all=True)
+        self.target.flush()
         if self.log_file:
             self.log_file.close()
         if self.cast_file:
@@ -123,6 +134,8 @@ class StreamAnonymizer:
 
         # 4. Hostnames
         line = re.sub(r"\bpve\.fritz\.box\b", "pve-node-01.lan ", line)
+        # The confirmation screen names the host: "... auf diesem Host (pve)."
+        line = line.replace("Host (pve).", "Host (pve-node-01).")
         line = re.sub(r"\bfritz\.box\b", "localdomain", line)
 
         # 5. SSH disconnect banner
@@ -131,7 +144,8 @@ class StreamAnonymizer:
         return line
 
 
-def drive_session(log_path: str | None = None, cast_path: str | None = None) -> None:
+def drive_session(log_path: str | None = None, cast_path: str | None = None,
+                  marker_path: str | None = None) -> None:
     ready_marker = "/tmp/pman_demo_ready"
     if os.path.exists(ready_marker):
         os.remove(ready_marker)
@@ -171,6 +185,10 @@ def drive_session(log_path: str | None = None, cast_path: str | None = None) -> 
         dimensions=(rows, cols),
     )
     child.logfile_read = anonymizer
+    markers: dict[str, float] = {}
+
+    def mark(name: str) -> None:
+        markers[name] = round(time.time() - anonymizer.start_time, 2)
 
     try:
         # Phase 1: Wait for Startansicht (main menu table and prompt)
@@ -192,22 +210,48 @@ def drive_session(log_path: str | None = None, cast_path: str | None = None) -> 
         # Phase 4: Open Maintenance Menu
         child.send(b"m\n")
         child.expect(b"Storage, Dateisysteme", timeout=10)
+        mark("maintenance")
         time.sleep(0.8)
 
-        # Navigate down 3 times to 'Community PVE-Werkzeuge'
+        # Navigate down 3 times to 'Proxmox VE Helper-Scripts (8)'
         child.send(b"\x1bOB\x1bOB\x1bOB")
-        child.expect(b"Community PVE-Werkzeuge", timeout=5)
+        child.expect(b"Helper-Scripts \\(8\\)", timeout=5)
         time.sleep(0.8)
 
-        # Enter Community PVE tools list
+        # Enter the Helper-Scripts (Community) menu
         child.send(b"\n")
-        child.expect(b"COMMUNITY PVE-WERKZEUGE", timeout=5)
-        # Hold community tools view for ~4.8s (t=18.0s OCR will capture 'Community PVE')
+        child.expect(b"Community-Skripte", timeout=5)
+        mark("community")
+        # Hold the menu for ~4.8s (t=18.0s OCR will capture 'Helper-Scripts')
         time.sleep(4.8)
 
-        # Phase 5: Exit Community view back to Maintenance menu
-        child.send(b"\x1b")  # ESC
-        child.expect(b"Community-Werkzeug", timeout=5)
+        # Phase 5: select 'Kernel Clean' ([LÖSCHT]) and open its confirmation.
+        # Enter only checks upstream metadata and downloads the pinned file; nothing is run.
+        for _ in range(5):
+            child.send(b"\x1bOB")
+            time.sleep(0.35)
+        # curses only redraws changed cells, so wait for the newly written file name
+        child.expect(b"kernel-clean\\.sh", timeout=5)
+        time.sleep(1.5)
+        child.send(b"\n")
+        child.expect(b"FREMDER CODE", timeout=60)
+        mark("confirm")
+        # Hold the confirmation (exact URL, command, root notice) for ~5.5s
+        time.sleep(5.5)
+
+        # Show the verified source code (read only), then cancel without starting
+        child.send(b"v")
+        child.expect(b"Bytes werden gestartet", timeout=5)
+        mark("preview")
+        time.sleep(2.5)
+        child.send(b"\x1b")  # back to the confirmation
+        time.sleep(0.8)
+        child.send(b"\x1b")  # cancel: no helper script is started
+        child.expect(b"Start abgebrochen", timeout=5)
+        mark("cancelled")
+        time.sleep(0.8)
+        child.send(b"\x1b")  # leave the Helper-Scripts menu
+        child.expect(b"Helper-Scripts \\(8\\)", timeout=5)
         time.sleep(0.6)
 
         # Phase 6: Exit Maintenance back to Main Menu
@@ -218,7 +262,11 @@ def drive_session(log_path: str | None = None, cast_path: str | None = None) -> 
         # Phase 7: Exit pman cleanly
         child.send(b"q\n")
         child.expect(pexpect.EOF, timeout=5)
+        mark("end")
     finally:
+        if marker_path:
+            with open(marker_path, "w", encoding="utf-8") as handle:
+                json.dump(markers, handle)
         anonymizer.flush()
         anonymizer.close()
         child.close(force=True)
@@ -234,7 +282,8 @@ def main() -> int:
     open(log_path, "wb").close()
     open(cast_path, "w", encoding="utf-8").close()
     
-    drive_session(log_path=log_path, cast_path=cast_path)
+    marker_path = os.path.join(log_dir, "demo_markers.json")
+    drive_session(log_path=log_path, cast_path=cast_path, marker_path=marker_path)
     return 0
 
 

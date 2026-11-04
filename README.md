@@ -21,7 +21,7 @@ The core needs no daemon or guest agent installation and no dependencies beyond 
 </p>
 
 <p align="center">
-  <em>Deterministic read-only demo: VM/CT overview, health diagnostics, host maintenance & community PVE tools.</em><br>
+  <em>Deterministic read-only demo: VM/CT overview, health diagnostics, host maintenance, the Proxmox VE Helper-Scripts (Community) menu and its confirmation screen.</em><br>
   <small>Recorded via headless PTY pipeline with in-stream pseudonymization · <a href="docs/demo/index.html">Interactive Web Vector Player ▶</a> · <a href="docs/demo/README.md">Pipeline Details →</a></small>
 </p>
 
