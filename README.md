@@ -281,7 +281,7 @@ The host-only **Proxmox VE Helper-Scripts (Community)** menu
 `community-scripts/ProxmoxVE`) launches eight selected third-party tools. They
 are not written by pman or Proxmox and can change host settings or guests chosen
 inside the helper. Tools are grouped by intent and each carries a hazard level
-as text: `[LESEN]` (read only), `[ÄNDERT]` (changes the host or guests) or
+as text: `[LESEN]` (diagnosis; Disk Health only installs packages if you agree to its prompt), `[ÄNDERT]` (changes the host or guests) or
 `[LÖSCHT]` (removes data or packages, no recycle bin); colour is only an extra
 cue. Before the confirmation screen pman checks the live source and downloads the
 pinned revision; the screen shows the exact source URL, the command, the notice

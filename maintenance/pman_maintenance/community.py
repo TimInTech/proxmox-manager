@@ -40,6 +40,7 @@ LEVELS = {
 TOOLS = (
     {'id': 'disk-health', 'title': 'PVE Disk Health Tool', 'label': 'Disk Health',
      'group': 'check', 'level': 'read',
+     'level_note': 'Diagnose; installiert nur auf Nachfrage Pakete',
      'path': 'tools/pve/disk-health.sh', 'sha': 'fa12746aedce484fe760bcccf4d1bcb3de58501b',
      'summary': 'SMART-Übersicht; bietet optional einen kurzen SMART-Selbsttest an.',
      'impact': 'Nur Diagnose bis auf Nachfrage. Kann smartmontools und nvme-cli per APT installieren.'},
@@ -139,6 +140,12 @@ def _download_pinned(repository, commit, path, expected):
     if git_blob_sha(data) != expected:
         raise RuntimeError('Prüfsumme von {} passt nicht zum geprüften Stand.'.format(path))
     return data
+
+
+def level_text(tool):
+    """'WORD – meaning' for the hazard level, with the tool's own qualification if it has one."""
+    word, meaning = LEVELS[tool['level']]
+    return '{} – {}'.format(word, tool.get('level_note', meaning))
 
 
 def find_tool(tool_id):

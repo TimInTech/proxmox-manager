@@ -297,9 +297,8 @@ def community_intro():
 
 
 def community_detail(tool, stored):
-    word, meaning = community.LEVELS[tool['level']]
     blocks = [L(tool['title'], style='accent'), tool['summary'], '',
-              Field('Stufe', '{} – {}'.format(word, meaning), style='accent'),
+              Field('Stufe', community.level_text(tool), style='accent'),
               Field('Folge', tool['impact']),
               Field('Läuft', 'als root auf dem Host'),
               Field('Stand', 'geprüft {} ({})'.format(community.reviewed_at(), community.REVIEWED_COMMIT[:7])),
@@ -313,10 +312,9 @@ def community_detail(tool, stored):
 def confirm_blocks(launch, host):
     tool = launch.tool
     url = community.source_url(tool)
-    word, meaning = community.LEVELS[tool['level']]
     name = tool['path'].rpartition('/')[2]
     return [L(tool['title'], style='accent'),
-            Field('Stufe', '{} – {}'.format(word, meaning), style='accent'),
+            Field('Stufe', community.level_text(tool), style='accent'),
             '',
             L('FREMDER CODE – läuft als root auf diesem Host ({}).'.format(host), style='accent'),
             'Er stammt weder von pman noch von Proxmox.',

@@ -75,7 +75,7 @@ eight selected Host Management tools in three groups:
 
 | Group | Tool | Level |
 | --- | --- | --- |
-| Prüfen & Sichern | Disk Health | `[LESEN]` |
+| Prüfen & Sichern | Disk Health (installs packages only if you agree) | `[LESEN]` |
 | Prüfen & Sichern | Host Backup | `[ÄNDERT]` |
 | Aktualisieren & Optimieren | LXC Updater, LXC Filesystem Trim, CPU Scaling Governor | `[ÄNDERT]` |
 | Aufräumen – löscht Daten | Kernel Clean, LXC Cleaner, Clean Orphaned LVM | `[LÖSCHT]` |

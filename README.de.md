@@ -68,7 +68,7 @@ Das Host-Menü enthält außerdem die **Proxmox VE Helper-Scripts (Community)**
 Code, der weder von pman noch von Proxmox stammt, mit eigenen interaktiven
 Dialogen; sie können Host-Einstellungen oder dort ausgewählte Gäste ändern. Die
 Werkzeuge sind nach Absicht gruppiert, und jedes trägt seine Gefahrenstufe als
-Text: `[LESEN]` (nur lesend), `[ÄNDERT]` (verändert Host oder Gäste) oder
+Text: `[LESEN]` (Diagnose; Disk Health installiert nur auf Nachfrage Pakete), `[ÄNDERT]` (verändert Host oder Gäste) oder
 `[LÖSCHT]` (entfernt Daten oder Pakete, kein Papierkorb); Farbe ist nur ein
 zusätzlicher Hinweis. Vor dem Bestätigungsschirm prüft das Modul den aktuellen
 Upstream und lädt die festgelegte Revision herunter. Der Schirm zeigt die genaue
