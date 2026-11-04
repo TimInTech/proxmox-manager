@@ -25,10 +25,10 @@ while (($#)); do
   --uninstall-maintenance) ACTION=uninstall ;;
   --rollback-maintenance) ACTION=rollback ;;
   --lang)
-    (($# >= 2)) && [[ "$2" == de || "$2" == en ]] || {
+    if (($# < 2)) || [[ "$2" != de && "$2" != en ]]; then
       usage
       exit 2
-    }
+    fi
     UI_LANG="$2"
     shift
     ;;
@@ -154,7 +154,7 @@ if [[ "$WITH_MAINTENANCE" == auto ]]; then
     # An existing choice is kept; ask only on the first interactive installation.
     if [[ -z "$UI_LANG" && ! -e "$lang_file" ]]; then
       read -r -p 'Language / Sprache [de/en] (de): ' answer
-      [[ "${answer,,}" == en* ]] && UI_LANG=en || UI_LANG=de
+      if [[ "${answer,,}" == en* ]]; then UI_LANG=en; else UI_LANG=de; fi
     fi
     if [[ "$UI_LANG" == en ]] || [[ -z "$UI_LANG" && "$(cat -- "$lang_file" 2>/dev/null)" == en ]]; then
       read -r -p 'Also install the storage and maintenance module? [y/N] ' answer
