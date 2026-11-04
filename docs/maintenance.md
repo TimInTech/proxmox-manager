@@ -68,20 +68,45 @@ At smaller widths the list is stacked; below the minimum size, actions are
 blocked until the terminal is resized. While a job runs, Esc or `q` requests
 cancellation and other input is ignored; after cancellation, `q` exits.
 
-The host menu also has **Community PVE-Werkzeuge** with eight selected Host
-Management tools: Disk Health, LXC Filesystem Trim, LXC Cleaner, Kernel Clean,
-Clean Orphaned LVM, Host Backup, CPU Scaling Governor and LXC Updater. These are
-the upstream scripts, clearly marked as Community Scripts; their own interactive
-prompts and target selection remain intact. Before confirmation, pman checks
-the live GitHub metadata for the tool and its core library. Before launch it
-checks both again, downloads only the reviewed commit, and verifies the Git
-blob SHA-1. With network timeouts, those repeated checks and downloads can
-block the interface for up to about one minute before the helper starts. A
-changed, missing or unreachable upstream source blocks launch.
-The core runtime library is also pinned and checked. Its optional telemetry API
-is intentionally omitted. A helper can still install packages, delete selected
-logs/volumes, change host settings or update guests as described in its impact
-text; pman asks for a separate confirmation before starting it.
+The host menu also has **Proxmox VE Helper-Scripts (Community)**
+(<https://community-scripts.org>; repository `community-scripts/ProxmoxVE`,
+MIT licence, "Copyright (c) 2021-2026 tteck | community-scripts ORG"). It offers
+eight selected Host Management tools in three groups:
+
+| Group | Tool | Level |
+| --- | --- | --- |
+| Prüfen & Sichern | Disk Health (installs packages only if you agree) | `[LESEN]` |
+| Prüfen & Sichern | Host Backup | `[ÄNDERT]` |
+| Aktualisieren & Optimieren | LXC Updater, LXC Filesystem Trim, CPU Scaling Governor | `[ÄNDERT]` |
+| Aufräumen – löscht Daten | Kernel Clean, LXC Cleaner, Clean Orphaned LVM | `[LÖSCHT]` |
+
+The level is always written out; colour (fixed 256-colour badge pairs with a
+contrast of at least 4.5:1, none under `NO_COLOR`) is only an additional cue.
+This is third-party code that runs as root on the host; its own interactive
+prompts and target selection remain intact.
+
+Before the confirmation screen, pman checks the live GitHub metadata for the tool
+and its core library, downloads only the reviewed commit and verifies the Git
+blob SHA-1. The screen shows the exact source URL, the command, the "runs as
+root on this host" notice, the pinned revisions and checksum and the impact. `v`
+opens the verified script (read only); after `j` exactly these bytes are
+executed, following a second metadata check. A changed, missing or unreachable
+upstream source blocks the start; the message names the file and the reviewed
+and current revision. The menu header shows the last stored source check
+(from the daily timer, no network access when opening the menu) and marks
+affected tools with `!`. With network timeouts the checks and downloads can block
+the interface for up to about one minute. The core runtime library is pinned and
+checked as well. Its optional telemetry API is intentionally omitted. A helper
+can still install packages, delete selected logs/volumes, change host settings or
+update guests as described in its impact text; pman asks for a separate
+confirmation before starting it.
+
+Display environment variables: `NO_COLOR=1` (no colour), `PMAN_ASCII=1` (ASCII
+glyphs instead of box and arrow characters; automatic for `TERM=linux`,
+`vt100`, `vt220`) and `PMAN_HYPERLINKS=1|0` (force OSC 8 links on or off). The
+URL is always shown as plain text; links are only added in terminals known to
+support them (VTE 0.50+, kitty, iTerm2, WezTerm, Windows Terminal, foot, VS Code)
+and never inside tmux or screen unless forced.
 
 TRIM reports unused blocks to lower storage layers. Its reported byte count is
 not a guarantee of newly available pool space. Guest filesystem use, thin-volume

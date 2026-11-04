@@ -29,6 +29,28 @@ Versions follow [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Maintenance module 1.0.4
+
+- Rework the Community Scripts menu: the source is named as **Proxmox VE
+  Helper-Scripts (Community)** with licence (MIT), website
+  `https://community-scripts.org` and repository URL; tools are grouped by
+  intent and every entry carries a text hazard level (`[LESEN]`, `[ÄNDERT]`,
+  `[LÖSCHT]`), not only a colour.
+- New confirmation screen: exact source URL, command, "runs as root on this
+  host", pinned revision and checksum. `v` shows the verified script before it
+  is started; exactly those bytes are then executed.
+- The maintenance menu marks changing actions (`[ÄNDERT]`) and the Helper-Scripts
+  entry (`[FREMD]`, blue badge) the same way; the Helper-Scripts overview no
+  longer repeats name and URL and lists the groups.
+- A blocked start now names the changed file and the reviewed/current revision
+  instead of a generic message; the menu shows the last stored source check.
+- Re-pin the reviewed Community Scripts revision (2026-11-04). Upstream had
+  changed `core.func` and four tools, which blocked every launcher.
+- Accessibility: no theme-dependent foreground colours any more (badges use fixed
+  256-colour pairs with a contrast of at least 4.5:1); `NO_COLOR`, `PMAN_ASCII=1`
+  (ASCII glyphs) and `PMAN_HYPERLINKS=0|1` (OSC 8 links, plain URL is always
+  shown) are supported. Golden snapshot tests cover 80x24, 120x40 and `NO_COLOR`.
+
 ## [2.13.2] - 2026-10-21
 
 ### Fixed

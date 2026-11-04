@@ -7,7 +7,7 @@ Die Demo zeigt ausschließlich aktuell implementierte, lesende Oberflächen auf 
 2. **Health-Übersicht (`h`)**: CPU-, MEM-, DISK-Auslastung, Uptime, OK/CRIT-Bewertung und Findings.
 3. **Hauptmenü**: Rückkehr in die Hauptansicht.
 4. **Host-Wartungsmenü (`m`)**: Curses-basierte Host-Wartungsoberfläche.
-5. **Community PVE-Werkzeuge**: Durchsicht der geprüften PVE-Helper-Skripte ohne Mutation oder Start.
+5. **Proxmox VE Helper-Scripts (Community)**: gruppierte Werkzeuge mit Gefahrenstufe, anschließend Bestätigungsschirm (Quelle, Befehl, Root-Hinweis) und Quellcode-Vorschau für „Kernel Clean“ – ohne Mutation, das Skript wird abgebrochen und nie gestartet.
 
 ---
 
@@ -69,14 +69,14 @@ Die Pipeline trennt Session-Steuerung, Datenanonymisierung, Rendering und Verifi
 - Keine Skalierungsunschärfe, keine Fensterrahmen, kein Desktop-Hintergrund, keine Terminal-in-Terminal-Verschachtelung.
 
 ### 4. Artefakt-Generierung
-- **Rohvideo**: `1280×720`, H.264, 30 fps, ca. 24–27 Sekunden Dauer.
+- **Rohvideo**: `1280×720`, H.264, 30 fps, ca. 40–45 Sekunden Dauer (abhängig von der Netzwerkprüfung vor der Bestätigung).
 - **GIF**: `1280×720`, 12 fps, optimierte Palette (`palettegen=max_colors=128:stats_mode=diff`, `paletteuse=dither=none`), Dateigröße unter 1 MB (Ziel < 10 MB).
 - **Asciinema Cast**: `docs/demo/out/proxmox-manager-demo.cast` (33 KB NDJSON mit exakten Timestamps und Terminal-Events).
 
 ### 5. Interaktiver Web-Vektor-Player (`index.html` / `build_player.py`)
 - Standalone HTML5-Webplayer mit integriertem Asciinema-Player v3 (Canvas/WASM-Rendering).
 - Vollständige Wiedergabesteuerung: Play/Pause, Timeline-Scrubber, 1x/2x Geschwindigkeit, Vollbild.
-- Interaktive Kapitelsprungmarken: Direktes Anspringen von Startansicht, Health-Check, Wartungsmenü, Community-Tools und Exit.
+- Interaktive Kapitelsprungmarken: Direktes Anspringen von Startansicht, Health-Check, Wartungsmenü, Helper-Scripts, Bestätigung, Quellcode und Exit.
 - **Freie Textauswahl**: Alle Terminalinhalte können direkt mit der Maus markiert und per Tastatur kopiert werden (`Strg+C`).
 - Offline- und Online-fähig: Lädt lokale Vendor-Assets (`vendor/`) oder eingebetteten Cast, funktioniert sowohl via `file://` als auch auf Webservern oder GitHub Pages.
 
@@ -108,12 +108,13 @@ python3 docs/demo/verify_demo.py
 
 ### Kriterien & Prüfpunkte:
 1. **ffprobe Stream-Validierung**:
-   - Rohvideo: Exakt 1280×720, 30 fps, Dauer zwischen 20.0s und 28.0s.
+   - Rohvideo: Exakt 1280×720, 30 fps, Dauer zwischen 20.0s und 60.0s.
    - GIF: 1100–1280 px Breite, 10–12 fps, Dateigröße < 10 MB.
 2. **OCR-Prüfung (`tesseract`)**:
    - Sekunde 2.0: Extrahiert Frame und verifiziert Schlüsselbegriff `"PROXMOX MANAGER"`.
    - Sekunde 8.0: Extrahiert Frame und verifiziert Schlüsselbegriff `"Health"`.
-   - Sekunde 18.0: Extrahiert Frame und verifiziert Schlüsselbegriff `"Community PVE"`.
+   - Sekunde 18.0: Extrahiert Frame und verifiziert Schlüsselbegriff `"Helper-Scripts"`.
+   - Bestätigungsschirm (Zeitpunkt aus der eingecheckten `out/demo_markers.json`, vom Treiber aufgezeichnet): verifiziert `"FREMDER CODE"` und `root`.
 3. **Privacy-Check (Regex)**:
    - Vollständiger Scan der OCR-Texte aller Frames und des gesamten aufgezeichneten PTY-Bytestroms (`pty_stream.log`).
-   - Verifiziert 0 Treffer für reale Hostnamen (`Node: pve`, `pve.fritz.box`) und RFC1918-IPs (`192.168.*`, `10.*`, `172.16-31.*`).
+   - Verifiziert 0 Treffer für reale Hostnamen (`Node: pve`, `Host (pve)`, `pve.fritz.box`; Steuerzeichen werden vor dem Scan entfernt, damit durch Farbcodes getrennte Namen gefunden werden) und RFC1918-IPs (`192.168.*`, `10.*`, `172.16-31.*`).

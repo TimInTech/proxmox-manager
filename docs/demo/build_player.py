@@ -304,20 +304,26 @@ def build_player() -> None:
         <button class="chapter-btn" onclick="seekTo(0)">
           <span class="chapter-time">0:00</span> Startansicht
         </button>
-        <button class="chapter-btn" onclick="seekTo(3.2)">
-          <span class="chapter-time">0:03</span> Health Check (h)
+        <button class="chapter-btn" onclick="seekTo(5.8)">
+          <span class="chapter-time">0:05</span> Health Check (h)
         </button>
-        <button class="chapter-btn" onclick="seekTo(9.5)">
-          <span class="chapter-time">0:10</span> Hauptmenü
+        <button class="chapter-btn" onclick="seekTo(11.8)">
+          <span class="chapter-time">0:11</span> Hauptmenü
         </button>
-        <button class="chapter-btn" onclick="seekTo(12.0)">
-          <span class="chapter-time">0:12</span> Wartungsmenü (m)
+        <button class="chapter-btn" onclick="seekTo(15.7)">
+          <span class="chapter-time">0:15</span> Wartungsmenü (m)
         </button>
-        <button class="chapter-btn" onclick="seekTo(15.0)">
-          <span class="chapter-time">0:15</span> Community PVE-Werkzeuge
+        <button class="chapter-btn" onclick="seekTo(17.4)">
+          <span class="chapter-time">0:17</span> Helper-Scripts (Community)
         </button>
-        <button class="chapter-btn" onclick="seekTo(22.0)">
-          <span class="chapter-time">0:22</span> Beenden (q)
+        <button class="chapter-btn" onclick="seekTo(26.7)">
+          <span class="chapter-time">0:26</span> Bestätigung vor dem Start
+        </button>
+        <button class="chapter-btn" onclick="seekTo(32.3)">
+          <span class="chapter-time">0:32</span> Quellcode ansehen (v)
+        </button>
+        <button class="chapter-btn" onclick="seekTo(39.4)">
+          <span class="chapter-time">0:39</span> Beenden (q)
         </button>
       </div>
     </div>

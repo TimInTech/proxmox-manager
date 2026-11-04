@@ -1,0 +1,52 @@
+pman Wartung | HOST | Community-Skripte
+Proxmox VE Helper-Scripts (Community) · MIT · Fremder Code, nicht von pman
+Web:    https://community-scripts.org
+Quelle: https://github.com/community-scripts/ProxmoxVE
+Quellstand 2026-11-03: 5 von 9 weichen ab - betroffene Tools sind blockiert
+───────────────────────────────────────────────────────────────────────────────
+ PRÜFEN & SICHERN                       │ PVE Kernel Clean
+   [LESEN ] Disk Health                 │ Entfernt nicht mehr benötigte
+   [ÄNDERT] Host Backup                 │ Kernelpakete vom Proxmox-Host.
+ AKTUALISIEREN & OPTIMIEREN             │
+   [ÄNDERT] LXC Updater                 │ Stufe  LÖSCHT – entfernt Daten oder
+   [ÄNDERT] LXC Filesystem Trim         │        Pakete, kein Papierkorb
+   [ÄNDERT] CPU Scaling Governor        │ Folge  Paketentfernung auf dem Host.
+ AUFRÄUMEN – LÖSCHT DATEN               │        Vor Bestätigung installierte
+ > [LÖSCHT] Kernel Clean              ! │        und aktive Kernel prüfen.
+   [LÖSCHT] LXC Cleaner               ! │ Läuft  als root auf dem Host
+   [LÖSCHT] Clean Orphaned LVM          │ Stand  geprüft 2026-11-04 (0123456)
+  ← Zurück zum Wartungsmenü             │ Datei  tools/pve/kernel-clean.sh
+                                        │ Start  blockiert: core.func geändert
+                                        │        (1111111 → 2222222)
+                                        │
+
+↑↓ Auswahl | Enter prüfen & bestätigen | Esc zurück | q Ende
+Bereit – es wurde noch nichts gestartet
+---attrs---
+bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb
+bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb
+
+
+
+
+bbbbbbbbbbbbbbbbb.........................bbbbbbbbbbbbbbbb
+...bbbbbbbb
+...bbbbbbbb
+bbbbbbbbbbbbbbbbbbbbbbbbbbb
+...bbbbbbbb......................................bbbbbbbbbbbbbbbbbbbbbbbbbbbb
+...bbbbbbbb......................................bbbbbbbbbbbbbbbbbbbbbbb
+...bbbbbbbb
+bbbbbbbbbbbbbbbbbbbbbbbbb
+RRRXXXXXXXXRRRRRRRRRRRRRRRRRRRRRRRRRRRR
+...bbbbbbbb...........................b
+...bbbbbbbb
+
+.................................................bbbbbbbbbbbbbbbbbbbbbbbbbbbbb
+.................................................bbbbbbbbbbbbbbbbbbb
+
+
+
+bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb
+---links---
+2,8 https://community-scripts.org https://community-scripts.org
+3,8 https://github.com/community-scripts/ProxmoxVE https://github.com/community-scripts/ProxmoxVE

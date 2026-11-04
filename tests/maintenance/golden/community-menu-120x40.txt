@@ -1,0 +1,84 @@
+pman Wartung | HOST | Community-Skripte
+Proxmox VE Helper-Scripts (Community) · MIT · Fremder Code, nicht von pman
+Web:    https://community-scripts.org
+Quelle: https://github.com/community-scripts/ProxmoxVE
+Quellstand 2026-11-03: 5 von 9 weichen ab - betroffene Tools sind blockiert
+───────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+ PRÜFEN & SICHERN                           │ PVE Kernel Clean
+   [LESEN ] Disk Health                     │ Entfernt nicht mehr benötigte Kernelpakete vom Proxmox-Host.
+   [ÄNDERT] Host Backup                     │
+ AKTUALISIEREN & OPTIMIEREN                 │ Stufe  LÖSCHT – entfernt Daten oder Pakete, kein Papierkorb
+   [ÄNDERT] LXC Updater                     │ Folge  Paketentfernung auf dem Host. Vor Bestätigung installierte und
+   [ÄNDERT] LXC Filesystem Trim             │        aktive Kernel prüfen.
+   [ÄNDERT] CPU Scaling Governor            │ Läuft  als root auf dem Host
+ AUFRÄUMEN – LÖSCHT DATEN                   │ Stand  geprüft 2026-11-04 (0123456)
+ > [LÖSCHT] Kernel Clean                  ! │ Datei  tools/pve/kernel-clean.sh
+   [LÖSCHT] LXC Cleaner                   ! │ Start  blockiert: core.func geändert (1111111 → 2222222)
+   [LÖSCHT] Clean Orphaned LVM              │
+  ← Zurück zum Wartungsmenü                 │
+                                            │
+                                            │
+                                            │
+                                            │
+                                            │
+                                            │
+                                            │
+                                            │
+                                            │
+                                            │
+                                            │
+                                            │
+                                            │
+                                            │
+                                            │
+                                            │
+                                            │
+                                            │
+                                            │
+
+↑↓ Auswahl | Enter prüfen & bestätigen | Esc zurück | q Ende
+Bereit – es wurde noch nichts gestartet
+---attrs---
+bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb
+bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb
+
+
+
+
+bbbbbbbbbbbbbbbbb.............................bbbbbbbbbbbbbbbb
+...gggggggg
+...yyyyyyyy
+bbbbbbbbbbbbbbbbbbbbbbbbbbb..........................bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb
+...yyyyyyyy
+...yyyyyyyy
+...yyyyyyyy
+bbbbbbbbbbbbbbbbbbbbbbbbb
+RRRrrrrrrrrRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRR
+...rrrrrrrr...............................b..........bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb
+...rrrrrrrr
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb
+---links---
+2,8 https://community-scripts.org https://community-scripts.org
+3,8 https://github.com/community-scripts/ProxmoxVE https://github.com/community-scripts/ProxmoxVE

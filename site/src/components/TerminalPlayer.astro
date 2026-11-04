@@ -1,6 +1,6 @@
 ---
 const base = import.meta.env.BASE_URL.replace(/\/$/, '');
-const chapters = [['0:00',0,'Startansicht'],['0:03',3.2,'Health Check'],['0:10',9.5,'Hauptmenü'],['0:12',12,'Wartungsmenü'],['0:15',15,'Community-Werkzeuge'],['0:22',22,'Beenden']];
+const chapters = [['0:00',0,'Startansicht'],['0:05',5.8,'Health Check'],['0:11',11.8,'Hauptmenü'],['0:15',15.7,'Wartungsmenü'],['0:17',17.4,'Helper-Scripts (Community)'],['0:26',26.7,'Bestätigung'],['0:32',32.3,'Quellcode (v)'],['0:39',39.4,'Beenden']];
 ---
 <link rel="stylesheet" href={`${base}/vendor/asciinema-player.css`} />
 <div class="terminal" data-cast={`${base}/demo/proxmox-manager-demo.cast`}><div class="terminal-bar"><span>pman · interaktive Aufzeichnung</span><span>80 × 24</span></div><div class="player" aria-label="Abspielbare Proxmox-Manager-Terminaldemo"><p class="muted">Terminaldemo wird geladen. <a href={`${base}/demo/proxmox-manager-demo.cast`}>Aufzeichnung herunterladen</a></p></div><div class="chapters" aria-label="Kapitel wählen">{chapters.map(([clock,time,label]) => <button type="button" data-seek={time} aria-label={`${label} bei ${clock}`}><span>{clock}</span> {label}</button>)}</div></div>

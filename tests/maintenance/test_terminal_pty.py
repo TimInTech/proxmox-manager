@@ -95,7 +95,12 @@ class TerminalPTYTest(unittest.TestCase):
             wait_for('Prüfung läuft'.encode())
             os.write(master, b'\x1b')
             wait_for(b'Abgebrochen')
-            os.write(master, b'q')
+            # The UI discards input queued while the result is drawn, so a 'q' sent in
+            # the same instant can be dropped; repeat it like a user would.
+            deadline = time.monotonic() + 4
+            while process.poll() is None and time.monotonic() < deadline:
+                time.sleep(.3)
+                os.write(master, b'q')
             self.assertEqual(process.wait(timeout=5), 0)
             self.assertEqual(termios.tcgetattr(slave), original)
         finally:
