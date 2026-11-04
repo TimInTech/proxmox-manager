@@ -1,0 +1,83 @@
+pman Wartung | HOST | Community-Skript starten?
+Proxmox VE Helper-Scripts (Community) · MIT · https://community-scripts.org
+───────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+Quellcode kernel-clean.sh - genau diese 39 Bytes werden gestartet.
+SHA-1 (Git-Blob): 98351a487f14ed77df99f8945a9f45bf0b1870c0
+
+#!/usr/bin/env bash
+echo one
+    echo two
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+↑↓ PgUp/PgDn blättern | Esc zurück zur Bestätigung
+Quellcode-Vorschau – es wird nichts ausgeführt
+---attrs---
+bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb
+bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb
+
+bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb
+---links---
+1,46 https://community-scripts.org https://community-scripts.org

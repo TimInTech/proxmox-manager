@@ -1,0 +1,83 @@
+pman Wartung | HOST
+                                            Details
+  Storage, Dateisysteme, Inodes           │ Proxmox VE Helper-Scripts (Community)
+  SMART und Fehlerverlauf                 │ Fremder Code unter MIT-Lizenz - nicht von pman und nicht von Proxmox.
+  TRIM-Zeitplanung, Kernel, Backups       │
+> Proxmox VE Helper-Scripts (8) ▸         │ https://community-scripts.org
+  Herkunft und Aktualitätsstatus          │
+                                          │ Enter öffnet 8 ausgewählte Host-Skripte; gestartet wird erst nach
+                                          │ Bestätigung.
+                                          │
+                                          │
+                                          │
+                                          │
+                                          │
+                                          │
+                                          │
+                                          │
+                                          │
+                                          │
+                                          │
+                                          │
+                                          │
+                                          │
+                                          │
+                                          │
+                                          │
+                                          │
+                                          │
+                                          │
+                                          │
+                                          │
+                                          │
+                                          │
+                                          │
+                                          │
+                                          │
+                                          │
+
+↑↓ Auswahl | Enter | PgUp/PgDn | Esc | q Ende
+Bereit
+---attrs---
+bbbbbbbbbbbbbbbbbbb
+............................................bbbbbbb
+............................................bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb
+
+
+RRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRR
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+bbbbbb
+---links---
+5,44 https://community-scripts.org https://community-scripts.org

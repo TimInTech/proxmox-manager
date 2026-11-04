@@ -1,0 +1,51 @@
+pman Wartung | HOST
+                                      Details
+  Storage, Dateisysteme, Inodes     | Proxmox VE Helper-Scripts (Community)
+  SMART und Fehlerverlauf           | Fremder Code unter MIT-Lizenz - nicht von
+  TRIM-Zeitplanung, Kernel, Backups | pman und nicht von Proxmox.
+> Proxmox VE Helper-Scripts (8) >   |
+  Herkunft und Aktualitätsstatus    | https://community-scripts.org
+                                    |
+                                    | Enter öffnet 8 ausgewählte Host-Skripte;
+                                    | gestartet wird erst nach Bestätigung.
+                                    |
+                                    |
+                                    |
+                                    |
+                                    |
+                                    |
+                                    |
+                                    |
+                                    |
+                                    |
+                                    |
+
+^v Auswahl | Enter | PgUp/PgDn | Esc | q Ende
+Bereit
+---attrs---
+bbbbbbbbbbbbbbbbbbb
+......................................bbbbbbb
+......................................bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb
+
+
+RRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRR
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+bbbbbb
+---links---
+6,38 https://community-scripts.org https://community-scripts.org

@@ -1,0 +1,51 @@
+pman Wartung | HOST | Community-Skript starten?
+Proxmox VE Helper-Scripts (Community) | MIT | https://community-scripts.org
+-------------------------------------------------------------------------------
+Start blockiert - nichts wurde ausgeführt.
+
+Datei: community-scripts/core/core/core.func
+Geprüft 1111111  ->  aktuell 2222222
+
+pman startet nur Stände, die geprüft wurden.
+Nächster Schritt: neuen pman-Release abwarten oder die Datei selbst prüfen.
+
+
+
+
+
+
+
+
+
+
+
+
+PgUp/PgDn Blättern | Esc Zurück | q Ende
+Start blockiert
+---attrs---
+bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb
+bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+bbbbbbbbbbbbbbb
+---links---
+1,46 https://community-scripts.org https://community-scripts.org

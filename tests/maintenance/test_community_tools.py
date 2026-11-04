@@ -77,7 +77,7 @@ class CommunityToolsTest(unittest.TestCase):
              patch.object(ui.locale, 'getpreferredencoding', return_value='UTF-8'), \
              patch.object(community, 'run_tool') as run:
             ui.run_tui(Context('host'))
-        self.assertTrue(any('COMMUNITY PVE-WERKZEUGE' in row for row in screen.rows))
+        self.assertTrue(any('Community-Skripte' in row for row in screen.rows))
         run.assert_not_called()
 
     def test_back_entry_updates_community_detail(self):
@@ -102,7 +102,7 @@ class CommunityToolsTest(unittest.TestCase):
              patch.object(ui.locale, 'setlocale'), \
              patch.object(ui.locale, 'getpreferredencoding', return_value='UTF-8'):
             ui.run_tui(Context('host'))
-        self.assertTrue(any('Community-Menü schließen' in row for row in screen.rows))
+        self.assertTrue(any(row == 'Zurück zum Wartungsmenü.' for row in screen.rows))
 
     def test_declining_helper_start_never_calls_runner(self):
         class Screen:
@@ -126,8 +126,9 @@ class CommunityToolsTest(unittest.TestCase):
              patch.object(ui.curses, 'has_colors', return_value=False), \
              patch.object(ui.locale, 'setlocale'), \
              patch.object(ui.locale, 'getpreferredencoding', return_value='UTF-8'), \
-             patch.object(community, 'preflight', side_effect=lambda tool_id: next(t for t in community.TOOLS if t['id'] == tool_id)), \
-             patch.object(community, 'run_tool') as run:
+             patch.object(community, 'prepare_launch', side_effect=lambda tool_id: community.Launch(
+                 next(t for t in community.TOOLS if t['id'] == tool_id), b'#!/bin/bash\n', b'# core\n')), \
+             patch.object(community, 'run_launch') as run:
             ui.run_tui(Context('host'))
         run.assert_not_called()
 
@@ -192,8 +193,8 @@ class CommunityTerminalTest(unittest.TestCase):
              patch.object(ui.curses, 'flushinp'), \
              patch.object(ui.curses, 'endwin') as endwin, \
              patch.object(ui.curses, 'reset_prog_mode') as reset, \
-             patch.object(community, 'preflight', return_value=tool), \
-             patch.object(community, 'run_tool', side_effect=RuntimeError('failure')):
+             patch.object(community, 'prepare_launch', return_value=community.Launch(tool, b'', b'')), \
+             patch.object(community, 'run_launch', side_effect=RuntimeError('failure')):
             ui._screen(Screen(), Context('host'))
         endwin.assert_called_once()
         reset.assert_called_once()

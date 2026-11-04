@@ -1,0 +1,85 @@
+pman Wartung | HOST | Community-Skript starten?
+Proxmox VE Helper-Scripts (Community) · MIT · https://community-scripts.org
+───────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+PVE Kernel Clean
+Stufe  LÖSCHT – entfernt Daten oder Pakete, kein Papierkorb
+
+FREMDER CODE – läuft als root auf diesem Host (pve).
+Er stammt weder von pman noch von Proxmox.
+
+Quelle https://github.com/community-scripts/ProxmoxVE/blob/0123456789abcdef0123456789abcdef01234567/tools/pve/kernel-
+       clean.sh
+Befehl bash kernel-clean.sh  (pman lädt die Datei, prüft SHA-1 98351a4… und startet genau diese Bytes in einem
+       Temp-Verzeichnis)
+Core   core/core.func @ fedcba9 · Telemetrie (api.func) wird nicht geladen
+Stand  geprüft 2026-11-04 · Upstream live: unverändert
+Folge  Paketentfernung auf dem Host. Vor Bestätigung installierte und aktive Kernel prüfen.
+
+Das Skript läuft danach interaktiv weiter; pman kann es nicht zurückrollen.
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+v Quellcode | j Starten | Esc/n Abbruch | PgUp/PgDn
+Wartet auf Bestätigung
+---attrs---
+bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb
+bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb
+
+bbbbbbbbbbbbbbbb
+.......bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb
+
+bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+bbbbbbbbbbbbbbbbbbbbbb
+---links---
+1,46 https://community-scripts.org https://community-scripts.org
+9,7 https://github.com/community-scripts/ProxmoxVE/blob/0123456789abcdef0123456789abcdef01234567/tools/pve/kernel-clean.sh https://github.com/community-scripts/ProxmoxVE/blob/0123456789abcdef0123456789abcdef01234567/tools/pve/kernel-
+10,7 https://github.com/community-scripts/ProxmoxVE/blob/0123456789abcdef0123456789abcdef01234567/tools/pve/kernel-clean.sh clean.sh

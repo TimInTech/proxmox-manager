@@ -4,19 +4,15 @@ import fcntl
 import os
 import locale
 import queue
-import re
+import socket
+import sys
 import threading
-import textwrap
 from .actions import Context, execute, prepare, registry
 from .runner import Runner
 from .sources import source_report
 from .state import STATE, private_dir
-from . import community
-
-
-def clean_text(value):
-    value = re.sub(r'\x1b\[[0-?]*[ -/]*[@-~]', '', str(value))
-    return ''.join(c for c in value if c in '\n\t' or (c.isprintable() and c != '\x1b'))
+from . import community, view
+from .view import clean_text, wrap_output  # noqa: F401  (re-exported for callers and tests)
 
 
 def navigate(index, direction, count):
@@ -31,12 +27,6 @@ def page_offset(offset, direction, page_size, line_count):
 
 def terminal_usable(height, width):
     return height >= 12 and width >= 45
-
-
-def wrap_output(lines, width):
-    return [piece for line in lines for piece in
-            (textwrap.wrap(clean_text(line).expandtabs(4), max(1, width),
-                           replace_whitespace=False) or [''])]
 
 
 def action_description(action):
@@ -85,31 +75,92 @@ def run_tui(ctx):
         print()
 
 
+def ascii_mode(env=os.environ):
+    return env.get('PMAN_ASCII') == '1' or env.get('TERM', '') in ('linux', 'vt100', 'vt220')
+
+
+def hyperlinks_supported(env=os.environ):
+    """OSC 8 links only where support is known; the URL stays readable text either way."""
+    forced = env.get('PMAN_HYPERLINKS')
+    if forced in ('0', '1'):
+        return forced == '1'
+    term = env.get('TERM', '')
+    if env.get('TMUX') or env.get('STY') or term.startswith(('screen', 'linux', 'vt', 'dumb')):
+        return False
+    if env.get('WT_SESSION') or env.get('KITTY_WINDOW_ID') or 'kitty' in term or 'foot' in term:
+        return True
+    if env.get('TERM_PROGRAM') in ('iTerm.app', 'WezTerm', 'vscode', 'ghostty'):
+        return True
+    vte = env.get('VTE_VERSION', '')
+    return vte.isdigit() and int(vte) >= 5000
+
+
+def emit_links(frame):
+    """Re-print link text wrapped in OSC 8 after curses drew it (curses cannot do this itself).
+
+    The visible text is the URL itself, so nothing is hidden behind a label.
+    """
+    out = []
+    for seg in frame.segs:
+        if seg.link and seg.text:
+            out.append('\x1b7\x1b[0m\x1b[{};{}H\x1b]8;;{}\x1b\\{}\x1b]8;;\x1b\\\x1b8'.format(
+                seg.y + 1, seg.x + 1, seg.link, seg.text))
+    if out:
+        os.write(sys.stdout.fileno(), ''.join(out).encode('utf-8'))
+
+
+def _stored_status():
+    try:
+        return community.stored_status()
+    except (OSError, RuntimeError, ValueError):
+        return {'checked_at': '', 'total': 0, 'deviating': 0, 'unknown': 0,
+                'tools': {t['id']: {'flagged': False, 'reason': ''} for t in community.TOOLS}}
+
+
+def _attrs(color):
+    """Curses attributes per flag letter; a badge pair is only set with fixed 256 colours."""
+    attrs = {'B': curses.A_BOLD, 'R': curses.A_REVERSE}
+    if color == '256':
+        for number, (style, (fg, bg)) in enumerate(view.BADGE_PAIRS.items(), 1):
+            curses.init_pair(number, fg, bg)
+            attrs[view.BADGE_LETTER[style]] = curses.color_pair(number)
+    return attrs
+
+
 def _screen(screen, ctx):
     curses.curs_set(0)
     screen.keypad(True)
     screen.timeout(100)
-    color = 0
+    color = ''
     if curses.has_colors() and 'NO_COLOR' not in os.environ:
         curses.start_color()
-        curses.use_default_colors()
-        curses.init_pair(1, curses.COLOR_CYAN, -1)
-        color = curses.color_pair(1)
+        if getattr(curses, 'COLORS', 0) >= 256:
+            color = '256'
+    attrs = _attrs(color)
+    ascii_only = ascii_mode()
+    links = hyperlinks_supported()
+    last_links = None
+    host = socket.gethostname()
     selected = 0
     scroll = 0
     output = [action_description(registry(ctx)[0]), '', 'Enter startet die Diagnose.']
     pending = None
     pending_community = None
+    previewing = False
+    saved_view = None
     flush_confirmation = False
     community_mode = False
     detail_mode = False
     community_selected = 0
+    stored = _stored_status()
     busy = False
     busy_kind = None
     cancel = threading.Event()
     messages = queue.Queue()
     worker = None
     status = 'Bereit'
+    page = 1
+    total = 0
 
     def start(kind, action=None):
         nonlocal busy, busy_kind, status, worker
@@ -125,16 +176,80 @@ def _screen(screen, ctx):
                 elif kind == 'sources':
                     value = source_report()
                 elif kind == 'community-check':
-                    value = community.preflight(action['id'])
+                    value = community.prepare_launch(action['id'])
                 elif kind == 'mutate':
                     value = mutate(action.id, ctx, runner)
                 else:
                     value = execute(action.id, ctx, runner)
                 messages.put((kind, value, action))
             except Exception as exc:
-                messages.put(('error', str(exc), action))
+                messages.put(('error', exc, action))
         worker = threading.Thread(target=job, daemon=True)
         worker.start()
+
+    def show_selection():
+        nonlocal output, scroll
+        scroll = 0
+        actions = registry(ctx)
+        if community_mode:
+            output = (view.community_detail(community.TOOLS[community_selected], stored)
+                      if community_selected < len(community.TOOLS) else ['Zurück zum Wartungsmenü.'])
+        elif selected < len(actions):
+            output = [action_description(actions[selected]), '', 'Quelle: ' + actions[selected].source]
+        elif ctx.scope == 'host' and selected == len(actions):
+            output = view.community_intro()
+        else:
+            output = ['Herkunft und Aktualitätsstatus', 'Enter öffnet diese Ansicht.']
+
+    def help_text(page, total):
+        if busy:
+            return 'Esc/q Abbruch | danach q Ende'
+        if previewing:
+            return '↑↓ PgUp/PgDn blättern | Esc zurück zur Bestätigung'
+        if pending_community:
+            return ('PgDn: alle Details lesen | Esc/n Abbruch' if scroll + page < total
+                    else 'v Quellcode | j Starten | Esc/n Abbruch | PgUp/PgDn')
+        if pending:
+            return ('PgDn: alle Details lesen | Esc/n Abbruch' if scroll + page < total
+                    else 'j Bestätigen | Esc/n Abbruch | PgUp/PgDn')
+        if detail_mode:
+            return 'PgUp/PgDn Blättern | Esc Zurück | q Ende'
+        if community_mode:
+            return '↑↓ Auswahl | Enter prüfen & bestätigen | Esc zurück | q Ende'
+        if ctx.scope == 'ct':
+            return '↑↓ Auswahl | Enter | Tab Pfad | Esc | q Ende'
+        return '↑↓ Auswahl | Enter | PgUp/PgDn | Esc | q Ende'
+
+    def build_model(height):
+        actions = registry(ctx)
+        modal = bool(detail_mode or pending or pending_community or busy)
+        crumb = ''
+        if community_mode:
+            crumb = 'Community-Skript starten?' if pending_community else 'Community-Skripte'
+        elif ctx.scope == 'ct':
+            crumb = 'Scan: ' + ctx.mount
+        title = ' | '.join(part for part in (
+            'pman Wartung', '{} {}'.format(ctx.scope.upper(), ctx.id or '').strip(), crumb) if part)
+        if community_mode:
+            rows = view.community_rows(stored)
+            active = community_selected
+        else:
+            rows = [view.Row('item', a.title + (' [Änderung]' if a.mutation else '')) for a in actions]
+            if ctx.scope == 'host':
+                rows.append(view.Row('item', 'Proxmox VE Helper-Scripts ({}) ▸'.format(len(community.TOOLS))))
+            rows.append(view.Row('item', 'Herkunft und Aktualitätsstatus'))
+            active = selected
+        selected_title = (community.TOOLS[community_selected]['title']
+                          if community_mode and community_selected < len(community.TOOLS)
+                          else [r for r in rows if r.kind != 'header'][active].label)
+        return view.Model(
+            title=title, rows=rows, selected=active, detail=output, modal=modal,
+            modal_title='Auswahl: ' + selected_title,
+            prov=view.provenance(view.status_line(stored)) if community_mode else None,
+            scroll=scroll, help=help_text, status=status,
+            small=('Terminal mindestens 45 Spalten und 12 Zeilen.',
+                   'Esc/q: Abbruch; danach q beendet.' if busy else 'Vergrößern oder q zum Beenden.'),
+            details_heading=not community_mode)
 
     try:
         while True:
@@ -152,13 +267,7 @@ def _screen(screen, ctx):
                     status = 'Abgebrochen'
                 elif kind == 'community-check':
                     pending_community = value
-                    output = ['COMMUNITY SCRIPT – Bestätigung', 'Ziel: HOST; Gäste werden im Helper ausgewählt.',
-                              'Werkzeug: ' + value['title'], 'Auswirkung: ' + value['impact'],
-                              'Quelle: ' + community.REPOSITORY + '/' + value['path'],
-                              'Geprüfte Revision: ' + community.REVIEWED_COMMIT,
-                              'Prüfergebnis: Live-Upstream und Core stimmen überein.',
-                              'Vor Ausführung werden Quelle und Dateiprüfsummen erneut geprüft.',
-                              'j = starten | Esc = abbrechen']
+                    output = view.confirm_blocks(value, host)
                     status = 'Wartet auf Bestätigung'
                 elif kind == 'prepare':
                     pending = action
@@ -166,85 +275,36 @@ def _screen(screen, ctx):
                               '', 'Änderung ausführen? j = bestätigen, Esc = abbrechen',
                               'Abbruch eines laufenden Befehls ist kein Rollback.']
                     status = 'Bestätigung erforderlich'
+                elif kind == 'error' and isinstance(value, community.SourceBlocked):
+                    output = value.lines()
+                    detail_mode = True
+                    status = 'Start blockiert'
                 else:
-                    output = clean_text(value).expandtabs(4).splitlines() or ['Keine Ausgabe.']
+                    text = value if kind != 'error' else str(value)
+                    output = clean_text(text).expandtabs(4).splitlines() or ['Keine Ausgabe.']
                     detail_mode = True
                     status = ('Abgebrochen' if cancel.is_set() else 'Fehlgeschlagen') if kind == 'error' else 'Erfolgreich'
             except queue.Empty:
                 pass
             screen.erase()
             height, width = screen.getmaxyx()
-            def put(y, text, attr=0, x=0, limit=None):
-                if 0 <= y < height and width > x + 1:
-                    try:
-                        screen.addnstr(y, x, clean_text(text), min(width - x - 1, limit or width), attr)
-                    except curses.error:
-                        pass
-            if height < 12 or width < 45:
-                put(0, 'Terminal mindestens 45 Spalten und 12 Zeilen.')
-                put(1, 'Esc/q: Abbruch; danach q beendet.' if busy else 'Vergrößern oder q zum Beenden.')
-            else:
-                actions = registry(ctx)
-                if community_mode:
-                    menu = [tool['title'] for tool in community.TOOLS] + ['← Zurück zum Wartungsmenü']
-                    active_selected = community_selected
-                else:
-                    menu = [a.title + (' [Änderung]' if a.mutation else '') for a in actions]
-                    if ctx.scope == 'host':
-                        menu.append('Community PVE-Werkzeuge ({})'.format(len(community.TOOLS)))
-                    menu.append('Herkunft und Aktualitätsstatus')
-                    active_selected = selected
-                title = 'pman Wartung | {} {} | {}'.format(
-                    ctx.scope.upper(), ctx.id or '',
-                    'COMMUNITY PVE-WERKZEUGE' if community_mode else
-                    ('Wartung | Scan: ' + ctx.mount if ctx.scope == 'ct' else 'Wartung'))
-                put(0, title, color | curses.A_BOLD)
-                modal = detail_mode or pending or pending_community or busy
-                side_by_side = width >= 76 and not modal
-                if modal:
-                    selected_title = (community.TOOLS[community_selected]['title']
-                                      if community_mode and community_selected < len(community.TOOLS)
-                                      else menu[active_selected])
-                    put(1, 'Auswahl: ' + selected_title, curses.A_BOLD)
-                    start_y, detail_x, detail_width = 3, 0, width - 2
-                elif side_by_side:
-                    menu_width = min(34, width // 2)
-                    menu_height = max(1, height - 5)
-                    first = max(0, active_selected - menu_height + 1)
-                    for row, index in enumerate(range(first, min(len(menu), first + menu_height)), 2):
-                        put(row, ('> ' if index == active_selected else '  ') + menu[index],
-                            curses.A_REVERSE if index == active_selected else 0, limit=menu_width - 1)
-                    detail_x, detail_width, start_y = menu_width + 1, width - menu_width - 3, 2
-                    put(1, 'Details', color | curses.A_BOLD, x=detail_x)
-                else:
-                    menu_height = min(len(menu), max(2, height // 4))
-                    first = max(0, active_selected - menu_height + 1)
-                    for row, index in enumerate(range(first, min(len(menu), first + menu_height)), 2):
-                        put(row, ('> ' if index == active_selected else '  ') + menu[index],
-                            curses.A_REVERSE if index == active_selected else 0)
-                    start_y, detail_x, detail_width = menu_height + 3, 0, width - 2
-                page = max(1, height - start_y - 3)
-                wrapped = wrap_output(output, detail_width)
-                scroll = min(scroll, max(0, len(wrapped) - page))
-                for row, line in enumerate(wrapped[scroll:scroll + page], start_y):
-                    put(row, line, x=detail_x, limit=detail_width)
-                first_line = scroll + 1 if wrapped else 0
-                last_line = min(len(wrapped), scroll + page)
-                put(height - 3, 'Zeilen {}–{} von {}'.format(first_line, last_line, len(wrapped)), color)
-                if busy:
-                    help_text = 'Esc/q Abbruch | danach q Ende'
-                elif pending or pending_community:
-                    help_text = ('PgDn: alle Details lesen | Esc/n Abbruch' if scroll + page < len(wrapped)
-                                 else 'j Bestätigen | Esc/n Abbruch | PgUp/PgDn')
-                elif detail_mode:
-                    help_text = 'PgUp/PgDn Blättern | Esc Zurück | q Ende'
-                else:
-                    help_text = '↑↓ Auswahl | Enter | PgUp/PgDn | Esc | q Ende'
-                    if ctx.scope == 'ct':
-                        help_text = '↑↓ Auswahl | Enter | Tab Pfad | Esc | q Ende'
-                put(height - 2, help_text, color)
-                put(height - 1, status, color)
+            frame = view.render(build_model(height), height, width, ascii_only)
+            page, total = frame.page, frame.total
+            for seg in frame.segs:
+                flags = view.attr_flags(seg.style, color)
+                attr = 0
+                for letter in flags:
+                    attr |= attrs.get(letter, 0)
+                try:
+                    screen.addnstr(seg.y, seg.x, seg.text, len(seg.text), attr)
+                except curses.error:
+                    pass
             screen.refresh()
+            if links:
+                signature = tuple((s.y, s.x, s.text, s.link) for s in frame.segs if s.link)
+                if signature != last_links:
+                    last_links = signature
+                    emit_links(frame)
             if flush_confirmation:
                 flush_confirmation = False
                 try:
@@ -275,31 +335,57 @@ def _screen(screen, ctx):
                     cancel.set()
                     status = 'Abbruch angefordert; CT-Scan kann bis zum Gast-Zeitlimit (55 s) weiterlaufen.'
                 continue
-            if (pending or pending_community) and key in (curses.KEY_PPAGE, curses.KEY_NPAGE):
-                scroll = page_offset(scroll, -1 if key == curses.KEY_PPAGE else 1, page, len(wrapped))
+            if previewing:
+                if key in (curses.KEY_PPAGE, curses.KEY_NPAGE):
+                    scroll = page_offset(scroll, -1 if key == curses.KEY_PPAGE else 1, page, total)
+                elif key == curses.KEY_UP:
+                    scroll = max(0, scroll - 1)
+                elif key == curses.KEY_DOWN:
+                    scroll = min(max(0, total - page), scroll + 1)
+                elif key in (27, ord('n'), ord('N')):
+                    previewing = False
+                    output, scroll = saved_view
+                    status = 'Wartet auf Bestätigung'
+                elif key == ord('q'):
+                    return
                 continue
-            if (pending or pending_community) and key in (ord('j'), ord('J')) and scroll + page < len(wrapped):
+            if (pending or pending_community) and key in (curses.KEY_PPAGE, curses.KEY_NPAGE):
+                scroll = page_offset(scroll, -1 if key == curses.KEY_PPAGE else 1, page, total)
+                continue
+            if (pending or pending_community) and key in (ord('j'), ord('J')) and scroll + page < total:
                 status = 'Bitte zuerst alle Details mit Bild ab lesen.'
                 continue
             if pending_community:
+                if key in (ord('v'), ord('V')):
+                    saved_view = (output, scroll)
+                    previewing = True
+                    output = view.preview_blocks(pending_community)
+                    scroll = 0
+                    status = 'Quellcode-Vorschau – es wird nichts ausgeführt'
+                    continue
                 if key in (ord('j'), ord('J')):
-                    tool = pending_community
+                    launch = pending_community
                     pending_community = None
                     status = 'Prüfe Quellstand und starte Helper Script …'
-                    put(height - 1, status, color)
+                    screen.addnstr(height - 1, 0, ' ' * (width - 1), width - 1)
+                    screen.addnstr(height - 1, 0, status, width - 1, curses.A_BOLD)
                     screen.refresh()
                     try:
                         curses.endwin()
-                        exit_code = community.run_tool(tool['id'])
+                        exit_code = community.run_launch(launch)
                         detail_mode = True
-                        output = ['Community Script beendet.', 'Exit-Code: {}'.format(exit_code),
-                                  'Quelle: community-scripts/ProxmoxVE @ {}'.format(community.REVIEWED_COMMIT[:12])]
+                        output = view.result_blocks(launch, exit_code)
                         status = 'Abgeschlossen' if exit_code == 0 else 'Helper Script mit Fehler beendet'
+                    except community.SourceBlocked as exc:
+                        detail_mode = True
+                        output = exc.lines()
+                        status = 'Start blockiert'
                     except Exception as exc:
                         detail_mode = True
                         output = ['Start abgebrochen:', clean_text(exc)]
                         status = 'Quelle geändert, nicht verfügbar oder Start fehlgeschlagen'
                     finally:
+                        last_links = None
                         try:
                             curses.reset_prog_mode()
                             screen.keypad(True)
@@ -331,50 +417,28 @@ def _screen(screen, ctx):
             if key == 27:
                 if detail_mode:
                     detail_mode = False
-                    scroll = 0
-                    if community_mode and community_selected < len(community.TOOLS):
-                        tool = community.TOOLS[community_selected]
-                        output = [tool['summary'], 'Risiko / Auswirkung: ' + tool['impact']]
-                    elif selected < len(registry(ctx)):
-                        output = [action_description(registry(ctx)[selected])]
-                    else:
-                        output = ['Enter öffnet diese Ansicht.']
+                    show_selection()
                     status = 'Bereit'
                     continue
                 if community_mode:
                     community_mode = False
                     selected = len(registry(ctx))
-                    output = ['Community-Werkzeugmenü geschlossen.']
+                    show_selection()
                     status = 'Bereit'
                     continue
                 return
             if detail_mode and key not in (curses.KEY_PPAGE, curses.KEY_NPAGE):
                 continue
             if key in (curses.KEY_UP, curses.KEY_DOWN):
+                step = -1 if key == curses.KEY_UP else 1
                 if community_mode:
-                    scroll = 0
-                    community_selected = navigate(community_selected, -1 if key == curses.KEY_UP else 1,
-                                                   len(community.TOOLS) + 1)
-                    if community_selected < len(community.TOOLS):
-                        tool = community.TOOLS[community_selected]
-                        output = [tool['summary'], '', 'Risiko / Auswirkung:', tool['impact'], '',
-                                  'Quelle: {} @ {}'.format(tool['path'], community.REVIEWED_COMMIT[:12]),
-                                  'Lizenz: MIT; Helper wird als Community-Code ausgeführt.']
-                    else:
-                        output = ['Community-Menü schließen und zur Wartungsansicht zurückkehren.']
+                    community_selected = navigate(community_selected, step, len(community.TOOLS) + 1)
+                    status = 'Bereit – es wurde noch nichts gestartet'
                 else:
-                    selected = navigate(selected, -1 if key == curses.KEY_UP else 1,
-                                        len(registry(ctx)) + (2 if ctx.scope == 'host' else 1))
-                    scroll = 0
-                    if selected < len(registry(ctx)):
-                        action = registry(ctx)[selected]
-                        output = [action_description(action), '', 'Quelle: ' + action.source]
-                    else:
-                        output = ['Community-Werkzeuge' if ctx.scope == 'host' and selected == len(registry(ctx)) else 'Herkunft und Aktualitätsstatus',
-                                  'Enter öffnet diese Ansicht.']
+                    selected = navigate(selected, step, len(registry(ctx)) + (2 if ctx.scope == 'host' else 1))
+                show_selection()
             elif key in (curses.KEY_PPAGE, curses.KEY_NPAGE):
-                if height >= 12 and width >= 45:
-                    scroll = page_offset(scroll, -1 if key == curses.KEY_PPAGE else 1, page, len(wrapped))
+                scroll = page_offset(scroll, -1 if key == curses.KEY_PPAGE else 1, page, total)
             elif key == 9 and ctx.scope == 'ct':
                 mounts = ['/var', '/home', '/opt', '/srv']
                 ctx = Context(ctx.scope, ctx.id, mounts[(mounts.index(ctx.mount) + 1) % len(mounts)])
@@ -384,19 +448,18 @@ def _screen(screen, ctx):
                     if community_selected == len(community.TOOLS):
                         community_mode = False
                         selected = len(actions)
-                        output = ['Zurück im Wartungsmenü.']
+                        show_selection()
                         status = 'Bereit'
                     else:
-                        tool = community.TOOLS[community_selected]
-                        start('community-check', tool)
+                        output = ['Prüfe den aktuellen Upstream-Stand und lade die Datei …',
+                                  'Das kann bis zu einer Minute dauern; Esc bricht ab.']
+                        start('community-check', community.TOOLS[community_selected])
                 elif ctx.scope == 'host' and selected == len(actions):
                     community_mode = True
                     community_selected = 0
-                    tool = community.TOOLS[0]
-                    output = [tool['summary'], '', 'Risiko / Auswirkung:', tool['impact'], '',
-                              'Jeder Start prüft den aktuellen Upstream und die Skript-Prüfsumme.',
-                              'Die optionale Upstream-Telemetrie wird nicht geladen.']
-                    status = 'Community Scripts: {} geprüfte Host-Werkzeuge'.format(len(community.TOOLS))
+                    stored = _stored_status()
+                    show_selection()
+                    status = 'Bereit – es wurde noch nichts gestartet'
                 elif selected == len(actions) + (1 if ctx.scope == 'host' else 0):
                     start('sources')
                 else:
