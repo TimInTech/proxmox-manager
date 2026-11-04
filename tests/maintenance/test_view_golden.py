@@ -32,9 +32,7 @@ def model(name):
     with patch.multiple(community, **FIXED), patch.object(community, 'reviewed_at', return_value='2026-11-04'):
         actions = registry(Context('host'))
         if name == 'host-main':
-            rows = [view.Row('item', a.title) for a in actions] + [
-                view.Row('item', 'Proxmox VE Helper-Scripts ({}) ▸'.format(len(community.TOOLS))),
-                view.Row('item', 'Herkunft und Aktualitätsstatus')]
+            rows = view.main_rows(actions, 'host')
             return view.Model(title='pman Wartung | HOST', rows=rows, selected=len(actions),
                               detail=view.community_intro(), details_heading=True,
                               help='↑↓ Auswahl | Enter | PgUp/PgDn | Esc | q Ende', status='Bereit')
@@ -116,11 +114,17 @@ class AccessibilityTest(unittest.TestCase):
         for name in SCREENS:
             text, _ = render_text(name, (80, 24), '', False)
             codes = text.split('---attrs---')[1].split('---links---')[0]
-            self.assertFalse(set('gyr') & set(codes), name)
+            self.assertFalse(set('gyre') & set(codes), name)
 
     def test_colour_snapshot_uses_badges_only_on_hazard_tags(self):
         text, _ = render_text('community-menu', (80, 24), '256', False)
         self.assertTrue(set('gyr') & set(text.split('---attrs---')[1]))
+
+    def test_main_menu_marks_external_code_with_a_text_badge_and_colour(self):
+        text, _ = render_text('host-main', (80, 24), '256', False)
+        screen, codes = text.split('---attrs---')[0], text.split('---attrs---')[1]
+        self.assertIn('[FREMD ]', screen)
+        self.assertIn('e', codes.split('---links---')[0])
 
     def test_ascii_mode_has_no_box_or_arrow_glyphs(self):
         for name in SCREENS:

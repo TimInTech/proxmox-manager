@@ -27,8 +27,8 @@ MIN_HEIGHT, MIN_WIDTH = 12, 45
 
 # Badge colours as xterm-256 indices (fixed RGB, so contrast does not depend on
 # the terminal theme): (foreground, background). Checked in the contrast test.
-BADGE_PAIRS = {'tag_read': (16, 114), 'tag_change': (16, 220), 'tag_delete': (231, 124)}
-BADGE_LETTER = {'tag_read': 'g', 'tag_change': 'y', 'tag_delete': 'r'}
+BADGE_PAIRS = {'tag_read': (16, 114), 'tag_change': (16, 220), 'tag_delete': (231, 124), 'tag_ext': (231, 25)}
+BADGE_LETTER = {'tag_read': 'g', 'tag_change': 'y', 'tag_delete': 'r', 'tag_ext': 'e'}
 
 _ASCII = {'–': '-', '→': '->', '←': '<-', '▸': '>', '·': '|', '…': '...', '─': '-', '│': '|', '↑': '^', '↓': 'v'}
 
@@ -71,7 +71,7 @@ def wrap_blocks(blocks, width):
 
 
 def attr_flags(style, color=''):
-    """Terminal attribute letters for a style: B bold, R reverse, g/y/r badge colour pair.
+    """Terminal attribute letters for a style: B bold, R reverse, g/y/r/e badge colour pair.
 
     color is '256' only when the terminal has fixed 256 colours and NO_COLOR is
     unset; otherwise no colour is ever set and the text tags carry the meaning.
@@ -187,7 +187,7 @@ def render(m, height, width, ascii_only=False):
         put(1, m.modal_title, 'accent')
         top = 3
     side = width >= 76 and not m.modal
-    menu_w = 36 if width < 100 else 42
+    menu_w = 40 if width < 100 else 44
     selectable = [i for i, row in enumerate(m.rows) if row.kind != 'header']
     row_selected = selectable[m.selected] if 0 <= m.selected < len(selectable) else -1
     start_y, detail_x, detail_width = top + 1, 0, width - 3
@@ -235,6 +235,12 @@ def _put_row(put, y, row, selected, limit, flag_x):
         put(y, ' ' + row.label, 'accent', limit=limit)
         return
     mark = '> ' if selected else '  '
+    if row.kind == 'item' and row.tag:
+        text = mark + row.label
+        x = max(len(text) + 1, min(limit - 9, 30))  # badges line up where the label leaves room
+        put(y, text.ljust(limit) if selected else text, style, limit=limit)
+        put(y, row.tag, 'tag_{}{}'.format(row.level, '+sel' if selected else ''), x=x, limit=limit)
+        return
     if row.kind == 'tool':
         text = (' > ' if selected else '   ') + row.tag + ' ' + row.label
     elif row.kind == 'back':
@@ -251,11 +257,11 @@ def _put_row(put, y, row, selected, limit, flag_x):
 def snapshot(frame, height, width, color=''):
     """Text grid and attribute grid of a frame, for golden tests and demos.
 
-    Attribute letters: . none, b bold, R reverse, X bold+reverse, g/y/r badge colours.
+    Attribute letters: . none, b bold, R reverse, X bold+reverse, g/y/r/e badge colours.
     """
     chars = [[' '] * width for _ in range(height)]
     attrs = [['.'] * width for _ in range(height)]
-    letters = {'': '.', 'B': 'b', 'R': 'R', 'BR': 'X', 'Bg': 'g', 'By': 'y', 'Br': 'r'}
+    letters = {'': '.', 'B': 'b', 'R': 'R', 'BR': 'X', 'Bg': 'g', 'By': 'y', 'Br': 'r', 'Be': 'e'}
     for seg in frame.segs:
         code = letters[attr_flags(seg.style, color)]
         for offset, char in enumerate(seg.text):
@@ -270,7 +276,20 @@ def snapshot(frame, height, width, color=''):
 # --- Content builders for the Helper-Scripts screens -------------------------
 
 def tag_text(level):
-    return '[{}]'.format(community.LEVELS[level][0].ljust(6))
+    """Fixed-width text tag; 'ext' marks code that does not come from pman."""
+    word = community.LEVELS[level][0] if level in community.LEVELS else 'FREMD'
+    return '[{}]'.format(word.ljust(6))
+
+
+def main_rows(actions, scope):
+    """Rows of the maintenance menu: changing actions and external code carry a badge."""
+    rows = [Row('item', a.title, tag_text('change') if a.mutation else '', False,
+                'change' if a.mutation else '') for a in actions]
+    if scope == 'host':
+        rows.append(Row('item', 'Helper-Scripts ({}) ▸'.format(len(community.TOOLS)), tag_text('ext'),
+                        False, 'ext'))
+    rows.append(Row('item', 'Herkunft und Aktualitätsstatus'))
+    return rows
 
 
 def community_rows(stored):
@@ -287,13 +306,18 @@ def community_rows(stored):
 
 
 def community_intro():
-    return [L('{} {}'.format(community.PROJECT_NAME, community.EDITION), style='accent'),
-            'Fremder Code unter {}-Lizenz - nicht von pman und nicht von Proxmox.'.format(community.LICENSE),
-            '',
-            L(community.WEBSITE, community.WEBSITE),
-            '',
-            'Enter öffnet {} ausgewählte Host-Skripte; gestartet wird erst nach Bestätigung.'.format(
-                len(community.TOOLS))]
+    groups = dict(community.GROUPS)
+    counts = {}
+    for tool in community.TOOLS:
+        counts[tool['group']] = counts.get(tool['group'], 0) + 1
+    lines = [L(community.PROJECT_NAME, style='accent'),
+             '{} · {}-Lizenz'.format(community.EDITION, community.LICENSE),
+             L('Fremder Code – nicht von pman und nicht von Proxmox.', style='accent'),
+             '', L(community.WEBSITE, community.WEBSITE), '',
+             '{} Skripte, nach Absicht gruppiert:'.format(len(community.TOOLS))]
+    lines += ['  {} ({})'.format(title, counts[key])
+              for key, title in groups.items()]
+    return lines + ['', 'Enter öffnet das Menü; gestartet wird erst nach Bestätigung.']
 
 
 def community_detail(tool, stored):

@@ -39,6 +39,9 @@ Versions follow [Semantic Versioning](https://semver.org/).
 - New confirmation screen: exact source URL, command, "runs as root on this
   host", pinned revision and checksum. `v` shows the verified script before it
   is started; exactly those bytes are then executed.
+- The maintenance menu marks changing actions (`[ÄNDERT]`) and the Helper-Scripts
+  entry (`[FREMD]`, blue badge) the same way; the Helper-Scripts overview no
+  longer repeats name and URL and lists the groups.
 - A blocked start now names the changed file and the reviewed/current revision
   instead of a generic message; the menu shows the last stored source check.
 - Re-pin the reviewed Community Scripts revision (2026-11-04). Upstream had

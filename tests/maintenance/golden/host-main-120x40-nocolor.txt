@@ -1,50 +1,50 @@
 pman Wartung | HOST
-                                            Details
-  Storage, Dateisysteme, Inodes           │ Proxmox VE Helper-Scripts (Community)
-  SMART und Fehlerverlauf                 │ Fremder Code unter MIT-Lizenz - nicht von pman und nicht von Proxmox.
-  TRIM-Zeitplanung, Kernel, Backups       │
-> Proxmox VE Helper-Scripts (8) ▸         │ https://community-scripts.org
-  Herkunft und Aktualitätsstatus          │
-                                          │ Enter öffnet 8 ausgewählte Host-Skripte; gestartet wird erst nach
-                                          │ Bestätigung.
-                                          │
-                                          │
-                                          │
-                                          │
-                                          │
-                                          │
-                                          │
-                                          │
-                                          │
-                                          │
-                                          │
-                                          │
-                                          │
-                                          │
-                                          │
-                                          │
-                                          │
-                                          │
-                                          │
-                                          │
-                                          │
-                                          │
-                                          │
-                                          │
-                                          │
-                                          │
-                                          │
-                                          │
+                                              Details
+  Storage, Dateisysteme, Inodes             │ Proxmox VE Helper-Scripts
+  SMART und Fehlerverlauf                   │ (Community) · MIT-Lizenz
+  TRIM-Zeitplanung, Kernel, Backups         │ Fremder Code – nicht von pman und nicht von Proxmox.
+> Helper-Scripts (8) ▸        [FREMD ]      │
+  Herkunft und Aktualitätsstatus            │ https://community-scripts.org
+                                            │
+                                            │ 8 Skripte, nach Absicht gruppiert:
+                                            │   PRÜFEN & SICHERN (2)
+                                            │   AKTUALISIEREN & OPTIMIEREN (3)
+                                            │   AUFRÄUMEN – LÖSCHT DATEN (3)
+                                            │
+                                            │ Enter öffnet das Menü; gestartet wird erst nach Bestätigung.
+                                            │
+                                            │
+                                            │
+                                            │
+                                            │
+                                            │
+                                            │
+                                            │
+                                            │
+                                            │
+                                            │
+                                            │
+                                            │
+                                            │
+                                            │
+                                            │
+                                            │
+                                            │
+                                            │
+                                            │
+                                            │
+                                            │
+                                            │
 
 ↑↓ Auswahl | Enter | PgUp/PgDn | Esc | q Ende
 Bereit
 ---attrs---
 bbbbbbbbbbbbbbbbbbb
-............................................bbbbbbb
-............................................bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb
+..............................................bbbbbbb
+..............................................bbbbbbbbbbbbbbbbbbbbbbbbb
 
-
-RRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRR
+..............................................bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb
+RRRRRRRRRRRRRRRRRRRRRRRRRRRRRRXXXXXXXXRRRRR
 
 
 
@@ -80,4 +80,4 @@ RRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRR
 
 bbbbbb
 ---links---
-5,44 https://community-scripts.org https://community-scripts.org
+6,46 https://community-scripts.org https://community-scripts.org

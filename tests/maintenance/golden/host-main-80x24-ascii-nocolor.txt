@@ -1,34 +1,34 @@
 pman Wartung | HOST
-                                      Details
-  Storage, Dateisysteme, Inodes     | Proxmox VE Helper-Scripts (Community)
-  SMART und Fehlerverlauf           | Fremder Code unter MIT-Lizenz - nicht von
-  TRIM-Zeitplanung, Kernel, Backups | pman und nicht von Proxmox.
-> Proxmox VE Helper-Scripts (8) >   |
-  Herkunft und Aktualitätsstatus    | https://community-scripts.org
-                                    |
-                                    | Enter öffnet 8 ausgewählte Host-Skripte;
-                                    | gestartet wird erst nach Bestätigung.
-                                    |
-                                    |
-                                    |
-                                    |
-                                    |
-                                    |
-                                    |
-                                    |
-                                    |
-                                    |
-                                    |
+                                          Details
+  Storage, Dateisysteme, Inodes         | Proxmox VE Helper-Scripts
+  SMART und Fehlerverlauf               | (Community) | MIT-Lizenz
+  TRIM-Zeitplanung, Kernel, Backups     | Fremder Code - nicht von pman und
+> Helper-Scripts (8) >        [FREMD ]  | nicht von Proxmox.
+  Herkunft und Aktualitätsstatus        |
+                                        | https://community-scripts.org
+                                        |
+                                        | 8 Skripte, nach Absicht gruppiert:
+                                        |   PRÜFEN & SICHERN (2)
+                                        |   AKTUALISIEREN & OPTIMIEREN (3)
+                                        |   AUFRÄUMEN - LÖSCHT DATEN (3)
+                                        |
+                                        | Enter öffnet das Menü; gestartet wird
+                                        | erst nach Bestätigung.
+                                        |
+                                        |
+                                        |
+                                        |
+                                        |
 
 ^v Auswahl | Enter | PgUp/PgDn | Esc | q Ende
 Bereit
 ---attrs---
 bbbbbbbbbbbbbbbbbbb
-......................................bbbbbbb
-......................................bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb
+..........................................bbbbbbb
+..........................................bbbbbbbbbbbbbbbbbbbbbbbbb
 
-
-RRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRR
+..........................................bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb
+RRRRRRRRRRRRRRRRRRRRRRRRRRRRRRXXXXXXXXR...bbbbbbbbbbbbbbbbbb
 
 
 
@@ -48,4 +48,4 @@ RRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRR
 
 bbbbbb
 ---links---
-6,38 https://community-scripts.org https://community-scripts.org
+7,42 https://community-scripts.org https://community-scripts.org

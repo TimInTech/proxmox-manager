@@ -234,10 +234,7 @@ def _screen(screen, ctx):
             rows = view.community_rows(stored)
             active = community_selected
         else:
-            rows = [view.Row('item', a.title + (' [Änderung]' if a.mutation else '')) for a in actions]
-            if ctx.scope == 'host':
-                rows.append(view.Row('item', 'Proxmox VE Helper-Scripts ({}) ▸'.format(len(community.TOOLS))))
-            rows.append(view.Row('item', 'Herkunft und Aktualitätsstatus'))
+            rows = view.main_rows(actions, ctx.scope)
             active = selected
         selected_title = (community.TOOLS[community_selected]['title']
                           if community_mode and community_selected < len(community.TOOLS)
