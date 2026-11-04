@@ -134,6 +134,32 @@ class CommunityToolsTest(unittest.TestCase):
 
 
 
+class StoredStatusTest(unittest.TestCase):
+    def test_stored_check_is_compared_with_the_current_manifest(self):
+        manifest = community.json.loads(community.sources.MANIFEST.read_text())
+        by_path = {(r['repository'], r['path']): r for r in manifest['references']}
+        stale = 'f' * 40
+        rows = [{'repository': k[0], 'path': k[1], 'observed_sha': v['blob_sha'], 'status': 'Upstream geändert'}
+                for k, v in by_path.items()]
+        # The stored verdict says "changed", but the observed blob equals the reviewed pin.
+        with patch.object(community, 'read_json', return_value={'checked_at': '2026-11-04T00:00:00+00:00',
+                                                                'references': rows}):
+            status = community.stored_status()
+        self.assertEqual(status['deviating'], 0)
+        self.assertFalse(any(info['flagged'] for info in status['tools'].values()))
+        rows[0]['observed_sha'] = stale
+        with patch.object(community, 'read_json', return_value={'checked_at': 'x', 'references': rows}):
+            status = community.stored_status()
+        self.assertEqual(status['deviating'], 1)
+        self.assertTrue(any('geändert' in info['reason'] for info in status['tools'].values()))
+
+    def test_missing_state_is_unknown_not_flagged(self):
+        with patch.object(community, 'read_json', return_value={}):
+            status = community.stored_status()
+        self.assertEqual((status['deviating'], status['unknown']), (0, 9))
+        self.assertFalse(any(info['flagged'] for info in status['tools'].values()))
+
+
 class CommunityPreflightTest(unittest.TestCase):
     def test_preflight_checks_tool_and_core_without_download(self):
         with patch.object(community, '_check_current') as check, \

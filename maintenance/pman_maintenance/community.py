@@ -168,14 +168,16 @@ def stored_status():
         row = rows.get((repository, path))
         if not row:
             return 'unknown', ''
-        status = row.get('status', 'Noch nicht geprüft')
-        if status == 'geprüfter Stand':
-            return 'ok', ''
         name = path.rpartition('/')[2]
-        if status == 'Upstream geändert' and row.get('observed_sha'):
-            return 'bad', '{} geändert ({} → {})'.format(
-                name, reviewed[(repository, path)]['blob_sha'][:7], row['observed_sha'][:7])
-        return 'bad', '{}: {}'.format(name, status)
+        expected = reviewed[(repository, path)]['blob_sha']
+        observed = row.get('observed_sha')
+        # Compare with the current manifest, not the stored verdict: a re-pin
+        # after the last check must not leave the old result standing.
+        if observed:
+            if observed == expected:
+                return 'ok', ''
+            return 'bad', '{} geändert ({} → {})'.format(name, expected[:7], observed[:7])
+        return 'bad', '{}: {}'.format(name, row.get('status', 'Prüfung fehlgeschlagen'))
 
     core = finding(CORE_REPOSITORY, 'core/core.func')
     tools = {}
