@@ -93,6 +93,7 @@ secure_dir "$bin"
 secure_dir "$units"
 secure_dir "$(dirname -- "$base")"
 if [[ -e "$base" || -L "$base" ]]; then secure_dir "$base"; fi
+if [[ -e "$(dirname -- "$lang_file")" || -L "$(dirname -- "$lang_file")" ]]; then secure_dir "$(dirname -- "$lang_file")"; fi
 atomic_file() {
   local src="$1" dst="$2" mode="$3" temp
   secure_dir "$(dirname -- "$dst")"

@@ -114,6 +114,18 @@ class LanguageChoiceTest(unittest.TestCase):
             self.assertEqual(self.install(stage, '--uninstall-maintenance').returncode, 0)
             self.assertFalse(language.exists())
 
+    def test_uninstall_refuses_a_symlinked_language_directory(self):
+        with tempfile.TemporaryDirectory() as directory:
+            stage = Path(directory) / 'stage'
+            outside = Path(directory) / 'outside'
+            outside.mkdir()
+            (outside / 'language').write_text('en\n')
+            (stage / 'etc').mkdir(parents=True)
+            (stage / 'etc/pman').symlink_to(outside)
+            result = self.install(stage, '--uninstall-maintenance')
+            self.assertNotEqual(result.returncode, 0)
+            self.assertTrue((outside / 'language').exists(), 'a staged uninstall must not delete outside --destdir')
+
     def test_invalid_language_is_rejected_before_anything_is_written(self):
         with tempfile.TemporaryDirectory() as directory:
             stage = Path(directory) / 'stage'
