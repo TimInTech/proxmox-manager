@@ -12,10 +12,10 @@ from pathlib import Path
 from . import sources
 
 REPOSITORY = 'community-scripts/ProxmoxVE'
-REVIEWED_COMMIT = '28fd647e6aed3db6d771cade4fb7c8c5deb48af3'
+REVIEWED_COMMIT = 'cfa250a79597db9aa8aaadea943c9e029316a2ef'
 CORE_REPOSITORY = 'community-scripts/core'
-CORE_COMMIT = 'af0fe772dd02bed10fd0124e3aacc86f2bc900d7'
-CORE_SHA = '0e18236d58a4aec4b200c231c8a4a2387e378bbb'
+CORE_COMMIT = '2867a755e4d1edd793612ab766c082220b1ac09f'
+CORE_SHA = '1dd9d1c82b7e77040903eb3fce832dde80b6a04e'
 
 # These are host tools selected from the Host Management category.
 TOOLS = (
@@ -24,11 +24,11 @@ TOOLS = (
      'summary': 'SMART-Übersicht; bietet optional einen kurzen SMART-Selbsttest an.',
      'impact': 'Nur Diagnose bis auf Nachfrage. Kann smartmontools und nvme-cli per APT installieren.'},
     {'id': 'fstrim', 'title': 'PVE LXC Filesystem Trim',
-     'path': 'tools/pve/fstrim.sh', 'sha': 'b63b4267c97ce3c62df4ad26c5e85131562f5950',
+     'path': 'tools/pve/fstrim.sh', 'sha': 'f2b30020614632dccc9bf2300b218f304661e2cf',
      'summary': 'TRIM für LXC-Dateisysteme auf SSD- und Thin-Provisioning-Speichern.',
      'impact': 'Ändert keine Gastdateien; meldet freie Blöcke an Storage. Betrifft ausgewählte CTs gemäß Helper-Menü.'},
     {'id': 'clean-lxcs', 'title': 'PVE LXC Cleaner',
-     'path': 'tools/pve/clean-lxcs.sh', 'sha': 'e54a307a980130c43134c68d28a8c7cfcdf6b260',
+     'path': 'tools/pve/clean-lxcs.sh', 'sha': '177feea9d1f9f442023d75ebb66a10b2a184ee67',
      'summary': 'Bereinigt Paketcache und auf Wunsch Logs in ausgewählten LXC-Gästen.',
      'impact': 'Löscht gewählte Cache-/Log-Dateien in den bestätigten CTs; Logs sind danach nicht mehr verfügbar.'},
     {'id': 'kernel-clean', 'title': 'PVE Kernel Clean',
@@ -44,11 +44,11 @@ TOOLS = (
      'summary': 'Erstellt ein benutzerdefiniertes Backup ausgewählter Host-Dateien und Verzeichnisse.',
      'impact': 'Schreibt ein Archiv am gewählten Ort. Ein Backup auf demselben Host schützt nicht gegen Host-Ausfall.'},
     {'id': 'scaling-governor', 'title': 'PVE CPU Scaling Governor',
-     'path': 'tools/pve/scaling-governor.sh', 'sha': '79622844c5051349a05acdd46490a5242cfb656c',
+     'path': 'tools/pve/scaling-governor.sh', 'sha': '49ab7189d171b5e982f8a9c46405c614d9fe4f1a',
      'summary': 'Konfiguriert den CPU-Frequenz-Governor des Hosts.',
      'impact': 'Ändert Host-Energie-/Leistungsverhalten und möglicherweise Startkonfiguration.'},
     {'id': 'update-lxcs', 'title': 'PVE LXC Updater',
-     'path': 'tools/pve/update-lxcs.sh', 'sha': 'ec3dd34f2ff1b1df3c4ce7e664aab5958f9dfca5',
+     'path': 'tools/pve/update-lxcs.sh', 'sha': '252972051fdd2ccf921111677965a2acb1424cb9',
      'summary': 'Aktualisiert Betriebssystempakete in ausgewählten LXC-Gästen.',
      'impact': 'Installiert Updates in bestätigten CTs; kann Dienste oder Gäste beeinflussen.'},
 )
