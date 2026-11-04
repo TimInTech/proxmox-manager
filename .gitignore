@@ -56,4 +56,3 @@ docs/demo/out/frame_*.png
 __pycache__/
 *.py[cod]
 dist/
-docs/demo/out/demo_markers.json

@@ -114,7 +114,7 @@ python3 docs/demo/verify_demo.py
    - Sekunde 2.0: Extrahiert Frame und verifiziert Schlüsselbegriff `"PROXMOX MANAGER"`.
    - Sekunde 8.0: Extrahiert Frame und verifiziert Schlüsselbegriff `"Health"`.
    - Sekunde 18.0: Extrahiert Frame und verifiziert Schlüsselbegriff `"Helper-Scripts"`.
-   - Bestätigungsschirm (Zeitpunkt aus `out/demo_markers.json`, vom Treiber aufgezeichnet): verifiziert `"FREMDER CODE"` und `root`.
+   - Bestätigungsschirm (Zeitpunkt aus der eingecheckten `out/demo_markers.json`, vom Treiber aufgezeichnet): verifiziert `"FREMDER CODE"` und `root`.
 3. **Privacy-Check (Regex)**:
    - Vollständiger Scan der OCR-Texte aller Frames und des gesamten aufgezeichneten PTY-Bytestroms (`pty_stream.log`).
    - Verifiziert 0 Treffer für reale Hostnamen (`Node: pve`, `Host (pve)`, `pve.fritz.box`; Steuerzeichen werden vor dem Scan entfernt, damit durch Farbcodes getrennte Namen gefunden werden) und RFC1918-IPs (`192.168.*`, `10.*`, `172.16-31.*`).
