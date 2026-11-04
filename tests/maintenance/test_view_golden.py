@@ -11,7 +11,8 @@ from unittest.mock import patch
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2] / 'maintenance'))
 
-from pman_maintenance import community, ui, view
+from pman_maintenance import community, i18n, ui, view
+from pman_maintenance.i18n import _
 from pman_maintenance.actions import Context, registry
 
 GOLDEN = Path(__file__).resolve().parent / 'golden'
@@ -33,33 +34,33 @@ def model(name):
         actions = registry(Context('host'))
         if name == 'host-main':
             rows = view.main_rows(actions, 'host')
-            return view.Model(title='pman Wartung | HOST', rows=rows, selected=len(actions),
+            return view.Model(title=_('pman Wartung') + ' | HOST', rows=rows, selected=len(actions),
                               detail=view.community_intro(), details_heading=True,
-                              help='↑↓ Auswahl | Enter | PgUp/PgDn | Esc | q Ende', status='Bereit')
+                              help=_('↑↓ Auswahl | Enter | PgUp/PgDn | Esc | q Ende'), status=_('Bereit'))
         prov = view.provenance(view.status_line(STORED))
         kernel = tool('kernel-clean')
         selected = community.TOOLS.index(kernel)
         if name == 'community-menu':
             return view.Model(
-                title='pman Wartung | HOST | Community-Skripte', rows=view.community_rows(STORED),
+                title=_('pman Wartung') + ' | HOST | ' + _('Community-Skripte'), rows=view.community_rows(STORED),
                 selected=selected, detail=view.community_detail(kernel, STORED), prov=prov,
-                help='↑↓ Auswahl | Enter prüfen & bestätigen | Esc zurück | q Ende',
-                status='Bereit – es wurde noch nichts gestartet')
+                help=_('↑↓ Auswahl | Enter prüfen & bestätigen | Esc zurück | q Ende'),
+                status=_('Bereit – es wurde noch nichts gestartet'))
         launch = community.Launch(kernel, b'#!/usr/bin/env bash\necho one\n\techo two\n', b'# core\n')
-        modal = dict(title='pman Wartung | HOST | Community-Skript starten?', modal=True, prov=prov)
+        modal = dict(title=_('pman Wartung') + ' | HOST | ' + _('Community-Skript starten?'), modal=True, prov=prov)
         if name == 'community-confirm':
             return view.Model(detail=view.confirm_blocks(launch, 'pve'),
-                              help='v Quellcode | j Starten | Esc/n Abbruch | PgUp/PgDn',
-                              status='Wartet auf Bestätigung', **modal)
+                              help=_('v Quellcode | j Starten | Esc/n Abbruch | PgUp/PgDn'),
+                              status=_('Wartet auf Bestätigung'), **modal)
         if name == 'community-blocked':
             blocked = community.SourceBlocked(community.CORE_REPOSITORY, 'core/core.func',
                                               '1111111aaaa', '2222222bbbb', 'Upstream geändert')
-            return view.Model(detail=blocked.lines(), help='PgUp/PgDn Blättern | Esc Zurück | q Ende',
-                              status='Start blockiert', **modal)
+            return view.Model(detail=blocked.lines(), help=_('PgUp/PgDn Blättern | Esc Zurück | q Ende'),
+                              status=_('Start blockiert'), **modal)
         if name == 'community-preview':
             return view.Model(detail=view.preview_blocks(launch),
-                              help='↑↓ PgUp/PgDn blättern | Esc zurück zur Bestätigung',
-                              status='Quellcode-Vorschau – es wird nichts ausgeführt', **modal)
+                              help=_('↑↓ PgUp/PgDn blättern | Esc zurück zur Bestätigung'),
+                              status=_('Quellcode-Vorschau – es wird nichts ausgeführt'), **modal)
     raise KeyError(name)
 
 
@@ -67,9 +68,13 @@ SCREENS = ('host-main', 'community-menu', 'community-confirm', 'community-blocke
 VARIANTS = (('', '256', False), ('nocolor', '', False), ('ascii-nocolor', '', True))
 
 
-def render_text(name, size, color, ascii_only):
+def render_text(name, size, color, ascii_only, lang='de'):
     height, width = size[1], size[0]
-    frame = view.render(model(name), height, width, ascii_only)
+    i18n.set_language(lang)
+    try:
+        frame = view.render(model(name), height, width, ascii_only)
+    finally:
+        i18n.set_language(None)
     text, codes = view.snapshot(frame, height, width, color)
     links = ['{},{} {} {}'.format(s.y, s.x, s.link, s.text) for s in frame.segs if s.link]
     return '{}\n---attrs---\n{}\n---links---\n{}\n'.format(text, codes, '\n'.join(links)), frame
@@ -90,6 +95,33 @@ class GoldenTest(unittest.TestCase):
                             path.write_text(actual)
                         self.assertTrue(path.exists(), 'missing golden file ' + path.name)
                         self.assertEqual(path.read_text(), actual)
+
+
+class EnglishGoldenTest(unittest.TestCase):
+    def test_english_screens_match_golden_files(self):
+        for name in SCREENS:
+            for size in SIZES:
+                for variant, color, ascii_only in VARIANTS[:2]:
+                    label = '-'.join(filter(None, (name, '{}x{}'.format(*size), variant, 'en')))
+                    with self.subTest(label):
+                        actual, _frame = render_text(name, size, color, ascii_only, 'en')
+                        path = GOLDEN / (label + '.txt')
+                        if os.environ.get('UPDATE_GOLDEN'):
+                            path.write_text(actual)
+                        self.assertTrue(path.exists(), 'missing golden file ' + path.name)
+                        self.assertEqual(path.read_text(), actual)
+
+    def test_english_screens_fit_and_show_no_german_ui_words(self):
+        for name in SCREENS:
+            for size in SIZES:
+                text, frame = render_text(name, size, '', False, 'en')
+                screen = text.split('---attrs---')[0]
+                for line in screen.splitlines():
+                    self.assertLess(len(line), size[0], (name, line))
+                if name in ('community-menu', 'host-main'):
+                    self.assertLessEqual(frame.total, frame.page)
+                for word in ('Fremder', 'Quelle:', 'Bestätigung', 'LÖSCHT', 'ÄNDERT', 'Zurück'):
+                    self.assertNotIn(word, screen, (name, word))
 
 
 class AccessibilityTest(unittest.TestCase):

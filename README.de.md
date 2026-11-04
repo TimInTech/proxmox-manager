@@ -34,6 +34,11 @@ Terminal standardmäßig nur den Kern. Zur ausdrücklichen Installation des Modu
 pman --maintenance
 ```
 
+Die Oberfläche gibt es auf Deutsch (Standard) und Englisch. Im Terminal fragt der
+Installer zuerst (`Language / Sprache [de/en]`); ohne Terminal gibst du
+`--lang en` oder `--lang de` an. Die Wahl steht in `/etc/pman/language` und bleibt bei
+Updates erhalten; `PMAN_LANG=en pman --maintenance` überschreibt sie für einen Lauf.
+
 Der Installer installiert keine zusätzlichen APT-Pakete. Für die Oberfläche ist
 Python 3.9 oder neuer mit `curses` sowie ein UTF-8-Terminal erforderlich.
 

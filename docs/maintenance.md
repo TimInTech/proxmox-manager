@@ -14,6 +14,14 @@ From the matching repository checkout or unpacked release bundle:
 pman --maintenance
 ```
 
+The display language is German (default) or English. Interactive installation asks
+`Language / Sprache [de/en]` first (once; an existing choice is kept), noninteractive
+installation takes `--lang de|en`. The installer writes the choice to
+`/etc/pman/language` (root-owned, removed by `--uninstall-maintenance`). The
+environment variable `PMAN_LANG=de|en` overrides the file for one run. Without
+either, the module uses German. A text without an English translation is shown in
+German instead of failing; stored source-check results stay language neutral.
+
 Interactive installation asks about the module, defaulting to **No**. Without a
 terminal, installation defaults to the core. `--without-maintenance` installs the
 core and leaves an existing module alone. The installer performs no `apt` package

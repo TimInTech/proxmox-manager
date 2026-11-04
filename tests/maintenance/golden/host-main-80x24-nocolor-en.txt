@@ -1,0 +1,51 @@
+pman maintenance | HOST
+                                          Details
+  Storage, filesystems, inodes          │ Proxmox VE Helper-Scripts
+  SMART and error history               │ (Community) · MIT licence
+  TRIM schedule, kernel, backups        │ Foreign code – not from pman and not
+> Helper-Scripts (8) ▸       [FOREIGN]  │ from Proxmox.
+  Provenance and freshness status       │
+                                        │ https://community-scripts.org
+                                        │
+                                        │ 8 scripts, grouped by purpose:
+                                        │   CHECK & BACK UP (2)
+                                        │   UPDATE & OPTIMISE (3)
+                                        │   CLEAN UP – DELETES DATA (3)
+                                        │
+                                        │ Enter opens the menu; nothing starts
+                                        │ before you confirm.
+                                        │
+                                        │
+                                        │
+                                        │
+                                        │
+
+↑↓ Select | Enter | PgUp/PgDn | Esc | q Quit
+Ready
+---attrs---
+bbbbbbbbbbbbbbbbbbbbbbb
+..........................................bbbbbbb
+..........................................bbbbbbbbbbbbbbbbbbbbbbbbb
+
+..........................................bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb
+RRRRRRRRRRRRRRRRRRRRRRRRRRRRRXXXXXXXXXR...bbbbbbbbbbbbb
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+bbbbb
+---links---
+7,42 https://community-scripts.org https://community-scripts.org

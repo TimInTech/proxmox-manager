@@ -6,6 +6,7 @@ import tempfile
 import threading
 import time
 from dataclasses import dataclass
+from .i18n import _
 
 
 class CommandError(RuntimeError):
@@ -39,11 +40,11 @@ class Runner:
             try:
                 while process.poll() is None:
                     if self.cancel.wait(.05):
-                        reason = 'Abgebrochen; bereits ausgeführte Änderungen werden nicht rückgängig gemacht.'
+                        reason = _('Abgebrochen; bereits ausgeführte Änderungen werden nicht rückgängig gemacht.')
                     elif time.monotonic() > deadline:
-                        reason = 'Zeitlimit erreicht.'
+                        reason = _('Zeitlimit erreicht.')
                     elif os.fstat(output.fileno()).st_size > 2 * 1024 * 1024:
-                        reason = 'Ausgabelimit erreicht.'
+                        reason = _('Ausgabelimit erreicht.')
                     if reason:
                         break
             finally:
@@ -59,5 +60,5 @@ class Runner:
         if reason:
             raise CommandError(reason)
         if allowed is not None and process.returncode not in allowed:
-            raise CommandError('{} (Exit {}): {}'.format(argv[0], process.returncode, text[:4000]))
+            raise CommandError(_('{} (Exit {}): {}').format(argv[0], process.returncode, text[:4000]))
         return Result(argv, process.returncode, text)

@@ -13,6 +13,7 @@ from .sources import source_report
 from .state import STATE, private_dir
 from . import community, view
 from .view import clean_text, wrap_output  # noqa: F401  (re-exported for callers and tests)
+from .i18n import _
 
 
 def navigate(index, direction, count):
@@ -31,16 +32,16 @@ def terminal_usable(height, width):
 
 def action_description(action):
     descriptions = {
-        'storage': 'Zeigt Speicher, Dateisysteme und Inodes des Hosts.',
-        'smart': 'Liest SMART-Zustand und speichert einen lokalen Vergleichsstand.',
-        'maintenance': 'Zeigt TRIM-Zeitplanung, Kernel und Backup-Speicher.',
-        'volumes': 'Zeigt die konfigurierten Volumes des ausgewählten Gastes.',
-        'filesystems': 'Zeigt die Dateisystembelegung des ausgewählten Gastes.',
-        'scan': 'Untersucht große Verzeichnisse im ausgewählten CT-Pfad.',
-        'trim': 'Meldet freie Blöcke des ausgewählten Gastes an den Speicher.',
-        'cache-clean': 'Entfernt heruntergeladene APT-Paketarchive im ausgewählten CT.',
+        'storage': _('Zeigt Speicher, Dateisysteme und Inodes des Hosts.'),
+        'smart': _('Liest SMART-Zustand und speichert einen lokalen Vergleichsstand.'),
+        'maintenance': _('Zeigt TRIM-Zeitplanung, Kernel und Backup-Speicher.'),
+        'volumes': _('Zeigt die konfigurierten Volumes des ausgewählten Gastes.'),
+        'filesystems': _('Zeigt die Dateisystembelegung des ausgewählten Gastes.'),
+        'scan': _('Untersucht große Verzeichnisse im ausgewählten CT-Pfad.'),
+        'trim': _('Meldet freie Blöcke des ausgewählten Gastes an den Speicher.'),
+        'cache-clean': _('Entfernt heruntergeladene APT-Paketarchive im ausgewählten CT.'),
     }
-    return '{}: {}'.format('Änderung mit Bestätigung' if action.mutation else 'Diagnose',
+    return '{}: {}'.format(_('Änderung mit Bestätigung') if action.mutation else _('Diagnose'),
                           descriptions.get(action.id, action.title))
 
 
@@ -51,7 +52,7 @@ def mutate(key, ctx, runner):
     try:
         info = os.fstat(fd)
         if info.st_uid != os.geteuid() or info.st_mode & 0o022:
-            raise RuntimeError('Unsichere Wartungssperre.')
+            raise RuntimeError(_('Unsichere Wartungssperre.'))
         fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
         return execute(key, ctx, runner, confirmed=True)
     finally:
@@ -65,11 +66,11 @@ def run_tui(ctx):
     except locale.Error:
         locale.setlocale(locale.LC_ALL, '')
     if not locale.getpreferredencoding(False).lower().replace('-', '').startswith('utf8'):
-        raise RuntimeError('Für die Oberfläche ist eine UTF-8-Locale erforderlich.')
+        raise RuntimeError(_('Für die Oberfläche ist eine UTF-8-Locale erforderlich.'))
     try:
         curses.wrapper(_screen, ctx)
     except curses.error as exc:
-        raise RuntimeError('Terminal unterstützt die Oberfläche nicht; TERM und Fenstergröße prüfen.') from exc
+        raise RuntimeError(_('Terminal unterstützt die Oberfläche nicht; TERM und Fenstergröße prüfen.')) from exc
     finally:
         # curses restores terminal mode but leaves the cursor at the last status row.
         print()
@@ -143,7 +144,7 @@ def _screen(screen, ctx):
     host = socket.gethostname()
     selected = 0
     scroll = 0
-    output = [action_description(registry(ctx)[0]), '', 'Enter startet die Diagnose.']
+    output = [action_description(registry(ctx)[0]), '', _('Enter startet die Diagnose.')]
     pending = None
     pending_community = None
     previewing = False
@@ -158,7 +159,7 @@ def _screen(screen, ctx):
     cancel = threading.Event()
     messages = queue.Queue()
     worker = None
-    status = 'Bereit'
+    status = _('Bereit')
     page = 1
     total = 0
 
@@ -167,7 +168,7 @@ def _screen(screen, ctx):
         busy_kind = kind
         cancel.clear()
         busy = True
-        status = 'Prüfung läuft – Esc bricht ab'
+        status = _('Prüfung läuft – Esc bricht ab')
         def job():
             try:
                 runner = Runner(cancel)
@@ -193,43 +194,43 @@ def _screen(screen, ctx):
         actions = registry(ctx)
         if community_mode:
             output = (view.community_detail(community.TOOLS[community_selected], stored)
-                      if community_selected < len(community.TOOLS) else ['Zurück zum Wartungsmenü.'])
+                      if community_selected < len(community.TOOLS) else [_('Zurück zum Wartungsmenü.')])
         elif selected < len(actions):
-            output = [action_description(actions[selected]), '', 'Quelle: ' + actions[selected].source]
+            output = [action_description(actions[selected]), '', _('Quelle: ') + _(actions[selected].source)]
         elif ctx.scope == 'host' and selected == len(actions):
             output = view.community_intro()
         else:
-            output = ['Herkunft und Aktualitätsstatus', 'Enter öffnet diese Ansicht.']
+            output = [_('Herkunft und Aktualitätsstatus'), _('Enter öffnet diese Ansicht.')]
 
     def help_text(page, total):
         if busy:
-            return 'Esc/q Abbruch | danach q Ende'
+            return _('Esc/q Abbruch | danach q Ende')
         if previewing:
-            return '↑↓ PgUp/PgDn blättern | Esc zurück zur Bestätigung'
+            return _('↑↓ PgUp/PgDn blättern | Esc zurück zur Bestätigung')
         if pending_community:
-            return ('PgDn: alle Details lesen | Esc/n Abbruch' if scroll + page < total
-                    else 'v Quellcode | j Starten | Esc/n Abbruch | PgUp/PgDn')
+            return (_('PgDn: alle Details lesen | Esc/n Abbruch') if scroll + page < total
+                    else _('v Quellcode | j Starten | Esc/n Abbruch | PgUp/PgDn'))
         if pending:
-            return ('PgDn: alle Details lesen | Esc/n Abbruch' if scroll + page < total
-                    else 'j Bestätigen | Esc/n Abbruch | PgUp/PgDn')
+            return (_('PgDn: alle Details lesen | Esc/n Abbruch') if scroll + page < total
+                    else _('j Bestätigen | Esc/n Abbruch | PgUp/PgDn'))
         if detail_mode:
-            return 'PgUp/PgDn Blättern | Esc Zurück | q Ende'
+            return _('PgUp/PgDn Blättern | Esc Zurück | q Ende')
         if community_mode:
-            return '↑↓ Auswahl | Enter prüfen & bestätigen | Esc zurück | q Ende'
+            return _('↑↓ Auswahl | Enter prüfen & bestätigen | Esc zurück | q Ende')
         if ctx.scope == 'ct':
-            return '↑↓ Auswahl | Enter | Tab Pfad | Esc | q Ende'
-        return '↑↓ Auswahl | Enter | PgUp/PgDn | Esc | q Ende'
+            return _('↑↓ Auswahl | Enter | Tab Pfad | Esc | q Ende')
+        return _('↑↓ Auswahl | Enter | PgUp/PgDn | Esc | q Ende')
 
     def build_model(height):
         actions = registry(ctx)
         modal = bool(detail_mode or pending or pending_community or busy)
         crumb = ''
         if community_mode:
-            crumb = 'Community-Skript starten?' if pending_community else 'Community-Skripte'
+            crumb = _('Community-Skript starten?') if pending_community else _('Community-Skripte')
         elif ctx.scope == 'ct':
-            crumb = 'Scan: ' + ctx.mount
+            crumb = _('Scan: ') + ctx.mount
         title = ' | '.join(part for part in (
-            'pman Wartung', '{} {}'.format(ctx.scope.upper(), ctx.id or '').strip(), crumb) if part)
+            _('pman Wartung'), '{} {}'.format(ctx.scope.upper(), ctx.id or '').strip(), crumb) if part)
         if community_mode:
             rows = view.community_rows(stored)
             active = community_selected
@@ -241,11 +242,11 @@ def _screen(screen, ctx):
                           else [r for r in rows if r.kind != 'header'][active].label)
         return view.Model(
             title=title, rows=rows, selected=active, detail=output, modal=modal,
-            modal_title='Auswahl: ' + selected_title,
+            modal_title=_('Auswahl: ') + selected_title,
             prov=view.provenance(view.status_line(stored)) if community_mode else None,
             scroll=scroll, help=help_text, status=status,
-            small=('Terminal mindestens 45 Spalten und 12 Zeilen.',
-                   'Esc/q: Abbruch; danach q beendet.' if busy else 'Vergrößern oder q zum Beenden.'),
+            small=(_('Terminal mindestens 45 Spalten und 12 Zeilen.'),
+                   _('Esc/q: Abbruch; danach q beendet.') if busy else _('Vergrößern oder q zum Beenden.')),
             details_heading=not community_mode)
 
     try:
@@ -256,31 +257,31 @@ def _screen(screen, ctx):
                 scroll = 0
                 flush_confirmation = True
                 if cancel.is_set():
-                    output = (['Abbruch angefordert. Die Änderung kann teilweise oder vollständig',
-                               'ausgeführt worden sein; dies ist kein Rollback. Zustand prüfen.']
+                    output = ([_('Abbruch angefordert. Die Änderung kann teilweise oder vollständig'),
+                               _('ausgeführt worden sein; dies ist kein Rollback. Zustand prüfen.')]
                               if busy_kind == 'mutate' else
-                              ['Abgebrochen; keine bestätigte Änderung wurde gestartet.'])
+                              [_('Abgebrochen; keine bestätigte Änderung wurde gestartet.')])
                     detail_mode = True
-                    status = 'Abgebrochen'
+                    status = _('Abgebrochen')
                 elif kind == 'community-check':
                     pending_community = value
                     output = view.confirm_blocks(value, host)
-                    status = 'Wartet auf Bestätigung'
+                    status = _('Wartet auf Bestätigung')
                 elif kind == 'prepare':
                     pending = action
-                    output = ['Ziel: ' + value['target'], 'Befehl: ' + value['display'], value['impact'],
-                              '', 'Änderung ausführen? j = bestätigen, Esc = abbrechen',
-                              'Abbruch eines laufenden Befehls ist kein Rollback.']
-                    status = 'Bestätigung erforderlich'
+                    output = [_('Ziel: ') + value['target'], _('Befehl: ') + value['display'], value['impact'],
+                              '', _('Änderung ausführen? j = bestätigen, Esc = abbrechen'),
+                              _('Abbruch eines laufenden Befehls ist kein Rollback.')]
+                    status = _('Bestätigung erforderlich')
                 elif kind == 'error' and isinstance(value, community.SourceBlocked):
                     output = value.lines()
                     detail_mode = True
-                    status = 'Start blockiert'
+                    status = _('Start blockiert')
                 else:
                     text = value if kind != 'error' else str(value)
-                    output = clean_text(text).expandtabs(4).splitlines() or ['Keine Ausgabe.']
+                    output = clean_text(text).expandtabs(4).splitlines() or [_('Keine Ausgabe.')]
                     detail_mode = True
-                    status = ('Abgebrochen' if cancel.is_set() else 'Fehlgeschlagen') if kind == 'error' else 'Erfolgreich'
+                    status = (_('Abgebrochen') if cancel.is_set() else _('Fehlgeschlagen')) if kind == 'error' else _('Erfolgreich')
             except queue.Empty:
                 pass
             screen.erase()
@@ -312,10 +313,10 @@ def _screen(screen, ctx):
                     pending_community = None
                     detail_mode = True
                     if confirming:
-                        output = ['Eingabepuffer konnte nicht geleert werden; Bestätigung abgebrochen.']
+                        output = [_('Eingabepuffer konnte nicht geleert werden; Bestätigung abgebrochen.')]
                     else:
-                        output += ['', 'Eingabepuffer konnte nicht geleert werden. Ergebnis oben beachten.']
-                    status = 'Eingabefehler'
+                        output += ['', _('Eingabepuffer konnte nicht geleert werden. Ergebnis oben beachten.')]
+                    status = _('Eingabefehler')
                     continue
             key = screen.getch()
             if key == -1:
@@ -323,14 +324,14 @@ def _screen(screen, ctx):
             if not terminal_usable(height, width):
                 if busy and key in (27, ord('q')):
                     cancel.set()
-                    status = 'Abbruch angefordert.'
+                    status = _('Abbruch angefordert.')
                 elif key == ord('q'):
                     return
                 continue
             if busy:
                 if key in (27, ord('q')):
                     cancel.set()
-                    status = 'Abbruch angefordert; CT-Scan kann bis zum Gast-Zeitlimit (55 s) weiterlaufen.'
+                    status = _('Abbruch angefordert; CT-Scan kann bis zum Gast-Zeitlimit (55 s) weiterlaufen.')
                 continue
             if previewing:
                 if key in (curses.KEY_PPAGE, curses.KEY_NPAGE):
@@ -342,7 +343,7 @@ def _screen(screen, ctx):
                 elif key in (27, ord('n'), ord('N')):
                     previewing = False
                     output, scroll = saved_view
-                    status = 'Wartet auf Bestätigung'
+                    status = _('Wartet auf Bestätigung')
                 elif key == ord('q'):
                     return
                 continue
@@ -350,7 +351,7 @@ def _screen(screen, ctx):
                 scroll = page_offset(scroll, -1 if key == curses.KEY_PPAGE else 1, page, total)
                 continue
             if (pending or pending_community) and key in (ord('j'), ord('J')) and scroll + page < total:
-                status = 'Bitte zuerst alle Details mit Bild ab lesen.'
+                status = _('Bitte zuerst alle Details mit Bild ab lesen.')
                 continue
             if pending_community:
                 if key in (ord('v'), ord('V')):
@@ -358,12 +359,12 @@ def _screen(screen, ctx):
                     previewing = True
                     output = view.preview_blocks(pending_community)
                     scroll = 0
-                    status = 'Quellcode-Vorschau – es wird nichts ausgeführt'
+                    status = _('Quellcode-Vorschau – es wird nichts ausgeführt')
                     continue
                 if key in (ord('j'), ord('J')):
                     launch = pending_community
                     pending_community = None
-                    status = 'Prüfe Quellstand und starte Helper Script …'
+                    status = _('Prüfe Quellstand und starte Helper Script …')
                     screen.addnstr(height - 1, 0, ' ' * (width - 1), width - 1)
                     screen.addnstr(height - 1, 0, status, width - 1, curses.A_BOLD)
                     screen.refresh()
@@ -372,15 +373,15 @@ def _screen(screen, ctx):
                         exit_code = community.run_launch(launch)
                         detail_mode = True
                         output = view.result_blocks(launch, exit_code)
-                        status = 'Abgeschlossen' if exit_code == 0 else 'Helper Script mit Fehler beendet'
+                        status = _('Abgeschlossen') if exit_code == 0 else _('Helper Script mit Fehler beendet')
                     except community.SourceBlocked as exc:
                         detail_mode = True
                         output = exc.lines()
-                        status = 'Start blockiert'
+                        status = _('Start blockiert')
                     except Exception as exc:
                         detail_mode = True
-                        output = ['Start abgebrochen:', clean_text(exc)]
-                        status = 'Quelle geändert, nicht verfügbar oder Start fehlgeschlagen'
+                        output = [_('Start abgebrochen:'), clean_text(exc)]
+                        status = _('Quelle geändert, nicht verfügbar oder Start fehlgeschlagen')
                     finally:
                         last_links = None
                         try:
@@ -392,8 +393,8 @@ def _screen(screen, ctx):
                     continue
                 if key in (27, ord('n'), ord('N'), ord('q')):
                     pending_community = None
-                    output = ['Start abgebrochen; es wurde kein Helper Script ausgeführt.']
-                    status = 'Abgebrochen'
+                    output = [_('Start abgebrochen; es wurde kein Helper Script ausgeführt.')]
+                    status = _('Abgebrochen')
                     if key == ord('q'):
                         return
                 continue
@@ -404,8 +405,8 @@ def _screen(screen, ctx):
                     start('mutate', action)
                 elif key in (27, ord('n'), ord('N'), ord('q')):
                     pending = None
-                    output = ['Änderung abgebrochen.']
-                    status = 'Abgebrochen'
+                    output = [_('Änderung abgebrochen.')]
+                    status = _('Abgebrochen')
                     if key == ord('q'):
                         return
                 continue
@@ -415,13 +416,13 @@ def _screen(screen, ctx):
                 if detail_mode:
                     detail_mode = False
                     show_selection()
-                    status = 'Bereit'
+                    status = _('Bereit')
                     continue
                 if community_mode:
                     community_mode = False
                     selected = len(registry(ctx))
                     show_selection()
-                    status = 'Bereit'
+                    status = _('Bereit')
                     continue
                 return
             if detail_mode and key not in (curses.KEY_PPAGE, curses.KEY_NPAGE):
@@ -430,7 +431,7 @@ def _screen(screen, ctx):
                 step = -1 if key == curses.KEY_UP else 1
                 if community_mode:
                     community_selected = navigate(community_selected, step, len(community.TOOLS) + 1)
-                    status = 'Bereit – es wurde noch nichts gestartet'
+                    status = _('Bereit – es wurde noch nichts gestartet')
                 else:
                     selected = navigate(selected, step, len(registry(ctx)) + (2 if ctx.scope == 'host' else 1))
                 show_selection()
@@ -446,17 +447,17 @@ def _screen(screen, ctx):
                         community_mode = False
                         selected = len(actions)
                         show_selection()
-                        status = 'Bereit'
+                        status = _('Bereit')
                     else:
-                        output = ['Prüfe den aktuellen Upstream-Stand und lade die Datei …',
-                                  'Das kann bis zu einer Minute dauern; Esc bricht ab.']
+                        output = [_('Prüfe den aktuellen Upstream-Stand und lade die Datei …'),
+                                  _('Das kann bis zu einer Minute dauern; Esc bricht ab.')]
                         start('community-check', community.TOOLS[community_selected])
                 elif ctx.scope == 'host' and selected == len(actions):
                     community_mode = True
                     community_selected = 0
                     stored = _stored_status()
                     show_selection()
-                    status = 'Bereit – es wurde noch nichts gestartet'
+                    status = _('Bereit – es wurde noch nichts gestartet')
                 elif selected == len(actions) + (1 if ctx.scope == 'host' else 0):
                     start('sources')
                 else:

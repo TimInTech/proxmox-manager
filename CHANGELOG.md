@@ -29,6 +29,14 @@ Versions follow [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Maintenance module 1.0.5
+
+- Add a display language choice: German (default) or English. The installer asks
+  `Language / Sprache [de/en]` in a terminal or takes `--lang de|en`, stores it in
+  `/etc/pman/language` and keeps it on upgrades; `PMAN_LANG=de|en` overrides it per
+  run. All screens, messages, CLI help and diagnostic reports are translated; a
+  completeness test fails when a text lacks an English entry.
+
 ### Maintenance module 1.0.4
 
 - Rework the Community Scripts menu: the source is named as **Proxmox VE
