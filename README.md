@@ -226,6 +226,11 @@ packages such as `virt-viewer`, `jq` or development tools.
 pman --maintenance
 ```
 
+The maintenance interface speaks German (default) or English. A terminal
+installation asks first (`Language / Sprache [de/en]`); without a terminal pass
+`--lang en` or `--lang de`. The choice is stored in `/etc/pman/language` and kept on
+upgrades; `PMAN_LANG=en pman --maintenance` overrides it for one run.
+
 Installs an atomic, root-owned copy at `/usr/local/bin/pman` so later edits to
 the checkout cannot change the privileged executable.
 

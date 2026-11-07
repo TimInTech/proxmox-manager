@@ -7,6 +7,7 @@ import urllib.parse
 import urllib.request
 from pathlib import Path
 from .state import STATE, read_json, write_json
+from .i18n import _
 
 MANIFEST = Path(__file__).resolve().parent.parent / 'sources.json'
 
@@ -23,7 +24,7 @@ def fetch_metadata(url, etag=''):
         with opener.open(request, timeout=8) as response:
             body = response.read(1024 * 1024 + 1)
             if len(body) > 1024 * 1024:
-                raise ValueError('API-Antwort zu groß.')
+                raise ValueError(_('API-Antwort zu groß.'))
             return response.status, json.loads(body), response.headers.get('ETag', '')
     except urllib.error.HTTPError as exc:
         return exc.code, {}, ''
@@ -33,7 +34,7 @@ def check_reference(reference, fetch=fetch_metadata, previous=None):
     previous = previous or {}
     result = {'repository': reference['repository'], 'path': reference['path'],
               'checked_at': datetime.datetime.now(datetime.timezone.utc).isoformat()}
-    directory, _, filename = reference['path'].rpartition('/')
+    directory, _sep, filename = reference['path'].rpartition('/')
     path = urllib.parse.quote(directory, safe='/')
     url = 'https://api.github.com/repos/{}/contents/{}'.format(reference['repository'], path)
     try:
@@ -42,14 +43,14 @@ def check_reference(reference, fetch=fetch_metadata, previous=None):
             sha = previous['observed_sha']
         elif status == 200 and isinstance(data, list):
             if any(not isinstance(row, dict) for row in data):
-                raise ValueError('Ungültige Metadatenliste.')
+                raise ValueError(_('Ungültige Metadatenliste.'))
             entry = next((row for row in data if row.get('name') == filename and row.get('type') == 'file'), None)
             if not entry:
                 result['status'] = 'Quelle fehlt'
                 return result
             sha = entry.get('sha')
             if not isinstance(sha, str) or not sha:
-                raise ValueError('Fehlende Git-Blob-Prüfsumme.')
+                raise ValueError(_('Fehlende Git-Blob-Prüfsumme.'))
         elif status == 404:
             result['status'] = 'Quelle fehlt'
             return result
@@ -80,24 +81,24 @@ def source_report():
     rows = [checked.get((reference['repository'], reference['path']), {})
             for reference in manifest['references']]
     counts = Counter(row.get('status', 'Noch nicht geprüft') for row in rows)
-    lines = ['Zuletzt geprüft: ' + status.get('checked_at', 'Noch nicht geprüft'),
-             '{} Quellen | geprüft: {} | geändert: {} | fehlen: {} | Fehler: {} | offen: {}'.format(
+    lines = [_('Zuletzt geprüft: ') + (status.get('checked_at') or _('Noch nicht geprüft')),
+             _('{} Quellen | geprüft: {} | geändert: {} | fehlen: {} | Fehler: {} | offen: {}').format(
                  len(rows), counts['geprüfter Stand'], counts['Upstream geändert'], counts['Quelle fehlt'],
                  counts['Prüfung fehlgeschlagen'], counts['Noch nicht geprüft']),
-             'Eigene Adapter; geprüfte Community-Tools nur auf Auswahl und mit Versionsprüfung.',
-             '', 'Referenzen:']
+             _('Eigene Adapter; geprüfte Community-Tools nur auf Auswahl und mit Versionsprüfung.'),
+             '', _('Referenzen:')]
     for reference in manifest['references']:
         row = checked.get((reference['repository'], reference['path']), {})
         status_text = row.get('status', 'Noch nicht geprüft')
         reviewed = reference['reviewed_commit'][:8]
         observed = row.get('observed_sha')
         if status_text == 'geprüfter Stand':
-            detail = 'geprüft: {}'.format(reviewed)
+            detail = _('geprüft: {}').format(reviewed)
         elif status_text == 'Upstream geändert' and observed:
-            detail = 'Referenz {} → aktuell {}'.format(reviewed, observed[:8])
+            detail = _('Referenz {} → aktuell {}').format(reviewed, observed[:8])
         else:
-            detail = status_text
+            detail = _(status_text)
         lines.append('{} / {} | {}'.format(reference['repository'], reference['path'], detail))
         if row.get('error'):
-            lines.append('  Fehler: ' + row['error'])
+            lines.append(_('  Fehler: ') + row['error'])
     return '\n'.join(lines)

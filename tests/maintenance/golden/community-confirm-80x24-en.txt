@@ -1,0 +1,53 @@
+pman maintenance | HOST | Start community script?
+Proxmox VE Helper-Scripts (Community) · MIT · https://community-scripts.org
+───────────────────────────────────────────────────────────────────────────────
+PVE Kernel Clean
+Level    DELETE – removes data or packages, no recycle bin
+
+FOREIGN CODE – runs as root on this host (pve).
+It comes neither from pman nor from Proxmox.
+
+Source   https://github.com/community-scripts/ProxmoxVE/blob/0123456789abcdef
+         0123456789abcdef01234567/tools/pve/kernel-clean.sh
+Command  bash kernel-clean.sh  (pman downloads the file, checks SHA-1
+         98351a4… and starts exactly these bytes from a temporary directory)
+Core     core/core.func @ fedcba9 · telemetry (api.func) is not loaded
+Status   reviewed 2026-11-04 · upstream live: unchanged
+Impact   Removes packages on the host. Check the installed and active kernels
+         before confirming.
+
+The script then continues interactively; pman cannot roll it back.
+
+
+
+v Source | j Start | Esc/n Cancel | PgUp/PgDn
+Waiting for confirmation
+---attrs---
+bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb
+bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb
+
+bbbbbbbbbbbbbbbb
+.........bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb
+
+bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+bbbbbbbbbbbbbbbbbbbbbbbb
+---links---
+1,46 https://community-scripts.org https://community-scripts.org
+9,9 https://github.com/community-scripts/ProxmoxVE/blob/0123456789abcdef0123456789abcdef01234567/tools/pve/kernel-clean.sh https://github.com/community-scripts/ProxmoxVE/blob/0123456789abcdef
+10,9 https://github.com/community-scripts/ProxmoxVE/blob/0123456789abcdef0123456789abcdef01234567/tools/pve/kernel-clean.sh 0123456789abcdef01234567/tools/pve/kernel-clean.sh

@@ -93,3 +93,87 @@ class PathAliasTest(unittest.TestCase):
             result=subprocess.run(['bash',str(ROOT/'install_dependencies.sh'),'--destdir',str(stage),'--with-maintenance'],capture_output=True,text=True)
             self.assertEqual(result.returncode,0,result.stderr)
             self.assertEqual(os.readlink(timer),'/dev/null')
+
+
+class LanguageChoiceTest(unittest.TestCase):
+    def install(self, stage, *flags):
+        return subprocess.run(['bash', str(ROOT / 'install_dependencies.sh'), '--destdir', str(stage), *flags],
+                              stdin=subprocess.DEVNULL, capture_output=True, text=True)
+
+    def test_lang_flag_is_stored_kept_on_upgrade_and_removed_on_uninstall(self):
+        with tempfile.TemporaryDirectory() as directory:
+            stage = Path(directory) / 'stage'
+            language = stage / 'etc/pman/language'
+            self.assertEqual(self.install(stage, '--with-maintenance', '--lang', 'en').returncode, 0)
+            self.assertEqual(language.read_text(), 'en\n')
+            self.assertEqual(language.stat().st_mode & 0o777, 0o644)
+            self.assertEqual(self.install(stage, '--with-maintenance').returncode, 0)
+            self.assertEqual(language.read_text(), 'en\n')
+            self.assertEqual(self.install(stage, '--with-maintenance', '--lang', 'de').returncode, 0)
+            self.assertEqual(language.read_text(), 'de\n')
+            self.assertEqual(self.install(stage, '--uninstall-maintenance').returncode, 0)
+            self.assertFalse(language.exists())
+
+    def test_uninstall_refuses_a_symlinked_language_directory(self):
+        with tempfile.TemporaryDirectory() as directory:
+            stage = Path(directory) / 'stage'
+            outside = Path(directory) / 'outside'
+            outside.mkdir()
+            (outside / 'language').write_text('en\n')
+            (stage / 'etc').mkdir(parents=True)
+            (stage / 'etc/pman').symlink_to(outside)
+            result = self.install(stage, '--uninstall-maintenance')
+            self.assertNotEqual(result.returncode, 0)
+            self.assertTrue((outside / 'language').exists(), 'a staged uninstall must not delete outside --destdir')
+
+    def test_invalid_language_is_rejected_before_anything_is_written(self):
+        with tempfile.TemporaryDirectory() as directory:
+            stage = Path(directory) / 'stage'
+            for flags in (('--lang', 'fr'), ('--lang',)):
+                result = self.install(stage, '--with-maintenance', *flags)
+                self.assertEqual(result.returncode, 2, flags)
+            self.assertFalse(stage.exists())
+
+    def test_core_only_install_writes_no_language_file(self):
+        with tempfile.TemporaryDirectory() as directory:
+            stage = Path(directory) / 'stage'
+            self.assertEqual(self.install(stage, '--lang', 'en').returncode, 0)
+            self.assertFalse((stage / 'etc/pman/language').exists())
+
+    def test_interactive_prompt_asks_for_the_language_first(self):
+        import pty
+        import select
+        import time
+        for answers, expected_language, module_prompt in ((b'en\ny\n', 'en', b'Also install the storage'),
+                                                          (b'\nj\n', 'de', b'Speicher- und Wartungsmodul')):
+            with tempfile.TemporaryDirectory() as directory:
+                stage = Path(directory) / 'stage'
+                master, slave = pty.openpty()
+                process = subprocess.Popen(['bash', str(ROOT / 'install_dependencies.sh'), '--destdir', str(stage)],
+                                           stdin=slave, stdout=slave, stderr=slave)
+                os.close(slave)
+                output = bytearray()
+
+                def drain(wait):
+                    try:
+                        while select.select([master], [], [], wait)[0]:
+                            chunk = os.read(master, 4096)
+                            if not chunk:
+                                break
+                            output.extend(chunk)
+                    except OSError:  # the child closed the terminal
+                        pass
+                try:
+                    for line in answers.splitlines(keepends=True):
+                        drain(.5)
+                        os.write(master, line)
+                    process.wait(timeout=20)
+                    drain(.2)
+                finally:
+                    if process.poll() is None:
+                        process.kill()
+                    os.close(master)
+                self.assertIn(b'Language / Sprache', bytes(output))
+                self.assertIn(module_prompt, bytes(output))
+                self.assertEqual((stage / 'etc/pman/language').read_text(), expected_language + '\n')
+                self.assertTrue((stage / 'usr/local/bin/pman-maintenance').is_file())

@@ -11,6 +11,7 @@ from pathlib import Path
 
 from . import sources
 from .state import STATE, read_json
+from .i18n import _
 
 PROJECT_NAME = 'Proxmox VE Helper-Scripts'
 EDITION = '(Community)'
@@ -95,7 +96,7 @@ def _fetch(url, limit=2 * 1024 * 1024):
     with opener.open(request, timeout=12) as response:
         body = response.read(limit + 1)
     if len(body) > limit:
-        raise RuntimeError('Upstream-Datei überschreitet die erlaubte Größe.')
+        raise RuntimeError(_('Upstream-Datei überschreitet die erlaubte Größe.'))
     return body
 
 
@@ -111,23 +112,23 @@ class SourceBlocked(RuntimeError):
     def __init__(self, repository, path, reviewed, observed, status):
         self.repository, self.path = repository, path
         self.reviewed, self.observed, self.status = reviewed, observed, status
-        super().__init__('Upstream ist nicht als geprüfter Stand bestätigt ({}). Start abgebrochen.'.format(status))
+        super().__init__(_('Upstream ist nicht als geprüfter Stand bestätigt ({}). Start abgebrochen.').format(_(status)))
 
     def lines(self):
-        lines = ['Start blockiert - nichts wurde ausgeführt.', '',
-                 'Datei: {}/{}'.format(self.repository, self.path)]
+        lines = [_('Start blockiert - nichts wurde ausgeführt.'), '',
+                 _('Datei: {}/{}').format(self.repository, self.path)]
         if self.status == 'Upstream geändert' and self.observed:
-            lines.append('Geprüft {}  ->  aktuell {}'.format(self.reviewed[:7], self.observed[:7]))
+            lines.append(_('Geprüft {}  ->  aktuell {}').format(self.reviewed[:7], self.observed[:7]))
         else:
-            lines.append('Status: {}'.format(self.status))
-        return lines + ['', 'pman startet nur Stände, die geprüft wurden.',
-                        'Nächster Schritt: neuen pman-Release abwarten oder die Datei selbst prüfen.']
+            lines.append(_('Status: {}').format(_(self.status)))
+        return lines + ['', _('pman startet nur Stände, die geprüft wurden.'),
+                        _('Nächster Schritt: neuen pman-Release abwarten oder die Datei selbst prüfen.')]
 
 
 def _check_current(repository, path, expected):
     reference = _reference(repository, path)
     if not reference or reference['blob_sha'] != expected:
-        raise RuntimeError('Werkzeug fehlt in der geprüften Quellenliste.')
+        raise RuntimeError(_('Werkzeug fehlt in der geprüften Quellenliste.'))
     result = sources.check_reference(reference)
     if result.get('status') != 'geprüfter Stand':
         raise SourceBlocked(repository, path, expected, result.get('observed_sha'),
@@ -138,20 +139,20 @@ def _download_pinned(repository, commit, path, expected):
     url = 'https://raw.githubusercontent.com/{}/{}/{}'.format(repository, commit, path)
     data = _fetch(url)
     if git_blob_sha(data) != expected:
-        raise RuntimeError('Prüfsumme von {} passt nicht zum geprüften Stand.'.format(path))
+        raise RuntimeError(_('Prüfsumme von {} passt nicht zum geprüften Stand.').format(path))
     return data
 
 
 def level_text(tool):
     """'WORD – meaning' for the hazard level, with the tool's own qualification if it has one."""
     word, meaning = LEVELS[tool['level']]
-    return '{} – {}'.format(word, tool.get('level_note', meaning))
+    return '{} – {}'.format(_(word), _(tool.get('level_note', meaning)))
 
 
 def find_tool(tool_id):
     tool = next((item for item in TOOLS if item['id'] == tool_id), None)
     if not tool:
-        raise ValueError('Unbekanntes Community-Werkzeug.')
+        raise ValueError(_('Unbekanntes Community-Werkzeug.'))
     return tool
 
 
@@ -183,7 +184,7 @@ def stored_status():
         if observed:
             if observed == expected:
                 return 'ok', ''
-            return 'bad', '{} geändert ({} → {})'.format(name, expected[:7], observed[:7])
+            return 'bad', _('{} geändert ({} → {})').format(name, expected[:7], observed[:7])
         return 'bad', '{}: {}'.format(name, row.get('status', 'Prüfung fehlgeschlagen'))
 
     core = finding(CORE_REPOSITORY, 'core/core.func')

@@ -1,0 +1,51 @@
+pman maintenance | HOST | Start community script?
+Proxmox VE Helper-Scripts (Community) · MIT · https://community-scripts.org
+───────────────────────────────────────────────────────────────────────────────
+Start blocked - nothing was executed.
+
+File: community-scripts/core/core/core.func
+Reviewed 1111111  ->  current 2222222
+
+pman only starts revisions that have been reviewed.
+Next step: wait for a new pman release or review the file yourself.
+
+
+
+
+
+
+
+
+
+
+
+
+PgUp/PgDn Scroll | Esc Back | q Quit
+Start blocked
+---attrs---
+bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb
+bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+bbbbbbbbbbbbb
+---links---
+1,46 https://community-scripts.org https://community-scripts.org

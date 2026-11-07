@@ -7,11 +7,13 @@ WITH_MAINTENANCE=auto
 TIMER=auto
 ACTION=install
 DESTDIR=''
+UI_LANG=''
 usage() {
   cat <<'EOF'
 Usage: ./install_dependencies.sh [--with-maintenance|--without-maintenance]
        [--no-source-timer] [--uninstall-maintenance|--rollback-maintenance]
-       [--destdir DIRECTORY]
+       [--lang de|en] [--destdir DIRECTORY]
+--lang sets the display language of the maintenance module (default: ask, else de).
 No package installation is performed. --destdir stages files only (no services).
 EOF
 }
@@ -22,6 +24,14 @@ while (($#)); do
   --no-source-timer) TIMER=0 ;;
   --uninstall-maintenance) ACTION=uninstall ;;
   --rollback-maintenance) ACTION=rollback ;;
+  --lang)
+    if (($# < 2)) || [[ "$2" != de && "$2" != en ]]; then
+      usage
+      exit 2
+    fi
+    UI_LANG="$2"
+    shift
+    ;;
   --destdir)
     (($# >= 2)) || {
       usage
@@ -76,12 +86,14 @@ secure_dir() {
 
 base="$DESTDIR/usr/local/lib/pman/maintenance"
 bin="$DESTDIR/usr/local/bin"
+lang_file="$DESTDIR/etc/pman/language"
 units="$DESTDIR/etc/systemd/system"
 # Validate all destination chains before any install, rollback or removal.
 secure_dir "$bin"
 secure_dir "$units"
 secure_dir "$(dirname -- "$base")"
 if [[ -e "$base" || -L "$base" ]]; then secure_dir "$base"; fi
+if [[ -e "$(dirname -- "$lang_file")" || -L "$(dirname -- "$lang_file")" ]]; then secure_dir "$(dirname -- "$lang_file")"; fi
 atomic_file() {
   local src="$1" dst="$2" mode="$3" temp
   secure_dir "$(dirname -- "$dst")"
@@ -123,7 +135,7 @@ if [[ "$ACTION" == uninstall ]]; then
     exit 1
   }
   rm -rf -- "$base"
-  rm -f -- "$bin/pman-maintenance" "$units/pman-maintenance-sources.service" "$units/pman-maintenance-sources.timer"
+  rm -f -- "$bin/pman-maintenance" "$units/pman-maintenance-sources.service" "$units/pman-maintenance-sources.timer" "$lang_file"
   [[ -n "$DESTDIR" ]] || systemctl daemon-reload
   echo 'Maintenance module removed; pman core, health cron and diagnostic state retained.'
   exit 0
@@ -140,7 +152,16 @@ fi
 if [[ "$WITH_MAINTENANCE" == auto ]]; then
   WITH_MAINTENANCE=no
   if [[ -t 0 && -t 1 ]]; then
-    read -r -p 'Speicher- und Wartungsmodul zusätzlich installieren? [j/N] ' answer
+    # An existing choice is kept; ask only on the first interactive installation.
+    if [[ -z "$UI_LANG" && ! -e "$lang_file" ]]; then
+      read -r -p 'Language / Sprache [de/en] (de): ' answer
+      if [[ "${answer,,}" == en* ]]; then UI_LANG=en; else UI_LANG=de; fi
+    fi
+    if [[ "$UI_LANG" == en ]] || [[ -z "$UI_LANG" && "$(cat -- "$lang_file" 2>/dev/null)" == en ]]; then
+      read -r -p 'Also install the storage and maintenance module? [y/N] ' answer
+    else
+      read -r -p 'Speicher- und Wartungsmodul zusätzlich installieren? [j/N] ' answer
+    fi
     [[ "$answer" =~ ^[jJyY]$ ]] && WITH_MAINTENANCE=yes
   fi
 fi
@@ -198,6 +219,12 @@ if [[ "$WITH_MAINTENANCE" == yes ]]; then
     else
       systemctl disable --now pman-maintenance-sources.timer
     fi
+  fi
+  if [[ -n "$UI_LANG" ]]; then
+    lang_temp=$(mktemp)
+    printf '%s\n' "$UI_LANG" >"$lang_temp"
+    atomic_file "$lang_temp" "$lang_file" 0644
+    rm -f -- "$lang_temp"
   fi
   echo 'Maintenance module installed. Disable daily metadata checks with systemctl disable --now pman-maintenance-sources.timer.'
 fi
