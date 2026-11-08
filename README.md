@@ -1,338 +1,156 @@
-**Language: English | [Deutsch](README.de.md)**
-
-<!-- markdownlint-disable MD033 MD041 -->
-<div align="center">
-
 # Proxmox Manager
 
-**Single-file Bash tool for managing Proxmox VMs and containers · Zero Dependencies**<br>
-The core needs no daemon or guest agent installation and no dependencies beyond what ships with Proxmox VE.
+Manage Proxmox VE virtual machines and LXC containers from the terminal.
 
-<p>
-  <a href="https://github.com/TimInTech/proxmox-manager/actions"><img src="https://img.shields.io/github/actions/workflow/status/TimInTech/proxmox-manager/ci.yml?branch=main&style=for-the-badge&logo=github&label=CI" alt="CI"></a>
-  <a href="https://github.com/TimInTech/proxmox-manager/actions"><img src="https://img.shields.io/github/actions/workflow/status/TimInTech/proxmox-manager/gitleaks.yml?branch=main&style=for-the-badge&logo=security&label=Gitleaks" alt="Gitleaks"></a>
-  <a href="LICENSE"><img src="https://img.shields.io/github/license/TimInTech/proxmox-manager?style=for-the-badge&color=blue" alt="License"></a>
-  <a href="https://www.gnu.org/software/bash/"><img src="https://img.shields.io/badge/Shell-Bash-4EAA25?style=for-the-badge&logo=gnu-bash" alt="Shell"></a>
-  <a href="https://www.proxmox.com/"><img src="https://img.shields.io/badge/Proxmox-VE%207%2F8%2F9-orange?style=for-the-badge" alt="Proxmox VE"></a>
-</p>
+Proxmox Manager (`pman`) provides interactive guest management, scriptable
+inventory output and health checks on the local Proxmox node. Its Bash core
+uses the tools included with Proxmox VE and runs on demand. An optional Python
+module adds storage diagnostics and host maintenance.
 
-<p align="center">
-  <img src="docs/demo/out/proxmox-manager-demo.gif" alt="Proxmox Manager Live Demo" width="820">
-</p>
+[![CI](https://github.com/TimInTech/proxmox-manager/actions/workflows/ci.yml/badge.svg)](https://github.com/TimInTech/proxmox-manager/actions/workflows/ci.yml)
+[![Gitleaks](https://github.com/TimInTech/proxmox-manager/actions/workflows/gitleaks.yml/badge.svg)](https://github.com/TimInTech/proxmox-manager/actions/workflows/gitleaks.yml)
+[![MIT license](https://img.shields.io/badge/license-MIT-blue)](LICENSE)
 
-<p align="center">
-  <em>Deterministic read-only demo: VM/CT overview, health diagnostics, host maintenance, the Proxmox VE Helper-Scripts (Community) menu and its confirmation screen.</em><br>
-  <small>Recorded via headless PTY pipeline with in-stream pseudonymization · <a href="docs/demo/index.html">Interactive Web Vector Player ▶</a> · <a href="docs/demo/README.md">Pipeline Details →</a></small>
-</p>
+English · [Deutsch](README.de.md)
 
-![Tech Stack](https://skillicons.dev/icons?i=linux,bash,debian)
+![Terminal demo showing guest inventory, health checks and the maintenance interface](docs/demo/out/proxmox-manager-demo.gif)
 
-<a href="https://buymeacoffee.com/timintech" target="_blank" rel="noopener noreferrer">
-  <img src="https://cdn.buymeacoffee.com/buttons/v2/default-yellow.png"
-       alt="Buy Me A Coffee" height="50" width="180">
-</a>
+Read-only recording: inventory, health, host maintenance and a community-script
+confirmation with source preview. No maintenance changes are executed.
+[Local interactive player](docs/demo/index.html) ·
+[Recording details](docs/demo/README.md). To use the player, open the HTML file
+from a local checkout; GitHub displays its source.
 
-</div>
+[Installation](#installation) · [Usage](#usage) ·
+[Health & alerts](#health-monitoring--alerts) ·
+[Configuration](#configuration) · [Maintenance](#optional-maintenance)
 
-**Planned v2.14.1:** inventory error reporting, authenticated SPICE connections,
-and maintenance TUI input handling fixes. See [CHANGELOG](CHANGELOG.md).
+## Features
 
-**New in v2.14.0:** optional storage and maintenance TUI (Python standard library),
-installed separately with `--with-maintenance`. See [maintenance module](docs/maintenance.md).
+- **Guest management.** List VMs and containers; start, shut down and restart
+  guests; open consoles; look up IPv4 addresses; manage snapshots.
+- **Health monitoring.** CPU, memory, disk usage and uptime per guest, with
+  configurable thresholds and alerts through ntfy or e-mail.
+- **Automation.** Plain-text and JSON inventory, status and name filters,
+  Nagios-style check exit codes and optional structured logs.
+- **SPICE access.** Configure a QXL display and request authenticated `.vv`
+  connection files through the Proxmox proxy.
+- **Optional maintenance.** Storage, filesystem and SMART diagnostics, scoped
+  guest maintenance and selected Proxmox VE Helper-Scripts from the community.
 
-**v2.13.2:** ⚡ **Stop** now shuts guests down cleanly (`qm|pct shutdown`,
-force stop only after the timeout) instead of pulling the plug.
-**v2.13.0:** 🩺 health view per guest and 🔔 ntfy / e-mail alerts from a
-cron check — [set up alerts in 3 steps](#-quick-start-alerts-in-3-steps).
+## Installation
 
----
-
-## 📖 Community & Tutorials
-
-Check out how others are using `proxmox-manager`:
-
-- 🇵🇱 **[Proxmox Manager – Co to jest, jak działa, instalacja i
-  obsługa](https://blog.askomputer.pl/proxmox-manager-timintech-co-to-jest-jak-dziala-instalacja-i-obsluga/)**
-  *A detailed walkthrough and review by askomputer.pl featuring usage examples
-  and screenshots (in Polish).*
-- **[Stop Wrestling Proxmox GUIs: Meet the Single-Bash TUI That Changes Everything](https://prompts.brightcoding.dev/blog/stop-wrestling-proxmox-guis-meet-the-single-bash-tui-that-changes-everything)**
-  *An English-language overview by Bright Coding covering installation, the TUI,
-  and common VM and container management workflows.*
-- **[This Lightweight Proxmox Tool Makes CLI Management Faster](https://www.virtualizationhowto.com/2026/05/this-lightweight-proxmox-tool-makes-cli-management-faster/)**
-  *Hands-on review by Brandon Lee covering installation, VM/LXC management, snapshots, console access, and practical homelab testing.*
-
-## 📸 Screenshots
-
-<div align="center">
-
-| Main menu — VM/CT table | Action menu — status with health line |
-|:---:|:---:|
-| ![Main menu](docs/screenshots/screenshot-tui.png) | ![Action menu](docs/screenshots/screenshot-action-menu.png) |
-| Live status for all VMs & containers | Start, stop, console, snapshots; `Status` adds CPU / MEM / DISK |
-| **Health view — `pman --health`** | **Cron check — `pman --check`** |
-| ![Health view](docs/screenshots/screenshot-health.png) | ![Health check](docs/screenshots/screenshot-check.png) |
-| CPU / MEM / DISK %, uptime and level per guest | WARN → RESOLVED with Nagios exit codes |
-| **ntfy push — web app** | **E-mail alert** |
-| ![ntfy alert](docs/screenshots/screenshot-ntfy.png) | ![E-mail alert](docs/screenshots/screenshot-mail.png) |
-| Same message on phone, desktop or browser | Plain-text mail via the local `sendmail` |
-
-</div>
-
-**Optional maintenance interface — host storage and maintenance menu**
-
-<p align="center">
-  <img src="docs/screenshots/screenshot-maintenance-menu.png"
-       alt="Proxmox Manager host maintenance TUI with storage, SMART, TRIM, community tools, and source status"
-       width="720">
-</p>
-
----
-
-## 🎯 Features
-
-| | Feature | Details |
-|---|---|---|
-| 🩺 | **Health Monitoring** | CPU / RAM / disk per guest, uptime and OK / WARN / CRIT — `pman --health`, key `h` in the TUI, `Health:` line in the status action |
-| 🔔 | **Alerts** | `pman --check` for cron: thresholds, stopped `onboot` guests, unexpected stops and failed tasks; ntfy / e-mail only when something changes (opt-in) |
-| 📋 | **List & Status** | All VMs and containers with live status — `[+]` running · `[-]` stopped · `[~]` paused · `[?]` unknown |
-| ⚡ | **Start / Stop / Restart** | Confirmation prompt for destructive actions. Proxmox error details on failure. Stop is a graceful shutdown (ACPI / guest agent); Proxmox force-stops the guest after the configurable timeout |
-| 🖥️ | **Console Access** | LXC shell via `pct enter` or QEMU terminal via `qm terminal`. Verifies running state before entering |
-| 🌐 | **IP Address Lookup** | Shows current IPv4 addresses for running VMs and CTs — VM via QEMU Guest Agent, CT via `pct exec` |
-| 📦 | **Snapshot Management** | List, create, rollback, delete — with name validation and snapshot preview before destructive actions |
-| 🖱️ | **SPICE Integration** | Enable SPICE for VMs and retrieve `.vv` connection files. Auto-launches `remote-viewer` in a graphical session |
-| 🤖 | **Automation-Ready** | `--json` output, `--filter` by status, `--name` ERE filter, `--force` mode, structured logging via `LOG_FILE` |
-| ⚙️ | **Config File** | Persistent allowlisted defaults via `/etc/pmanrc` or `~/.pmanrc` — CLI flags always win |
-
----
-
-## 🔔 Quick start: alerts in 3 steps
-
-Run as root on the Proxmox node after [installing `pman`](#-installation).
-
-### 1 — Pick a channel in `/etc/pmanrc`
-
-```bash
-touch /etc/pmanrc && chmod 600 /etc/pmanrc
-cat >>/etc/pmanrc <<'EOF'
-NTFY_URL="https://ntfy.sh/pman-alerts-CHANGE-ME"   # hard-to-guess topic name
-# HEALTH_MAIL_TO="admin@example.com"               # optional, uncomment once sendmail works
-EOF
-```
-
-Anyone who knows a public ntfy.sh topic can read it — treat the name like a
-password, or use a [protected topic](#health-monitoring--alerts) with a token.
-For e-mail, most home servers need a smarthost first — see
-[relaying through an external SMTP provider](#relaying-through-an-external-smtp-provider).
-
-### 2 — Send a test message
-
-`--test-notify` uses every channel configured in `/etc/pmanrc`. Leave the
-e-mail line commented out until sendmail delivers, otherwise the test fails on
-the mail step instead of proving ntfy works.
-
-```bash
-pman --test-notify
-pman --check --dry-run; echo "exit $?"   # what would be sent, nothing saved
-```
-
-Subscribe to the same topic in the [ntfy
-app](https://ntfy.sh/docs/subscribe/phone/) or at `https://ntfy.sh/<your-topic>`
-in the browser; the test message shows up there.
-
-### 3 — Let cron check every 5 minutes
-
-```bash
-cat >/etc/cron.d/pman-health <<'EOF'
-PATH=/usr/sbin:/usr/bin:/sbin:/bin
-*/5 * * * * root /usr/local/bin/pman --check >/dev/null 2>&1
-EOF
-```
-
-The first run only records a baseline. From then on, you get one message per
-change — new or escalated problems, improvements and `RESOLVED`:
-
-<p align="center">
-  <img src="docs/screenshots/screenshot-ntfy.png"
-       alt="ntfy web app with WARN and RESOLVED alerts from pman"
-       width="720">
-</p>
-
-Details, thresholds and limitations: [Health monitoring &
-alerts](#health-monitoring--alerts).
-
----
-
-## 🏗️ How It Works
-
-A single `proxmox-manager.sh` script — no build step, no service, config
-optional. Runs on-demand as root directly on the Proxmox VE node; alerts run
-from cron.
-
-```text
-  User / Automation                         cron (*/5)
-       │                                        │
-       ▼                                        ▼
-  ┌───────────────────────────────────────────────────────┐
-  │  pman  (proxmox-manager.sh)                           │
-  │                                                       │
-  │  ┌──────────┐  ┌─────────────┐  ┌──────────────────┐  │
-  │  │ --list   │  │ interactive │  │ --health         │  │
-  │  │ --json   │  │    TUI      │  │ --check ─────────┼──┼──▶ ntfy / e-mail
-  │  │ --filter │  │             │  │ state: /var/lib  │  │    (on change)
-  │  └────┬─────┘  └──────┬──────┘  └────────┬─────────┘  │
-  └───────┼───────────────┼──────────────────┼────────────┘
-          │               │                  │
-          ▼               ▼                  ▼
-  ┌───────────────────────────────────────────────────────┐
-  │  qm (VMs)  ·  pct (CTs)  ·  pvesh (usage, tasks)      │  ← Proxmox CLI
-  └───────────────────────────────────────────────────────┘
-          │
-          ▼
-  ┌───────────────────────────────────────────────────────┐
-  │  Proxmox VE Host  (local)                             │
-  │  QEMU Virtual Machines  ·  LXC Containers             │
-  └───────────────────────────────────────────────────────┘
-```
-
-> ✅ Core: no network calls (unless alerts are configured) · ✅ No background process ·
-> ✅ Bash ≥ 4.0 · ✅ PVE 7.x / 8.x / 9.x
-
----
-
-## 🚀 Installation
-
-**Requirements:** Proxmox VE host · Bash ≥ 4.0 · Root privileges · `qm` / `pct`
-/ `pvesh` and `python3` (all bundled with PVE) · optional: `sendmail` (e.g.
-postfix) for e-mail alerts
-
-### Step 1 — Clone
+Run as **root on the Proxmox VE node**. The project targets PVE 7.x, 8.x and
+9.x. The core requires Bash 4 or newer, `qm`, `pct`, `pvesh` and Python 3,
+which are included with PVE. The clone instructions also require Git.
 
 ```bash
 git clone https://github.com/TimInTech/proxmox-manager.git
 cd proxmox-manager
-```
-
-### Step 2 — Run directly
-
-```bash
-chmod +x proxmox-manager.sh
-./proxmox-manager.sh
-```
-
-### Step 3 — Or register as `pman` system-wide *(optional, requires root)*
-
-```bash
-./install_dependencies.sh
-```
-
-The installer defaults to the core in noninteractive mode and asks whether to add
-the maintenance module in a terminal. It does not automatically install optional
-packages such as `virt-viewer`, `jq` or development tools.
-
-```bash
-./install_dependencies.sh --with-maintenance
-pman --maintenance
-```
-
-The maintenance interface speaks German (default) or English. A terminal
-installation asks first (`Language / Sprache [de/en]`); without a terminal pass
-`--lang en` or `--lang de`. The choice is stored in `/etc/pman/language` and kept on
-upgrades; `PMAN_LANG=en pman --maintenance` overrides it for one run.
-
-Installs an atomic, root-owned copy at `/usr/local/bin/pman` so later edits to
-the checkout cannot change the privileged executable.
-
----
-
-## 🛠️ Usage
-
-| Command | Description |
-|---|---|
-| `pman` | Interactive TUI — VM/CT table with full action menus |
-| `pman --list` | Plain-text table output — useful for logging or quick checks |
-| `pman --json` | Machine-readable JSON array for automation & `jq` |
-| `pman --filter running` | Filter output by status: `running` \| `stopped` \| `paused` |
-| `pman --name web` | Filter by VM/CT name (ERE substring-match; combinable with `--filter`) |
-| `pman --force` | Skip supported core confirmation prompts; maintenance confirmations remain mandatory |
-| `pman --timeout 30` | Graceful shutdown timeout before force stop, in seconds (default: 60) |
-| `pman --no-clear` | Don't clear screen in interactive mode |
-| `pman --once` | Run a single interactive refresh cycle (useful for TTY recording) |
-| `pman --maintenance` | Optional arrow-key storage/maintenance TUI for the host; guest menus open the selected CT/VM |
-| `pman --health` | Health overview: CPU / MEM / DISK %, uptime and level per guest (`--list`, `--json` combinable) |
-| `pman --check` | Health check for cron: alerts on changes, exit `0` OK · `1` WARN · `2` CRIT · `3` UNKNOWN |
-| `pman --check --dry-run` | Show the check result and the message that would be sent; nothing is sent or saved |
-| `pman --test-notify` | Send a test message through all configured channels |
-| `pman --version` | Print version and exit |
-| `pman -h, --help` | Show usage information and exit |
-
-### Interactive mode
-
-```text
+./install_dependencies.sh --without-maintenance
 pman
 ```
 
-Displays a table of all VMs/containers. Enter a VMID to open the action menu.
+The installer places an atomic, root-owned copy at `/usr/local/bin/pman`.
+Subsequent edits to the checkout do not change the installed executable. It
+installs no APT packages, optional viewers or development tools.
+
+To run the core directly from the checkout:
+
+```bash
+bash proxmox-manager.sh
+```
+
+### Add the maintenance module
+
+The module requires Python 3.9 or newer with `curses` and a UTF-8 terminal.
+It uses only the Python standard library.
+
+```bash
+./install_dependencies.sh --with-maintenance --lang en
+pman --maintenance
+```
+
+Without `--with-maintenance` or `--without-maintenance`, the installer asks in
+an interactive terminal; without a terminal it installs only the core.
+The maintenance interface supports German (default) and English. When neither
+module flag is passed, the first interactive installation also asks for the
+language. `--lang de|en` sets it explicitly in `/etc/pman/language`; upgrades
+preserve the choice.
+`PMAN_LANG=en pman --maintenance` overrides it for one run.
+
+Installing the module normally enables a daily systemd timer for public source
+metadata checks. Add `--no-source-timer` to install without enabling it, or
+turn it off later:
+
+```bash
+systemctl disable --now pman-maintenance-sources.timer
+```
+
+See [optional maintenance](#optional-maintenance) for controls, source
+verification, rollback and removal.
+
+## Usage
+
+### Interactive management
+
+Run `pman`, then enter a guest's VMID to open its action menu. Press `h` for
+health, `r` to refresh and `q` to quit. `M` or `m` opens optional maintenance
+for the host from the main menu, or for the selected guest from its action menu.
 
 ```text
 [+] running   [-] stopped   [~] paused   [?] unknown
 ```
 
-Press `h` for the health overview · `r` to refresh · `q` to quit
+| Guest inventory | Guest actions |
+| --- | --- |
+| ![VM and container inventory](docs/screenshots/screenshot-tui.png) | ![Guest action menu with a health status line](docs/screenshots/screenshot-action-menu.png) |
 
-### Optional maintenance interface
+Screenshots are example views; version labels and output may differ from the
+current checkout.
 
-Press `M` or `m` in the main menu for host maintenance, or in a guest action
-menu for that selected CT or VM. Arrow keys select an action, Enter opens it,
-Page Up/Down scrolls output, Esc goes back or cancels a confirmation, and `q`
-exits. `Tab` switches the CT scan directory. The display adapts to terminal
-size and honors `NO_COLOR`; a UTF-8 terminal is required.
+Stop requests a graceful shutdown with `qm shutdown` or `pct shutdown`. Proxmox
+force-stops the guest only after the configured timeout (60 seconds by default).
+Destructive core actions request confirmation; errors include Proxmox details.
+Snapshot rollback and deletion show the selected snapshot before confirmation.
 
-Native diagnostics use the selected scope; native guest changes require explicit
-confirmation and never start stopped guests. `--force` cannot bypass confirmation.
-The host-only **Proxmox VE Helper-Scripts (Community)** menu
-(<https://community-scripts.org>, MIT licence, repository
-`community-scripts/ProxmoxVE`) launches eight selected third-party tools. They
-are not written by pman or Proxmox and can change host settings or guests chosen
-inside the helper. Tools are grouped by intent and each carries a hazard level
-as text: `[LESEN]` (diagnosis; Disk Health only installs packages if you agree to its prompt), `[ÄNDERT]` (changes the host or guests) or
-`[LÖSCHT]` (removes data or packages, no recycle bin); colour is only an extra
-cue. Before the confirmation screen pman checks the live source and downloads the
-pinned revision; the screen shows the exact source URL, the command, the notice
-that the script runs as root on this host and the pinned revision and checksum.
-`v` shows the verified script, and exactly those bytes are started after `j`.
-The check is repeated right before launch; changed, missing or unreachable
-sources block execution and the message names the file and the reviewed and
-current revision. The optional upstream telemetry component is omitted. See
-[maintenance documentation](docs/maintenance.md) for limits, source checks,
-rollback and removal.
+Container consoles use `pct enter`; VM consoles use `qm terminal` and require
+a configured serial console, with `qm monitor` as a fallback. Both require a
+running guest. IPv4 lookup uses `pct exec` for containers and the QEMU Guest
+Agent for VMs.
 
-Display options: `NO_COLOR=1` removes all colour, `PMAN_ASCII=1` replaces box and
-arrow glyphs with ASCII (also automatic on `TERM=linux`), and `PMAN_HYPERLINKS=1|0`
-forces OSC 8 clickable links on or off (the URL is always printed as plain text).
+### Command reference
 
-To remove only the optional module, run:
+| Command | Purpose |
+| --- | --- |
+| `pman` | Open the interactive guest table and action menus. |
+| `pman --list` | Print a plain-text inventory. |
+| `pman --json` | Print inventory as a JSON array. |
+| `pman --list --filter running` | Filter by `running`, `stopped` or `paused`. |
+| `pman --list --name 'web\|db'` | Filter names with an extended regular expression; combines with `--filter`. |
+| `pman --health` | Show local guest health; combines with `--list` or `--json`, and with name/status filters. |
+| `pman --check` | Check health and notify on changes; exit `0` OK, `1` WARN, `2` CRIT, `3` UNKNOWN. |
+| `pman --check --dry-run` | Print the result and proposed notification without sending or saving state. |
+| `pman --test-notify` | Send a test message through every configured notification channel. |
+| `pman --maintenance` | Open the optional host maintenance interface. |
+| `pman --timeout 30` | Set seconds before a shutdown is force-stopped. |
+| `pman --force` | Skip supported core confirmations; maintenance confirmations remain mandatory. |
+| `pman --no-clear` | Preserve terminal contents between interactive views. |
+| `pman --once` | Run one interactive refresh cycle, for example when recording. |
+| `pman --version` | Print the core version. |
+| `pman --help` | Show help; `-h` is equivalent. |
 
-```bash
-./install_dependencies.sh --uninstall-maintenance
-```
+`--list` and `--json` are alternative output modes. `--check` always checks all
+local guests and does not accept name/status filters or other output modes.
+`--maintenance` also runs separately from inventory and health modes.
 
-To switch back to the previous installed module release, run:
-
-```bash
-./install_dependencies.sh --rollback-maintenance
-```
-
-Both operations retain the Bash core. The module may need a UTF-8 terminal. A
-cancelled CT scan can continue in the guest until its 55-second timeout, and
-community source checks may block the UI for up to about one minute while the
-live checks and pinned source downloads wait for their network timeouts.
-Cancelling a running change is not a rollback; see [maintenance documentation](docs/maintenance.md).
-
-### JSON output
+### JSON inventory
 
 ```bash
-pman --json | jq '.[] | select(.status == "running")'
+pman --json
 ```
+
+Example output:
 
 ```json
 [
@@ -341,137 +159,187 @@ pman --json | jq '.[] | select(.status == "running")'
 ]
 ```
 
-### SPICE remote desktop
-
-For a running VM with a QXL display, SPICE info requests an authenticated
-`.vv` connection file from the Proxmox `spiceproxy` API using `pvesh` and Python 3
-on the host. If `remote-viewer`
-(from [`virt-viewer`](https://virt-manager.org/)) is installed and a graphical
-session is available, it is launched automatically:
+Use the built-in filter to keep the array, or install `jq` separately to
+transform the data:
 
 ```bash
-# Install virt-viewer (Debian / Proxmox host)
+pman --json --filter running
+pman --json | jq '.[] | select(.status == "running")'
+```
+
+An inventory query failure produces a nonzero exit status rather than a
+successful empty or partial result.
+
+### SPICE remote desktop
+
+For a running VM with a QXL display, **SPICE info** requests an authenticated
+`.vv` connection file from the Proxmox `spiceproxy` API using `pvesh` and Python
+3. If `remote-viewer` is installed and a graphical session is available, pman
+launches it automatically. On Debian, the viewer package is installed with:
+
+```bash
 apt install virt-viewer
 ```
 
-Otherwise, the path to the private `.vv` file is printed. Open it promptly with
-`remote-viewer` on a desktop that can reach the Proxmox proxy on TCP 3128; it
-contains a short-lived ticket and TLS trust information. Delete unused connection
-files. `PROXMOX_MANAGER_SPICE_ADDR` (environment or `~/.pmanrc`) selects the
-client-reachable proxy hostname/IP; it does not change the VM bind address.
+Otherwise, pman prints the private connection file's path. Open it promptly
+with `remote-viewer` on a desktop that can reach the Proxmox proxy on TCP 3128.
+The file contains a short-lived ticket and TLS trust information; delete unused
+files. `PROXMOX_MANAGER_SPICE_ADDR` selects the client-reachable proxy hostname
+or IP, not the VM's bind address.
 
-Enable SPICE sets only the VGA type to QXL and preserves named VGA properties.
-Existing QXL multi-monitor settings remain intact. Applying a display hardware
-change requires a full shutdown and start; pman does not restart the VM automatically.
+**Enable SPICE** sets the VGA type to QXL while preserving named VGA properties
+and existing QXL multi-monitor settings. Applying a display hardware change
+requires a full shutdown and start; pman does not restart the VM automatically.
 
-### Health monitoring & alerts
+## Health monitoring & alerts
 
-`pman --health` shows every guest on the **local node** (templates skipped) with
-CPU, memory and disk usage, uptime and a health level; `--list` prints plain
-text, `--json` machine-readable data (`null` where a value is not available).
-The same data backs the `h` key in the TUI and the `Health:` line of the status
-action.
+`pman --health` shows CPU, memory, disk usage, uptime and health levels for
+guests
+on the **local node**, excluding templates. Add `--list` for plain text or
+`--json` for machine-readable data, with `null` for unavailable values.
+The same data appears under `h` and in the guest status action.
 
-<p align="center">
-  <img src="docs/screenshots/screenshot-health.png"
-       alt="pman --health: CPU, memory, disk, uptime and level per guest"
-       width="720">
-</p>
+![Health overview with guest metrics and health levels](docs/screenshots/screenshot-health.png)
 
-`pman --check` is meant for cron. It evaluates:
+### Set up notifications
 
-| Check | Level | Notes |
-|---|---|---|
-| CPU | WARN / CRIT | Must stay above the threshold for `HEALTH_CPU_RUNS` runs in a row |
-| Memory, disk | WARN / CRIT | Immediately. VM disk usage needs the QEMU guest agent, otherwise n/a |
-| *(guest stops)* | — | CPU / memory / disk alerts of a stopped guest are resolved |
-| Stopped with `onboot=1` | CRIT | Configured to start at boot but not running (WARN if stopped by a task) |
-| Stopped unexpectedly | WARN | Was running at the last check; its latest task is no stop/shutdown/suspend/migrate/destroy/backup |
-| Failed task | WARN / CRIT | Any node task that ended not `OK` since the last run (`WARNINGS` → WARN) |
+Run these steps as root after installing `pman`.
 
-Thresholds (percent; `0` disables that level):
+1. Configure at least one channel in a private `/etc/pmanrc`. Replace the topic
+   below with your own hard-to-guess name; anyone who knows a public ntfy topic
+   can read it. For access control, use a protected topic and a token file as
+   described under [notification channels](#notification-channels).
 
-| Key | Default | Key | Default |
-|---|---|---|---|
+   ```bash
+   touch /etc/pmanrc
+   chmod 600 /etc/pmanrc
+   cat >>/etc/pmanrc <<'EOF'
+   NTFY_URL="https://ntfy.sh/pman-alerts-CHANGE-ME"
+   # HEALTH_MAIL_TO="admin@example.com"
+   EOF
+   ```
+
+2. Subscribe to the topic in the [ntfy app](https://ntfy.sh/docs/subscribe/phone/)
+   or at `https://ntfy.sh/<your-topic>`, then test delivery and inspect a dry run.
+   Enable e-mail only after local `sendmail` delivery works: the test uses every
+   configured channel; it succeeds if at least one delivers and warns about
+   failed channels.
+
+   ```bash
+   pman --test-notify
+   pman --check --dry-run; echo "exit $?"
+   ```
+
+3. Schedule a check every five minutes. Cron needs an explicit `PATH` that
+   includes `/usr/sbin`.
+
+   ```bash
+   cat >/etc/cron.d/pman-health <<'EOF'
+   PATH=/usr/sbin:/usr/bin:/sbin:/bin
+   */5 * * * * root /usr/local/bin/pman --check >/dev/null 2>&1
+   EOF
+   ```
+
+The first run establishes a baseline for task history; existing guest health
+problems can already trigger alerts. Later runs notify on new or escalated
+problems, improvements and `RESOLVED`, including duration. Each run combines
+its changes into one message.
+
+### Checks and thresholds
+
+| Check | Level | Behaviour |
+| --- | --- | --- |
+| CPU | WARN / CRIT | Requires `HEALTH_CPU_RUNS` consecutive runs before the initial alert. |
+| Memory, disk | WARN / CRIT | Immediate; VM disk usage requires the QEMU Guest Agent. |
+| Guest stops | — | Clears its CPU, memory and disk alerts. |
+| Stopped with `onboot=1` | CRIT | WARN if a Proxmox task explains the stop. |
+| Unexpected stop | WARN | Previously running, without an explaining stop, shutdown, suspend, migrate, destroy or backup task. |
+| Failed node task | WARN / CRIT | Completed unsuccessfully since the last check; `WARNINGS` yields WARN. |
+
+Thresholds are percentages; `0` disables the respective level.
+
+| Setting | Default | Setting | Default |
+| --- | --- | --- | --- |
 | `HEALTH_CPU_WARN` | 85 | `HEALTH_CPU_CRIT` | 95 |
 | `HEALTH_MEM_WARN` | 90 | `HEALTH_MEM_CRIT` | 95 |
 | `HEALTH_DISK_WARN` | 85 | `HEALTH_DISK_CRIT` | 95 |
-| `HEALTH_CPU_RUNS` | 3 | `HEALTH_IGNORE_IDS` | *(empty)* e.g. `105,210` |
+| `HEALTH_CPU_RUNS` | 3 | `HEALTH_IGNORE_IDS` | Empty; e.g. `105,210` |
 
-A notification is sent only when something changes: new or escalated problems,
-improvements and `RESOLVED` (with duration). All changes of one run go into one
-message. The first run only records a baseline, so old failed tasks are not
-reported. State is kept in `HEALTH_STATE_DIR` (default `/var/lib/pman`, mode
-`0700`); if every channel fails, the unsent changes stay pending and are sent by
-the next run. Exit codes: `0` OK · `1` WARN · `2` CRIT · `3` UNKNOWN (usage,
-config, lock or `pvesh` error) — the output is a Nagios-style summary line plus
-one line per problem.
+State is stored in `HEALTH_STATE_DIR` (default `/var/lib/pman`, mode `0700`).
+If every configured channel fails, unsent changes remain pending for the next
+run. Output is a Nagios-style summary followed by one line per problem. Exit
+codes are `0` OK, `1` WARN, `2` CRIT and `3` UNKNOWN; usage, configuration,
+locking and `pvesh` errors produce UNKNOWN in check mode.
 
-<p align="center">
-  <img src="docs/screenshots/screenshot-check.png"
-       alt="pman --check: three memory warnings, RESOLVED minutes later"
-       width="720">
-</p>
+![Cron check showing warnings and their resolution](docs/screenshots/screenshot-check.png)
 
-**ntfy** — push to phone/desktop via [ntfy](https://ntfy.sh) (public or
-self-hosted):
+A shutdown initiated inside a guest has no Proxmox task and is reported as an
+unexpected stop. In a cluster, schedule checks on every node; each checks only
+its local guests. Failed-task detection examines the last 200 node tasks.
+
+### Notification channels
+
+For public or self-hosted [ntfy](https://ntfy.sh), set `NTFY_URL`. Protected
+topics can use `NTFY_TOKEN_FILE`; keep the token out of `pmanrc`:
 
 ```bash
 # /etc/pmanrc
-NTFY_URL="https://ntfy.sh/pman-alerts-CHANGE-ME"   # use a hard-to-guess topic
-NTFY_TOKEN_FILE="/etc/pman/ntfy.token"             # optional, for protected topics
+NTFY_URL="https://ntfy.sh/pman-alerts-CHANGE-ME"
+NTFY_TOKEN_FILE="/etc/pman/ntfy.token"
+```
 
-# store the token in a private file (never inline in pmanrc)
+Create a private token file, then enter the token in the editor:
+
+```bash
 install -d -m 700 /etc/pman
-install -m 600 /dev/null /etc/pman/ntfy.token && nano /etc/pman/ntfy.token
+install -m 600 /dev/null /etc/pman/ntfy.token
+nano /etc/pman/ntfy.token
 ```
 
-The token file and its directory must not be writable by others; a token
-requires an `https://` URL (`http://` plus a token is a configuration error).
-**E-mail** uses the local `sendmail` (postfix, which PVE installs for its own
-notifications, works out of the box when it can relay):
+The token file and its directory must not be writable by others. Token
+authentication requires HTTPS; an HTTP URL with a token is a configuration
+error.
+
+E-mail uses local `sendmail`, for example Postfix with working relay delivery.
+Recipients are comma-separated without spaces; the sender is optional:
 
 ```bash
 # /etc/pmanrc
-HEALTH_MAIL_TO="admin@example.com"       # comma separated, no spaces
-HEALTH_MAIL_FROM="pman@pve.example.com"  # optional
+HEALTH_MAIL_TO="admin@example.com"
+HEALTH_MAIL_FROM="pman@pve.example.com"
 ```
 
-Subject and body match the ntfy message (plain text, `Auto-Submitted:
-auto-generated`):
+Both channels use the same message text. E-mail is plain text and carries
+`Auto-Submitted: auto-generated`.
 
-<p align="center">
-  <img src="docs/screenshots/screenshot-mail.png"
-       alt="pman WARN alert e-mail in a web mail client"
-       width="720">
-</p>
+| ntfy notification | E-mail notification |
+| --- | --- |
+| ![ntfy warnings and resolved notifications](docs/screenshots/screenshot-ntfy.png) | ![Plain-text health alert in a mail client](docs/screenshots/screenshot-mail.png) |
 
-#### Relaying through an external SMTP provider
+### Relaying through an external SMTP provider
 
-Most home servers cannot deliver mail themselves: the provider blocks port 25
-or the receiving side rejects a dynamic IP. Postfix then needs a smarthost. The
-example below uses Gmail submission; any provider works the same way, only host
-and port change.
+Hosts without direct mail delivery need a smarthost, for example when port 25
+is blocked or a dynamic IP is rejected. This recipe configures Postfix for Gmail
+submission on port 587; other providers may require different authentication,
+sender policies and endpoints. Use your actual account instead of
+`you@example.com`. Gmail app passwords depend on account eligibility; see
+[Google's app-password instructions](https://support.google.com/accounts/answer/185833).
 
-**1 — Authentication.** Providers with two-factor authentication do not accept
-the account password over SMTP. Create an *app password* instead (Google:
-Account → Security → App passwords) and write it to a private file — enter it
-yourself, so it never ends up in a shell history or a script:
+Install SASL support and enter the app password without spaces. The password is
+read interactively so it does not become part of shell history:
 
 ```bash
-apt install libsasl2-modules                      # SASL client, not installed by default
+apt install libsasl2-modules
 umask 077
-read -rsp "app password: " P; echo
-printf '[smtp.gmail.com]:587 you@example.com:%s\n' "$P" >/etc/postfix/sasl_passwd
-unset P
+read -rsp "app password: " PMAN_SMTP_PASSWORD; echo
+printf '[smtp.gmail.com]:587 you@example.com:%s\n' "$PMAN_SMTP_PASSWORD" >/etc/postfix/sasl_passwd
+unset PMAN_SMTP_PASSWORD
 postmap /etc/postfix/sasl_passwd
 chmod 600 /etc/postfix/sasl_passwd /etc/postfix/sasl_passwd.db
 ```
 
-App passwords are shown in groups of four — enter them **without the spaces**.
-
-**2 — Postfix.** `sender_canonical` rewrites the envelope sender, because
-providers only accept mail from the authenticated account:
+Configure encrypted submission and rewrite the envelope sender to the
+authenticated account:
 
 ```bash
 postconf -e "relayhost = [smtp.gmail.com]:587" \
@@ -482,222 +350,197 @@ postconf -e "relayhost = [smtp.gmail.com]:587" \
   "smtp_tls_security_level = encrypt" \
   "smtp_tls_CAfile = /etc/ssl/certs/ca-certificates.crt" \
   "sender_canonical_classes = envelope_sender" \
-  "sender_canonical_maps = regexp:/etc/postfix/sender_canonical" \
-  "inet_protocols = ipv4"
+  "sender_canonical_maps = regexp:/etc/postfix/sender_canonical"
 echo '/.+/  you@example.com' >/etc/postfix/sender_canonical
-echo 'root: you@example.com' >>/etc/aliases && newaliases
+echo 'root: you@example.com' >>/etc/aliases
+newaliases
 systemctl restart postfix
 ```
 
-`inet_protocols = ipv4` matters on hosts without a working IPv6 route:
-otherwise every delivery first fails with `Network is unreachable` and the mail
-sits in the queue. The `root` alias makes sure Proxmox's own notifications
-reach the same mailbox.
-
-**3 — Verify.** Send a test message and read the log; Debian 13 has no
-`/var/log/mail.log`, postfix logs to the journal:
+The root alias also routes Proxmox's own root notifications to that mailbox.
+If IPv6 delivery fails with `Network is unreachable`, configure
+`postconf -e "inet_protocols = ipv4"` and restart Postfix. Check delivery:
 
 ```bash
 pman --test-notify
-journalctl -t postfix/smtp -n 5 --no-pager   # look for status=sent
-mailq                                        # should be empty
+journalctl -t postfix/smtp -n 5 --no-pager
+mailq
 ```
 
-<p align="center">
-  <img src="docs/screenshots/screenshot-mail-relay.png"
-       alt="pman --test-notify followed by a postfix log line with status=sent"
-       width="720">
-</p>
+Look for `status=sent` and an empty queue. On systems without
+`/var/log/mail.log`,
+use the journal. Errors `535 5.7.8` or `534 5.7.9` indicate an authentication
+problem; check the app password and account requirements. Gmail may rewrite the
+From address; filter by subject or use a recipient such as
+`you+pman@example.com`.
 
-Common failures: `535 5.7.8` or `534 5.7.9 Application-specific password
-required` means the password is not an app password; `status=deferred` with
-`Network is unreachable` is the IPv6 case above. Gmail always replaces the
-`From` header with the authenticated account, so identify alerts by their
-subject, or send them to a plus address such as `you+pman@example.com` and
-filter on the recipient.
+![Notification test followed by successful Postfix relay delivery](docs/screenshots/screenshot-mail-relay.png)
 
-Test the channels, then add the cron job (set `PATH`, cron's default lacks
-`/usr/sbin`):
+## Configuration
+
+Settings are loaded in this order: environment/defaults, `/etc/pmanrc`,
+`~/.pmanrc`, then CLI flags. Later values take precedence.
 
 ```bash
-pman --test-notify
-pman --check --dry-run; echo "exit $?"
-```
-
-```text
-# /etc/cron.d/pman-health
-PATH=/usr/sbin:/usr/bin:/sbin:/bin
-*/5 * * * * root /usr/local/bin/pman --check >/dev/null 2>&1
-```
-
-Limitations: a shutdown from **inside** a guest has no Proxmox task and is
-reported as "stopped unexpectedly"; in a cluster, run the cron job on **every
-node** (each checks only its own guests); failed tasks are read from the last
-200 node tasks.
-
-### Configuration
-
-`proxmox-manager` checks the following files at startup (in this order):
-
-| File | Scope |
-|---|---|
-| `/etc/pmanrc` | System-wide (all users) |
-| `~/.pmanrc` | Per-user (overrides system-wide) |
-
-CLI flags are applied last and always win over config file values.
-
-```bash
-# ~/.pmanrc — example
-STOP_TIMEOUT=120                          # shutdown timeout before force stop (default: 60)
-LOG_FILE="/var/log/proxmox-manager.log"   # structured log file (empty = disabled)
-PROXMOX_MANAGER_SPICE_ADDR="spice.example.invalid" # Client-reachable SPICE proxy hostname/IP
-HEALTH_MEM_WARN=80                        # health thresholds, see "Health monitoring & alerts"
+# ~/.pmanrc
+STOP_TIMEOUT=120
+LOG_FILE="/var/log/proxmox-manager.log"
+PROXMOX_MANAGER_SPICE_ADDR="spice.example.invalid"
+HEALTH_MEM_WARN=80
 NTFY_URL="https://ntfy.sh/pman-alerts-CHANGE-ME"
 ```
 
-Configuration files are parsed as data, not executed as shell code. Accepted
-keys: `STOP_TIMEOUT`, `LOG_FILE`, `PROXMOX_MANAGER_SPICE_ADDR`,
-`HEALTH_CPU_WARN`, `HEALTH_CPU_CRIT`, `HEALTH_MEM_WARN`, `HEALTH_MEM_CRIT`,
-`HEALTH_DISK_WARN`, `HEALTH_DISK_CRIT`, `HEALTH_CPU_RUNS`, `HEALTH_IGNORE_IDS`,
-`HEALTH_STATE_DIR`, `NTFY_URL`, `NTFY_TOKEN_FILE`, `HEALTH_MAIL_TO` and
-`HEALTH_MAIL_FROM`; anything else is ignored with a warning. Health settings are
-validated only by `--health`, `--check` and `--test-notify`, so a typo never
-blocks the TUI. Because the file may name alert targets, keep it private: `chmod
-600 /etc/pmanrc`. When enabled, `LOG_FILE` must be an absolute, non-symlinked
-regular file owned by the current user with mode `0600`; its parent directory
-must also be owner-controlled and not group/world-writable.
+Files are parsed as data, never sourced as shell code. Accepted keys:
 
-### Shell Completions
+| Group | Keys |
+| --- | --- |
+| Core | `STOP_TIMEOUT`, `LOG_FILE`, `PROXMOX_MANAGER_SPICE_ADDR` |
+| Thresholds | `HEALTH_CPU_WARN`, `HEALTH_CPU_CRIT`, `HEALTH_MEM_WARN`, `HEALTH_MEM_CRIT`, `HEALTH_DISK_WARN`, `HEALTH_DISK_CRIT` |
+| Check state | `HEALTH_CPU_RUNS`, `HEALTH_IGNORE_IDS`, `HEALTH_STATE_DIR` |
+| Notifications | `NTFY_URL`, `NTFY_TOKEN_FILE`, `HEALTH_MAIL_TO`, `HEALTH_MAIL_FROM` |
+
+Unknown keys produce a warning and are ignored. Health settings are validated
+by `--health`, `--check` and `--test-notify`, so mistakes in those settings do
+not block the guest-management interface. Keep files private, for example
+`chmod 600 /etc/pmanrc`.
+
+Logging is disabled when `LOG_FILE` is empty. If enabled, the path must be
+absolute and refer to a non-symlink regular file owned by the current user,
+mode `0600`. The parent directory must also be owner-controlled and not writable
+by group or others. Full Proxmox error output goes to the log; terminal errors
+show the first line.
+
+### Shell completions
 
 ```bash
-# Bash (system-wide)
-sudo cp completions/pman.bash /etc/bash_completion.d/pman
+# Bash, system-wide
+cp completions/pman.bash /etc/bash_completion.d/pman
 
 # Zsh
 mkdir -p ~/.zsh/completions
 cp completions/pman.zsh ~/.zsh/completions/_pman
 ```
 
----
+For Zsh, include `~/.zsh/completions` in `fpath` before calling `compinit`.
 
-## 🔐 Security
+## Optional maintenance
 
-- **Root required:** `qm` and `pct` need elevated privileges — there's no
-  workaround.
-- **No credentials stored:** Relies entirely on Proxmox host authentication.
-- **Network access:** notifications are opt-in. The optional maintenance module
-  also checks public source metadata and fetches pinned community scripts on
-  request. The ntfy token is read from a `0600` file, passed to `curl` via stdin
-  and never sent over plain http.
-- **CI hardening:** ShellCheck on every push · Gitleaks scan for accidental
-  secrets.
+The maintenance interface provides host storage, filesystem and SMART
+information. Guest diagnostics and changes are scoped to the selected VM or
+container, including confirmed TRIM and APT cache cleanup for Debian/Ubuntu
+containers. Native guest actions never start stopped guests. Every change
+requires confirmation, which `--force` cannot bypass.
 
----
+![Host maintenance menu with storage diagnostics and community tools](docs/screenshots/screenshot-maintenance-menu.png)
 
-## 📋 Changelog
+Arrow keys select an action; Enter opens it. Page Up/Down scrolls output,
+Esc returns or cancels a confirmation, and `q` exits. `Tab` switches the CT scan
+directory. Display adapts to the terminal size:
 
-### 🆕 [v2.14.0](CHANGELOG.md) — 2026-10-28
+| Environment variable | Effect |
+| --- | --- |
+| `NO_COLOR=1` | Disable colour. |
+| `PMAN_ASCII=1` | Use ASCII box and arrow characters; automatic on `TERM=linux`. |
+| `PMAN_HYPERLINKS=1` or `0` | Force OSC 8 links on or off; URLs also appear as plain text. |
+| `PMAN_LANG=en` or `de` | Override the installed maintenance language for one run. |
 
-> Optional arrow-key storage and maintenance module, scoped CT/VM actions,
-> explicit confirmations, source provenance and daily metadata-only checks.
+### Community helper scripts
 
-### [v2.13.2](CHANGELOG.md) — 2026-10-21
+The host menu includes eight selected **Proxmox VE Helper-Scripts (Community)**
+from [community-scripts/ProxmoxVE](https://github.com/community-scripts/ProxmoxVE)
+([project website](https://community-scripts.org), MIT license). This is
+third-party code, maintained separately from pman and Proxmox. Helpers have
+their own interactive dialogs and may change the host or guests selected within
+the helper.
 
-> **Stop** is a graceful shutdown (`qm|pct shutdown --timeout --forceStop 1`);
-> Proxmox force-stops only after `--timeout`. Previously `qm|pct stop` cut the
-> power immediately. Tests now cover stop and restart.
+Tools are grouped by intent and labelled `[READ]`, `[CHANGE]` or `[DELETE]`
+in English (`[LESEN]`, `[ÄNDERT]`, `[LÖSCHT]` in German). Disk Health may also
+install packages after its own prompt. Deletion has no recycle bin.
 
-### [v2.13.1](CHANGELOG.md) — 2026-09-26
+Before confirmation, pman checks the live upstream source and downloads the
+pinned revision. The confirmation shows the source URL, command, root execution
+notice, revision and checksum. Press `v` to inspect the verified script; `j`
+launches those exact bytes. Verification runs again immediately before launch.
+Changed, missing or unreachable sources block execution, with the file and
+reviewed/current revisions named in the message. The optional upstream telemetry
+component is omitted.
 
-> README: health monitoring and alerts with screenshots · SMTP relay setup
+A cancelled CT scan may continue in the guest until its 55-second timeout.
+Source checks and downloads can block the interface for about a minute while
+network timeouts expire. Cancelling a running change does not roll it back.
+See the [maintenance documentation](docs/maintenance.md) for scope, source
+checks
+and operational limits.
 
-### [v2.13.0](CHANGELOG.md) — 2026-09-19
+### Rollback and removal
 
-> Health view (`--health`, key `h`) · `--check` for cron with ntfy / e-mail
-> alerts on changes · exit codes 0/1/2/3 · `--test-notify`
-
-### [v2.12.1](CHANGELOG.md) — 2026-09-19
-
-> Action and snapshot menus draw a closed frame · README screenshots regenerated
-
-### [v2.12.0](CHANGELOG.md) — 2026-09-19
-
-| Issue | Change |
-|---|---|
-| [#33](https://github.com/TimInTech/proxmox-manager/issues/33) | TUI frames aligned by visible width; long guest names grow the NAME column (truncated at terminal width); correct PVE version and compact uptime in the header |
-| [#31](https://github.com/TimInTech/proxmox-manager/pull/31) | Security hardening: config files parsed as allowlisted data (no `source`), private log files, atomic root-owned `pman` install, SHA-pinned CI |
-| [#30](https://github.com/TimInTech/proxmox-manager/pull/30) | Snapshot names validated against Proxmox rules; SPICE `.vv` files use the real bind address/port |
-| [#28](https://github.com/TimInTech/proxmox-manager/issues/28) | New **IP info** menu item to show current IPv4 addresses for running VMs and CTs |
-
-### [v2.11.1](CHANGELOG.md) — 2026-05-04
-
-| Issue | Change |
-|---|---|
-| [#21](https://github.com/TimInTech/proxmox-manager/issues/21) | Full Proxmox stderr written to `LOG_FILE`; only first line shown on stdout |
-| [#22](https://github.com/TimInTech/proxmox-manager/issues/22) | Config file support: `/etc/pmanrc` and `~/.pmanrc` loaded before CLI flags |
-| [#23](https://github.com/TimInTech/proxmox-manager/issues/23) | Numbered snapshot selection for rollback and delete (free-text fallback) |
-| [#24](https://github.com/TimInTech/proxmox-manager/issues/24) | `validate_menu_choice()` helper — unified error format for all menu inputs |
-| [#25](https://github.com/TimInTech/proxmox-manager/issues/25) | `--name PATTERN` flag — ERE substring filter on VM/CT name, combinable with `--filter` |
-| [#26](https://github.com/TimInTech/proxmox-manager/issues/26) | `virt-viewer` auto-launched from SPICE info; fallback hint when not installed |
-| [#28](https://github.com/TimInTech/proxmox-manager/issues/28) | New **IP info** menu item to show current IPv4 addresses for running VMs and CTs |
-
-### [v2.9.0](CHANGELOG.md) — 2026-04-09
-
-> `--filter STATUS` · `--timeout SECS` with force-stop fallback · `--force` mode
-> · 29 unit tests · Bash & Zsh shell completions
-
-**→ [View full CHANGELOG](CHANGELOG.md)**
-
----
-
-## 🧪 Testing
+From a checkout, switch to the previous installed module release or remove
+only the optional module:
 
 ```bash
-# Lint
-shellcheck proxmox-manager.sh
+./install_dependencies.sh --rollback-maintenance
+```
 
-# Unit tests (no real Proxmox needed — uses mock stubs)
+```bash
+./install_dependencies.sh --uninstall-maintenance
+```
+
+Both retain the Bash core. Removal also retains health cron configuration and
+private diagnostic state.
+
+## Security
+
+The core runs as root using the host's Proxmox authentication; it needs no
+separate Proxmox API credentials or pman daemon. Guest agents are required for
+specific metrics and VM IP lookup, not for basic inventory and management.
+
+Notifications are opt-in. Maintenance can contact public source services,
+download pinned helpers and run its daily metadata timer. ntfy tokens are read
+from private files, passed to `curl` through stdin and require HTTPS. SPICE
+connection files contain temporary authentication tickets.
+
+CI includes ShellCheck, mock tests and Gitleaks scanning. Report vulnerabilities
+according to [SECURITY.md](SECURITY.md).
+
+## Community & Tutorials
+
+External articles about the project; commands and screenshots may describe
+older versions.
+
+- [Proxmox Manager – Co to jest, jak działa, instalacja i obsługa](https://blog.askomputer.pl/proxmox-manager-timintech-co-to-jest-jak-dziala-instalacja-i-obsluga/)
+  — askomputer.pl. Polish installation and usage walkthrough with screenshots.
+- [Stop Wrestling Proxmox GUIs: Meet the Single-Bash TUI That Changes Everything](https://prompts.brightcoding.dev/blog/stop-wrestling-proxmox-guis-meet-the-single-bash-tui-that-changes-everything)
+  — Bright Coding. English overview of installation and guest management.
+- [This Lightweight Proxmox Tool Makes CLI Management Faster](https://www.virtualizationhowto.com/2026/05/this-lightweight-proxmox-tool-makes-cli-management-faster/)
+  — Brandon Lee, Virtualization Howto. English review covering VM/LXC
+management,
+  snapshots, consoles and homelab use.
+
+## Development
+
+Local tests use mocks and require neither a Proxmox host nor live guest actions:
+
+```bash
+shellcheck proxmox-manager.sh
 bash tests/run.sh
 bash tests/test_inventory.sh
 bash tests/test_spice.sh
-
-# Optional maintenance module tests (no real Proxmox needed)
 python3 -B -m unittest discover -s tests/maintenance -v
 ```
 
-The core suite covers `validate_vmid`, `validate_snapshot_name`, `ip_info`,
-`--filter`, CLI flags, config parsing, the health view, the `--check` engine and
-notifications (mocked `pvesh`, `curl`, `sendmail`; no network, no root).
+They cover CLI parsing, configuration, inventory, snapshots, SPICE, health
+checks, notifications and the optional maintenance module. Install development
+tools separately. Follow [CONTRIBUTING.md](CONTRIBUTING.md) for style, testing
+and
+pull requests, and the [Code of Conduct](CODE_OF_CONDUCT.md). Keep runtime
+dependencies limited to the host tools and Python standard library; do not
+commit generated reports or large test artifacts.
 
----
+Use [issues](https://github.com/TimInTech/proxmox-manager/issues) for bug reports
+and feature discussions. Release history and the unreleased 2.14.1 changes
+present in this checkout are documented in [CHANGELOG.md](CHANGELOG.md).
 
-## 🤝 Contributing
+## License
 
-Contributions welcome — keep it simple, keep it Bash.
-
-1. Fork & create a feature branch: `git checkout -b feat/your-change`
-2. Keep external dependencies at zero. Run `shellcheck` locally.
-3. Commit with conventional format: `feat(vm): add suspend action`
-4. Open a Pull Request.
-
-**Do not commit:** generated files, scan outputs, binary files, or large test
-data.
-
----
-
-## 📜 License
-
-MIT License — see [LICENSE](LICENSE) for full text.
-
----
-
-<!-- markdownlint-disable MD033 -->
-<div align="center">
-
-### Boring Proxmox administration, automated ✨
-
-[🐛 Report Bug](https://github.com/TimInTech/proxmox-manager/issues) ·
-[✨ Request Feature](https://github.com/TimInTech/proxmox-manager/issues) ·
-[📋 Changelog](CHANGELOG.md)
-
-</div>
+[MIT](LICENSE). Maintained by [TimInTech](https://github.com/TimInTech).
+[Support the project](https://buymeacoffee.com/timintech).

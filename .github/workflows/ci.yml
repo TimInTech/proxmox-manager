@@ -125,7 +125,7 @@ jobs:
           for needle in ('HEALTH_CPU_RUNS', 'cat >/etc/cron.d/pman-health', '--filter running'):
               if needle not in guide:
                   sys.exit(f'guide lost command: {needle}')
-          for anchor in ('id="-installation"', 'id="health-monitoring--alerts"',
+          for anchor in ('id="installation"', 'id="health-monitoring--alerts"',
                          'id="relaying-through-an-external-smtp-provider"'):
               if anchor not in guide:
                   sys.exit(f'guide lost anchor: {anchor}')

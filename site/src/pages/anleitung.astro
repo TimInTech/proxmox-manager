@@ -39,6 +39,14 @@ md.renderer.rules.heading_open = (tokens, idx, options, env, self) => {
   }
   return renderToken ? renderToken(tokens, idx, options, env, self) : self.renderToken(tokens, idx, options);
 };
+const renderLink = md.renderer.rules.link_open;
+md.renderer.rules.link_open = (tokens, idx, options, env, self) => {
+  const href = tokens[idx].attrGet('href');
+  if (env.prefix && href?.startsWith('#')) {
+    tokens[idx].attrSet('href', `#${env.prefix}${href.slice(1)}`);
+  }
+  return renderLink ? renderLink(tokens, idx, options, env, self) : self.renderToken(tokens, idx, options);
+};
 const render = (text, prefix = '') => md.render(prepare(text), { prefix });
 const sections = [...english.matchAll(/^## (.+)$/gm)].map((match, i, all) => ({
   title: match[1],
