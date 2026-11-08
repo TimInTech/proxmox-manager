@@ -6,28 +6,20 @@ Versions follow [Semantic Versioning](https://semver.org/).
 
 ---
 
-## [2.14.0] - 2026-10-28
-
-### Maintenance module 1.0.3
-
-- Refine the optional maintenance TUI with responsive action/detail views,
-  clearer status and contextual keys, safe confirmation paging, and terminal
-  restoration coverage.
-- Check community source metadata before confirmation; pinned hashes and a
-  second live check remain required immediately before launch.
-- Fix community back-entry details and discard keys queued while a worker runs.
-
-- Add an optional Python/curses storage and maintenance module with a small Bash
-  dispatcher (`--maintenance`, main-menu `m`, and guest-menu `m`).
-- Add host storage/SMART diagnostics, scoped CT/VM adapters, confirmed TRIM and
-  Debian/Ubuntu CT package-cache cleanup. No automatic guest starts or broad cleanup.
-- Install the module independently with versioned atomic deployment and rollback;
-  base installation no longer installs unrelated optional packages automatically.
-- Track declared Community Scripts reference revisions with a daily metadata-only
-  checker. Execute native local adapters, never downloaded upstream code.
-- Add independent module bundles/checksums and Python/installer regression tests.
-
 ## [Unreleased]
+
+Planned core version: **2.14.1** (prepared 2026-11-08; not published).
+
+### Fixed
+
+- Configure SPICE through QXL only, preserve VGA properties and request authenticated
+  connection files through the Proxmox proxy instead of inventing ports.
+- Report failed VM/CT inventory queries with a nonzero exit status instead of
+  returning an empty or partial successful listing.
+- Discard stale worker input before displaying maintenance results, so fresh input
+  after a cancelled diagnostic is retained.
+- Isolate the Bash test viewer marker in its temporary test directory.
+- Gate releases on Bash/Python tests, tag/core-version agreement and asset checksums.
 
 ### Maintenance module 1.0.5
 
@@ -58,6 +50,28 @@ Versions follow [Semantic Versioning](https://semver.org/).
   256-colour pairs with a contrast of at least 4.5:1); `NO_COLOR`, `PMAN_ASCII=1`
   (ASCII glyphs) and `PMAN_HYPERLINKS=0|1` (OSC 8 links, plain URL is always
   shown) are supported. Golden snapshot tests cover 80x24, 120x40 and `NO_COLOR`.
+
+## [2.14.0] - 2026-10-28
+
+### Maintenance module 1.0.3
+
+- Refine the optional maintenance TUI with responsive action/detail views,
+  clearer status and contextual keys, safe confirmation paging, and terminal
+  restoration coverage.
+- Check community source metadata before confirmation; pinned hashes and a
+  second live check remain required immediately before launch.
+- Fix community back-entry details and discard keys queued while a worker runs.
+
+- Add an optional Python/curses storage and maintenance module with a small Bash
+  dispatcher (`--maintenance`, main-menu `m`, and guest-menu `m`).
+- Add host storage/SMART diagnostics, scoped CT/VM adapters, confirmed TRIM and
+  Debian/Ubuntu CT package-cache cleanup. No automatic guest starts or broad cleanup.
+- Install the module independently with versioned atomic deployment and rollback;
+  base installation no longer installs unrelated optional packages automatically.
+- Track declared Community Scripts reference revisions with a daily metadata-only
+  checker. Native adapters run locally; selected community tools download and
+  execute pinned upstream scripts after source and hash verification.
+- Add independent module bundles/checksums and Python/installer regression tests.
 
 ## [2.13.2] - 2026-10-21
 
@@ -345,7 +359,8 @@ rewrite.
 
 ---
 
-[Unreleased]: https://github.com/TimInTech/proxmox-manager/compare/v2.13.2...HEAD
+[Unreleased]: https://github.com/TimInTech/proxmox-manager/compare/v2.14.0...HEAD
+[2.14.0]: https://github.com/TimInTech/proxmox-manager/compare/v2.13.2...v2.14.0
 [2.13.2]: https://github.com/TimInTech/proxmox-manager/compare/v2.13.1...v2.13.2
 [2.13.1]: https://github.com/TimInTech/proxmox-manager/compare/v2.13.0...v2.13.1
 [2.13.0]: https://github.com/TimInTech/proxmox-manager/compare/v2.12.1...v2.13.0

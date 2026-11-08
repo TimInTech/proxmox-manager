@@ -19,6 +19,7 @@ cd "$ROOT_DIR"
 TEST_TMP="$(mktemp -d)"
 trap 'rm -rf "$TEST_TMP"' EXIT
 export HOME="$TEST_TMP/home"
+export HERMES_VIRT_VIEWER_MARKER="$TEST_TMP/virt-viewer-called"
 mkdir -p "$HOME"
 
 PASS=0
@@ -253,30 +254,12 @@ else
 fi
 
 # ---------------------------------------------------------------------------
-# Unit tests: spice_info()
+# SPICE regression tests use their own mocks and private ticket files.
 # ---------------------------------------------------------------------------
-rm -f /tmp/hermes-virt-viewer-called
-unset DISPLAY WAYLAND_DISPLAY XDG_RUNTIME_DIR
-_spice_exit=0
-_spice_out="$(spice_info 200 vm-one 2>&1)" || _spice_exit=$?
-_spice_vv="$(printf '%s\n' "$_spice_out" | sed -n 's/.*SPICE connection file: //p' | tail -1)"
-if [[ "$_spice_exit" == "0" ]] && printf '%s\n' "$_spice_out" | grep -q 'spice://127.0.0.1:61000'; then
-  _pass "spice_info: URI uses monitor/config host and port"
+if bash "$ROOT_DIR/tests/test_spice.sh"; then
+  _pass "SPICE: authenticated connection and display configuration regressions"
 else
-  _fail "spice_info: URI did not use expected host/port"
-fi
-
-if [[ -n "$_spice_vv" ]] && [[ -f "$_spice_vv" ]] && grep -q '^host=127.0.0.1$' "$_spice_vv"; then
-  _pass "spice_info: .vv file uses actual SPICE bind host"
-else
-  _fail "spice_info: .vv file did not use expected host"
-fi
-
-if [[ -n "$_spice_vv" ]]; then rm -f "$_spice_vv"; fi
-if [[ ! -e /tmp/hermes-virt-viewer-called ]]; then
-  _pass "spice_info: does not auto-launch virt-viewer without GUI session"
-else
-  _fail "spice_info: auto-launched virt-viewer without GUI session"
+  _fail "SPICE: authenticated connection or display configuration regression"
 fi
 
 # ---------------------------------------------------------------------------

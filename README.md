@@ -34,6 +34,9 @@ The core needs no daemon or guest agent installation and no dependencies beyond 
 
 </div>
 
+**Planned v2.14.1:** inventory error reporting, authenticated SPICE connections,
+and maintenance TUI input handling fixes. See [CHANGELOG](CHANGELOG.md).
+
 **New in v2.14.0:** optional storage and maintenance TUI (Python standard library),
 installed separately with `--with-maintenance`. See [maintenance module](docs/maintenance.md).
 
@@ -52,6 +55,11 @@ Check out how others are using `proxmox-manager`:
   obsługa](https://blog.askomputer.pl/proxmox-manager-timintech-co-to-jest-jak-dziala-instalacja-i-obsluga/)**
   *A detailed walkthrough and review by askomputer.pl featuring usage examples
   and screenshots (in Polish).*
+- **[Stop Wrestling Proxmox GUIs: Meet the Single-Bash TUI That Changes Everything](https://prompts.brightcoding.dev/blog/stop-wrestling-proxmox-guis-meet-the-single-bash-tui-that-changes-everything)**
+  *An English-language overview by Bright Coding covering installation, the TUI,
+  and common VM and container management workflows.*
+- **[This Lightweight Proxmox Tool Makes CLI Management Faster](https://www.virtualizationhowto.com/2026/05/this-lightweight-proxmox-tool-makes-cli-management-faster/)**
+  *Hands-on review by Brandon Lee covering installation, VM/LXC management, snapshots, console access, and practical homelab testing.*
 
 ## 📸 Screenshots
 
@@ -91,7 +99,7 @@ Check out how others are using `proxmox-manager`:
 | 🖥️ | **Console Access** | LXC shell via `pct enter` or QEMU terminal via `qm terminal`. Verifies running state before entering |
 | 🌐 | **IP Address Lookup** | Shows current IPv4 addresses for running VMs and CTs — VM via QEMU Guest Agent, CT via `pct exec` |
 | 📦 | **Snapshot Management** | List, create, rollback, delete — with name validation and snapshot preview before destructive actions |
-| 🖱️ | **SPICE Integration** | Enable SPICE for VMs and retrieve `.vv` connection files. Auto-launches `virt-viewer` when installed |
+| 🖱️ | **SPICE Integration** | Enable SPICE for VMs and retrieve `.vv` connection files. Auto-launches `remote-viewer` in a graphical session |
 | 🤖 | **Automation-Ready** | `--json` output, `--filter` by status, `--name` ERE filter, `--force` mode, structured logging via `LOG_FILE` |
 | ⚙️ | **Config File** | Persistent allowlisted defaults via `/etc/pmanrc` or `~/.pmanrc` — CLI flags always win |
 
@@ -335,19 +343,26 @@ pman --json | jq '.[] | select(.status == "running")'
 
 ### SPICE remote desktop
 
-The SPICE integration generates a `.vv` connection file for any VM. If
-[`virt-viewer`](https://virt-manager.org/) is installed, it is launched
-automatically:
+For a running VM with a QXL display, SPICE info requests an authenticated
+`.vv` connection file from the Proxmox `spiceproxy` API using `pvesh` and Python 3
+on the host. If `remote-viewer`
+(from [`virt-viewer`](https://virt-manager.org/)) is installed and a graphical
+session is available, it is launched automatically:
 
 ```bash
 # Install virt-viewer (Debian / Proxmox host)
 apt install virt-viewer
 ```
 
-When `virt-viewer` is **not** installed, the path to the generated `.vv` file is
-printed together with the install hint. The SPICE bind address defaults to
-`127.0.0.1` and can be overridden via `PROXMOX_MANAGER_SPICE_ADDR` (env var or
-`~/.pmanrc`).
+Otherwise, the path to the private `.vv` file is printed. Open it promptly with
+`remote-viewer` on a desktop that can reach the Proxmox proxy on TCP 3128; it
+contains a short-lived ticket and TLS trust information. Delete unused connection
+files. `PROXMOX_MANAGER_SPICE_ADDR` (environment or `~/.pmanrc`) selects the
+client-reachable proxy hostname/IP; it does not change the VM bind address.
+
+Enable SPICE sets only the VGA type to QXL and preserves named VGA properties.
+Existing QXL multi-monitor settings remain intact. Applying a display hardware
+change requires a full shutdown and start; pman does not restart the VM automatically.
 
 ### Health monitoring & alerts
 
@@ -535,7 +550,7 @@ CLI flags are applied last and always win over config file values.
 # ~/.pmanrc — example
 STOP_TIMEOUT=120                          # shutdown timeout before force stop (default: 60)
 LOG_FILE="/var/log/proxmox-manager.log"   # structured log file (empty = disabled)
-PROXMOX_MANAGER_SPICE_ADDR="spice.example.invalid" # SPICE bind address
+PROXMOX_MANAGER_SPICE_ADDR="spice.example.invalid" # Client-reachable SPICE proxy hostname/IP
 HEALTH_MEM_WARN=80                        # health thresholds, see "Health monitoring & alerts"
 NTFY_URL="https://ntfy.sh/pman-alerts-CHANGE-ME"
 ```
@@ -642,10 +657,15 @@ cp completions/pman.zsh ~/.zsh/completions/_pman
 shellcheck proxmox-manager.sh
 
 # Unit tests (no real Proxmox needed — uses mock stubs)
-tests/run.sh
+bash tests/run.sh
+bash tests/test_inventory.sh
+bash tests/test_spice.sh
+
+# Optional maintenance module tests (no real Proxmox needed)
+python3 -B -m unittest discover -s tests/maintenance -v
 ```
 
-141 tests covering `validate_vmid`, `validate_snapshot_name`, `ip_info`,
+The core suite covers `validate_vmid`, `validate_snapshot_name`, `ip_info`,
 `--filter`, CLI flags, config parsing, the health view, the `--check` engine and
 notifications (mocked `pvesh`, `curl`, `sendmail`; no network, no root).
 

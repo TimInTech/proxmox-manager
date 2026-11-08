@@ -284,6 +284,22 @@ def _screen(screen, ctx):
                     status = (_('Abgebrochen') if cancel.is_set() else _('Fehlgeschlagen')) if kind == 'error' else _('Erfolgreich')
             except queue.Empty:
                 pass
+            # Drop stale worker input before publishing the result/confirmation.
+            if flush_confirmation:
+                flush_confirmation = False
+                try:
+                    curses.flushinp()
+                except curses.error:
+                    confirming = bool(pending or pending_community)
+                    pending = None
+                    pending_community = None
+                    detail_mode = True
+                    if confirming:
+                        output = [_('Eingabepuffer konnte nicht geleert werden; Bestätigung abgebrochen.')]
+                    else:
+                        output += ['', _('Eingabepuffer konnte nicht geleert werden. Ergebnis oben beachten.')]
+                    status = _('Eingabefehler')
+                    continue
             screen.erase()
             height, width = screen.getmaxyx()
             frame = view.render(build_model(height), height, width, ascii_only)
@@ -303,21 +319,6 @@ def _screen(screen, ctx):
                 if signature != last_links:
                     last_links = signature
                     emit_links(frame)
-            if flush_confirmation:
-                flush_confirmation = False
-                try:
-                    curses.flushinp()
-                except curses.error:
-                    confirming = bool(pending or pending_community)
-                    pending = None
-                    pending_community = None
-                    detail_mode = True
-                    if confirming:
-                        output = [_('Eingabepuffer konnte nicht geleert werden; Bestätigung abgebrochen.')]
-                    else:
-                        output += ['', _('Eingabepuffer konnte nicht geleert werden. Ergebnis oben beachten.')]
-                    status = _('Eingabefehler')
-                    continue
             key = screen.getch()
             if key == -1:
                 continue

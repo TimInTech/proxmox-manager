@@ -7,6 +7,10 @@ Bash-Skript. Die optionale Speicher- und Wartungsoberfläche verwendet Python 3
 und die Standardbibliothek; der Bash-Kern kann ohne sie installiert werden. Die
 vollständige Befehls- und Konfigurationsreferenz steht im [englischen README](README.md).
 
+**Geplant für v2.14.1:** Fehlermeldungen bei Inventarabfragen, authentifizierte
+SPICE-Verbindungen und Korrekturen der Eingabebehandlung im Wartungsmodul.
+Siehe [Changelog](CHANGELOG.md).
+
 <p align="center">
   <img src="docs/demo/out/proxmox-manager-demo.gif" alt="Proxmox Manager Live Demo" width="820">
 </p>
@@ -15,6 +19,18 @@ vollständige Befehls- und Konfigurationsreferenz steht im [englischen README](R
   <em>Deterministische, lesende Konsolen-Demo: VM/CT-Übersicht, Health-Diagnose, Host-Wartung & Helper-Scripts (Community).</em><br>
   <small>Headless PTY-Pipeline mit In-Stream-Pseudonymisierung · <a href="docs/demo/index.html">Interaktiver Web-Vektor-Player ▶</a> · <a href="docs/demo/README.md">Pipeline-Details →</a></small>
 </p>
+
+## Community & Tutorials
+
+Externe Veröffentlichungen über `proxmox-manager`:
+
+- **[Proxmox Manager – Co to jest, jak działa, instalacja i obsługa](https://blog.askomputer.pl/proxmox-manager-timintech-co-to-jest-jak-dziala-instalacja-i-obsluga/)**
+  Anleitung und Vorstellung von askomputer.pl mit Beispielen und Screenshots (Polnisch).
+- **[Stop Wrestling Proxmox GUIs: Meet the Single-Bash TUI That Changes Everything](https://prompts.brightcoding.dev/blog/stop-wrestling-proxmox-guis-meet-the-single-bash-tui-that-changes-everything)**
+  Überblick von Bright Coding über Installation, TUI und VM-/Container-Verwaltung (Englisch).
+- **[This Lightweight Proxmox Tool Makes CLI Management Faster](https://www.virtualizationhowto.com/2026/05/this-lightweight-proxmox-tool-makes-cli-management-faster/)**
+  Praxistest von Brandon Lee zu Installation, VM-/LXC-Verwaltung, Snapshots,
+  Konsolenzugriff und Einsatz im Homelab (Englisch).
 
 ## Installation
 
@@ -119,6 +135,8 @@ mit:
 ```bash
 python3 -B -m unittest discover -s tests/maintenance
 bash tests/run.sh
+bash tests/test_inventory.sh
+bash tests/test_spice.sh
 ```
 
 Die echten Proxmox-Aktionen brauchen einen Testhost. Siehe [Wartungsdokumentation](docs/maintenance.md).
@@ -129,3 +147,15 @@ Die echten Proxmox-Aktionen brauchen einen Testhost. Siehe [Wartungsdokumentatio
 Bestand aus. `pman --health` zeigt den Zustand und `pman --check` führt den
 optionalen Alarm-Check aus. Konfiguration, Befehle und Beispiele erläutert das
 [englische README](README.md). Lizenz: [MIT](LICENSE).
+
+### SPICE
+
+„Enable SPICE“ setzt den VGA-Typ auf QXL und erhält benannte VGA-Eigenschaften.
+Vorhandene QXL-Mehrmonitor-Konfigurationen bleiben erhalten. Die Änderung benötigt
+ein vollständiges Herunterfahren und Starten; pman startet die VM nicht automatisch neu.
+„SPICE info“ fordert für eine laufende VM mit QXL eine authentifizierte `.vv`-Datei
+über die Proxmox-API an. `remote-viewer` (Paket `virt-viewer`) öffnet sie bei
+vorhandener grafischer Sitzung. Der Desktop muss den Proxy auf TCP 3128 erreichen.
+`PROXMOX_MANAGER_SPICE_ADDR` bezeichnet dessen erreichbaren Hostnamen oder IP,
+nicht eine VM-Bind-Adresse. Die private Datei enthält ein kurzlebiges Ticket;
+zeitnah öffnen und ungenutzte Dateien löschen.

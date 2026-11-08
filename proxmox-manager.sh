@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Proxmox VM/CT Management Tool
-# Version 2.14.0 — 2026-10-27
+# Version 2.14.1 — 2026-11-08
 # - fix: stop action runs qm/pct shutdown --timeout --forceStop 1 (clean shutdown, force stop only after the timeout) instead of qm/pct stop, which pulled the plug
 # - feat: health view (--health, menu key h) and cron checks (--check) with ntfy/e-mail alerts
 # - fix: action and snapshot menus draw a closed frame (right border, padded rows)
@@ -772,6 +772,20 @@ vm_name_from_config() { qm config "$1" 2>/dev/null | awk -F': *' '/^name:/     {
 
 # collect_instances — emit TAB-separated rows: ID TYPE STATUS SYMBOL NAME
 collect_instances() {
+  # Capture both queries before emitting rows; a failed query is not an empty host.
+  local ct_list='' vm_list=''
+  if have pct; then
+    ct_list="$(pct list)" || {
+      err "Failed to list CT inventory (pct list)."
+      return 1
+    }
+  fi
+  if have qm; then
+    vm_list="$(qm list)" || {
+      err "Failed to list VM inventory (qm list)."
+      return 1
+    }
+  fi
   if have pct; then
     while IFS= read -r line; do
       [[ -z "${line// /}" ]] && continue
@@ -787,7 +801,7 @@ collect_instances() {
       [[ "$status" == "stopped" ]] && sym="$SYM_STOPPED"
       [[ "$status" == "paused" ]] && sym="$SYM_PAUSED"
       printf "%s\tCT\t%s\t%s\t%s\n" "$id" "$status" "$sym" "$name"
-    done < <(pct list 2>/dev/null || true)
+    done <<<"$ct_list"
   fi
 
   if have qm; then
@@ -804,24 +818,29 @@ collect_instances() {
       [[ "$status" == "stopped" ]] && sym="$SYM_STOPPED"
       [[ "$status" == "paused" ]] && sym="$SYM_PAUSED"
       printf "%s\tVM\t%s\t%s\t%s\n" "$id" "$status" "$sym" "$name"
-    done < <(qm list 2>/dev/null || true)
+    done <<<"$vm_list"
   fi
 }
 
 # filtered_instances — wraps collect_instances; applies FILTER_STATUS and FILTER_NAME (AND logic).
 filtered_instances() {
+  local inventory
+  inventory="$(collect_instances)" || return 1
   local id ty st sym nm
   while IFS=$'\t' read -r id ty st sym nm; do
+    [[ -z "$id" ]] && continue
     [[ -n "$FILTER_STATUS" && "$st" != "$FILTER_STATUS" ]] && continue
     if [[ -n "$FILTER_NAME" ]]; then
       [[ "$nm" =~ $FILTER_NAME ]] || continue
     fi
     printf "%s\t%s\t%s\t%s\t%s\n" "$id" "$ty" "$st" "$sym" "$nm"
-  done < <(collect_instances)
+  done <<<"$inventory"
 }
 
 print_json() {
-  mapfile -t rows < <(filtered_instances | sort -n -t$'\t' -k1,1)
+  local inventory
+  inventory="$(filtered_instances)" || return 1
+  mapfile -t rows < <(printf '%s' "$inventory" | sort -n -t$'\t' -k1,1)
   if ((${#rows[@]} == 0)); then
     printf '[]\n'
     return 0
@@ -1084,7 +1103,9 @@ print_table() {
   [[ "$MODE" == "interactive" ]] && draw_boxes=1
 
   local -a rows=()
-  mapfile -t rows < <(filtered_instances | sort -n -t$'\t' -k1,1)
+  local inventory
+  inventory="$(filtered_instances)" || return 2
+  mapfile -t rows < <(printf '%s' "$inventory" | sort -n -t$'\t' -k1,1)
 
   # NAME column grows with the longest name; boxed output is capped at the
   # terminal width and longer names are truncated.
@@ -2657,7 +2678,10 @@ maintenance_open() {
 
 main_menu() {
   header
-  if ! print_table; then return 1; fi
+  local table_rc=0
+  print_table || table_rc=$?
+  ((table_rc == 2)) && return 1
+  ((table_rc != 0)) && return 0
   echo
   printf '  %b%s%b  %s\n' "${BOLD}" "Keys:" "${NC}" \
     "<VMID> = open action menu   ${BOLD}h${NC} = health   ${BOLD}m${NC} = host maintenance   ${BOLD}r${NC} = refresh   ${BOLD}q${NC} = quit"
@@ -2674,15 +2698,17 @@ main_menu() {
       if ! validate_vmid "$choice"; then
         return 0
       fi
-      local sel_type='' sel_name='' found=0
+      local sel_type='' sel_name='' found=0 inventory
+      inventory="$(collect_instances)" || return 1
       while IFS=$'\t' read -r id ty _ _ nm; do
+        [[ -z "$id" ]] && continue
         _type_cache["$id"]="$ty" # warm the cache for all listed instances
         if [[ "$id" == "$choice" ]]; then
           sel_type="$ty"
           sel_name="$nm"
           found=1
         fi
-      done < <(collect_instances)
+      done <<<"$inventory"
       if ((found == 1)); then
         action_menu "$choice" "$sel_type" "$sel_name"
       else
@@ -2693,6 +2719,7 @@ main_menu() {
     fi
     ;;
   esac
+  return 0
 }
 
 action_menu() {
@@ -3142,85 +3169,109 @@ _spice_has_gui_session() {
   [[ -n "${DISPLAY:-}" ]] || [[ -n "${WAYLAND_DISPLAY:-}" && -n "${XDG_RUNTIME_DIR:-}" ]]
 }
 
-_spice_endpoint() {
-  local id="$1"
-  local monitor endpoint host='' port='' cfg_spice cfg_addr id_int
-
-  monitor="$(qm monitor "$id" <<<'info spice' 2>/dev/null || true)"
-  endpoint="$(sed -n 's/^[[:space:]]*address:[[:space:]]*\([^[:space:]]*\).*/\1/p' <<<"$monitor" | head -1)"
-  if [[ -n "$endpoint" ]]; then
-    if [[ "$endpoint" == \[*\]:* ]]; then
-      host="${endpoint%%]:*}"
-      host="${host#[}"
-      port="${endpoint##*:}"
-    elif [[ "$endpoint" == *:* ]]; then
-      host="${endpoint%:*}"
-      port="${endpoint##*:}"
-    fi
-  fi
-
-  cfg_spice="$(qm config "$id" 2>/dev/null | sed -n 's/^spice: .*port=\([0-9]\+\).*/\1/p' | head -1)"
-  cfg_addr="$(qm config "$id" 2>/dev/null | sed -n 's/^spice: .*addr=\([^,]*\).*/\1/p' | head -1)"
-  [[ -z "$port" && -n "$cfg_spice" ]] && port="$cfg_spice"
-  [[ -z "$host" && -n "$cfg_addr" ]] && host="$cfg_addr"
-
-  [[ -z "$host" ]] && host="${PROXMOX_MANAGER_SPICE_ADDR:-$(hostname -I 2>/dev/null | awk '{print $1}')}"
-  id_int=$((10#$id))
-  [[ -z "$port" ]] && port="$((61000 + id_int))"
-
-  printf '%s\t%s\n' "$host" "$port"
-}
-
+# Proxmox supplies short-lived tickets, proxy routing and TLS trust material.
+# Never print the response or pass its credentials as process arguments.
 spice_info() {
-  local id="$1" name="$2"
-  local host port endpoint
-  endpoint="$(_spice_endpoint "$id")"
-  host="${endpoint%%$'\t'*}"
-  port="${endpoint##*$'\t'}"
-
-  printf '  %bSPICE:%b spice://%s:%s\n' "${BOLD}${CYAN_BRIGHT}" "${NC}" "$host" "$port"
-  umask 077
-  local vv
-  vv="$(mktemp -p "${TMPDIR:-/tmp}" "vm-${id}.XXXXXX.vv")" || {
+  local id="$1" name="$2" node vv
+  validate_vmid "$id" || return 1
+  if ! have pvesh || ! have python3; then
+    err "SPICE connection files require pvesh and python3."
+    return 1
+  fi
+  node="$(_local_node)"
+  [[ "$node" =~ ^[A-Za-z0-9][A-Za-z0-9._-]*$ ]] || {
+    err "Cannot determine the local Proxmox node."
+    return 1
+  }
+  vv="$(
+    umask 077
+    mktemp -p "${TMPDIR:-/tmp}" "vm-${id}.XXXXXX.vv"
+  )" || {
     err "mktemp failed"
     return 1
   }
-  chmod 600 "$vv" || true
-  cat >"$vv" <<EOF
-[virt-viewer]
-type=spice
-host=${host}
-port=${port}
-title=VM ${id} (${name})
-delete-this-file=1
-fullscreen=0
-EOF
-  if have virt-viewer && _spice_has_gui_session; then
-    virt-viewer "$vv" &
-    ok "Launching virt-viewer for VM ${id}..."
+  local -a proxy_args=()
+  [[ -n "$PROXMOX_MANAGER_SPICE_ADDR" ]] && proxy_args=(--proxy "$PROXMOX_MANAGER_SPICE_ADDR")
+  if ! pvesh create "/nodes/${node}/qemu/${id}/spiceproxy" --output-format json "${proxy_args[@]}" 2>/dev/null |
+    python3 -c '
+import json, sys
+try:
+    data = json.load(sys.stdin)
+    required = ("type", "host", "proxy", "tls-port", "password", "ca", "host-subject")
+    if not isinstance(data, dict) or any(not data.get(k) for k in required):
+        raise ValueError()
+    if data["type"] != "spice" or not 1 <= int(data["tls-port"]) <= 65535:
+        raise ValueError()
+    keys = required + ("secure-attention", "toggle-fullscreen", "release-cursor", "title")
+    lines = ["[virt-viewer]"]
+    for key in keys:
+        if key not in data:
+            continue
+        value = str(data[key])
+        if any(ord(c) < 32 or ord(c) == 127 for c in value):
+            raise ValueError()
+        lines.append(key + "=" + value)
+    lines.append("delete-this-file=1")
+    with open(sys.argv[1], "w", encoding="utf-8") as output:
+        output.write("\n".join(lines) + "\n")
+except (ValueError, TypeError, OSError):
+    sys.exit(1)
+' "$vv" 2>/dev/null; then
+    rm -f -- "$vv"
+    err "Could not obtain a valid SPICE connection file for VM ${id} (${name})."
+    return 1
+  fi
+  if have remote-viewer && _spice_has_gui_session; then
+    remote-viewer "$vv" &
+    ok "Launching remote-viewer for VM ${id}..."
   else
     ok "SPICE connection file: ${vv}"
-    if have virt-viewer; then
-      note "No graphical session detected in this shell. Open the .vv file from a desktop session."
-    else
-      note "Install virt-viewer with: apt install virt-viewer"
+    note "Open it promptly with remote-viewer from a desktop that can reach the Proxmox proxy (TCP 3128)."
+    if ! have remote-viewer; then
+      note "Install remote-viewer with: apt install virt-viewer"
     fi
   fi
 }
 
 spice_enable() {
-  local id="$1"
-  local id_int port
-  id_int=$((10#$id))
-  port=$((61000 + id_int))
-  local addr="${PROXMOX_MANAGER_SPICE_ADDR:-127.0.0.1}"
-  qm set "$id" --vga qxl >/dev/null 2>&1 || true
-  if qm set "$id" --spice "port=${port},addr=${addr}" >/dev/null 2>&1; then
-    ok "SPICE enabled for VM ${id}. Port: ${port}. A restart is required."
-    confirm "Restart VM ${id} now?" && do_action "$id" "VM" restart "VM-${id}"
-  else
-    err "Could not enable SPICE for VM ${id}."
+  local id="$1" config vga='' digest='' part updated='' output
+  validate_vmid "$id" || return 1
+  if ! config="$(qm config "$id" 2>/dev/null)"; then
+    err "Could not read VM ${id} configuration; SPICE was not changed."
+    return 1
   fi
+  while IFS= read -r part; do
+    case "$part" in
+    vga:*) vga="$(trim "${part#vga:}")" ;;
+    digest:*) digest="$(trim "${part#digest:}")" ;;
+    esac
+  done <<<"$config"
+  local -a properties=()
+  IFS=, read -r -a properties <<<"$vga"
+  for part in "${properties[@]}"; do
+    case "$part" in
+    qxl | qxl2 | qxl3 | qxl4 | type=qxl | type=qxl2 | type=qxl3 | type=qxl4)
+      ok "SPICE display is already configured for VM ${id}."
+      return 0
+      ;;
+    esac
+  done
+  updated='qxl'
+  for part in "${properties[@]}"; do
+    # Preserve named VGA subproperties (memory, clipboard, future options).
+    if [[ "$part" == *=* && "$part" != type=* ]]; then
+      updated+=",${part}"
+    fi
+  done
+  local -a digest_args=()
+  [[ -n "$digest" ]] && digest_args=(--digest "$digest")
+  if ! output="$(qm set "$id" --vga "$updated" "${digest_args[@]}" 2>&1)"; then
+    err "Could not enable SPICE for VM ${id}."
+    _log_pve_err "$output"
+    return 1
+  fi
+  ok "SPICE display enabled for VM ${id}. A full VM shutdown and start is required to apply display hardware changes."
+  return 0
 }
 
 # =============================================================================
@@ -3426,7 +3477,7 @@ main() {
     fi
     ;;
   json)
-    print_json
+    print_json || exit 1
     exit 0
     ;;
   health | health_list)
@@ -3451,7 +3502,7 @@ main() {
     ;;
   interactive)
     while true; do
-      main_menu || true
+      main_menu || exit 1
       ((RUN_ONCE == 1)) && break
     done
     ;;

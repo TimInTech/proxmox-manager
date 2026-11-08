@@ -95,12 +95,7 @@ class TerminalPTYTest(unittest.TestCase):
             wait_for('Prüfung läuft'.encode())
             os.write(master, b'\x1b')
             wait_for(b'Abgebrochen')
-            # The UI discards input queued while the result is drawn, so a 'q' sent in
-            # the same instant can be dropped; repeat it like a user would.
-            deadline = time.monotonic() + 4
-            while process.poll() is None and time.monotonic() < deadline:
-                time.sleep(.3)
-                os.write(master, b'q')
+            os.write(master, b'q')
             self.assertEqual(process.wait(timeout=5), 0)
             self.assertEqual(termios.tcgetattr(slave), original)
         finally:
@@ -109,3 +104,46 @@ class TerminalPTYTest(unittest.TestCase):
                 process.wait()
             os.close(master)
             os.close(slave)
+
+
+class ResultInputRaceTest(unittest.TestCase):
+    def test_quit_entered_after_result_is_visible_is_not_discarded(self):
+        """A terminal reply to the new result must survive stale-input cleanup."""
+        from unittest.mock import patch
+        module_dir = Path(__file__).resolve().parents[2] / 'maintenance'
+        sys.path.insert(0, str(module_dir))
+        from pman_maintenance import ui
+        from pman_maintenance.actions import Context
+
+        class ImmediateWorker:
+            def __init__(self, target, **kwargs): self.target = target
+            def start(self): self.target()
+            def is_alive(self): return False
+
+        class Screen:
+            def __init__(self):
+                self.keys = [10]
+                self.rows = []
+                self.result_visible = False
+            def keypad(self, enabled): pass
+            def timeout(self, value): pass
+            def erase(self): self.rows = []
+            def getmaxyx(self): return (24, 80)
+            def addnstr(self, row, col, value, *args): self.rows.append(value)
+            def refresh(self):
+                if not self.result_visible and any('diagnostic complete' in row for row in self.rows):
+                    self.result_visible = True
+                    self.keys.append(ord('q'))
+            def getch(self):
+                if not self.keys:
+                    raise AssertionError('quit entered after result was displayed was discarded')
+                return self.keys.pop(0)
+
+        screen = Screen()
+        with patch.object(ui.curses, 'curs_set'), \
+             patch.object(ui.curses, 'flushinp', side_effect=screen.keys.clear), \
+             patch.object(ui.curses, 'has_colors', return_value=False), \
+             patch.object(ui.threading, 'Thread', ImmediateWorker), \
+             patch.object(ui, 'execute', return_value='diagnostic complete'):
+            ui._screen(screen, Context('host'))
+        self.assertTrue(screen.result_visible)

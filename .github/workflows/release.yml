@@ -23,8 +23,31 @@ jobs:
         with:
           persist-credentials: false
 
-      - name: Build core and optional module assets
-        run: bash tools/build-release.sh dist
+      - name: Verify release tag matches core version
+        run: |
+          set -euo pipefail
+          version=$(bash proxmox-manager.sh --version | awk '{print $2}')
+          if [[ "$GITHUB_REF_NAME" != "v$version" ]]; then
+            printf 'Release tag %s does not match core version v%s\n' "$GITHUB_REF_NAME" "$version" >&2
+            exit 1
+          fi
+
+      - name: Run Bash integration tests
+        run: |
+          set -euo pipefail
+          bash tests/run.sh
+          bash tests/test_inventory.sh
+          bash tests/test_spice.sh
+
+      - name: Run maintenance tests
+        run: python3 -B -m unittest discover -s tests/maintenance -v
+
+      - name: Build and verify core and optional module assets
+        run: |
+          set -euo pipefail
+          bash tools/build-release.sh dist
+          cd dist
+          sha256sum --check --strict SHA256SUMS
 
       - name: Create GitHub Release
         env:

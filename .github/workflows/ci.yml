@@ -34,6 +34,9 @@ jobs:
             echo "No shell scripts found."
             exit 0
           fi
+          for file in "${files[@]}" maintenance/pman-maintenance; do
+            bash -n "$file"
+          done
           shellcheck -x "${files[@]}" maintenance/pman-maintenance
 
       - name: Download, verify, and run shfmt
@@ -53,7 +56,11 @@ jobs:
           "${shfmt_path}" -d proxmox-manager.sh install_dependencies.sh maintenance/pman-maintenance tools/build-release.sh
 
       - name: Run tests
-        run: bash tests/run.sh
+        run: |
+          set -euo pipefail
+          bash tests/run.sh
+          bash tests/test_inventory.sh
+          bash tests/test_spice.sh
 
   maintenance:
     name: Maintenance Python ${{ matrix.python }}

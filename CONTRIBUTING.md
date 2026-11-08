@@ -20,7 +20,10 @@ Thanks for your interest in improving `proxmox-manager`!
 4. **Testing**
       - Exercise the script on a Proxmox test host or mock environment when
          possible.
-      - Add automated tests once the project includes test harnesses.
+      - Run `bash tests/run.sh`, `bash tests/test_inventory.sh`,
+        `bash tests/test_spice.sh` and
+        `python3 -B -m unittest discover -s tests/maintenance -v` locally.
+      - Add regression coverage to the existing test harnesses for behavior changes.
       - Document manual testing steps in the pull request description.
 
 5. **Commit standards**
